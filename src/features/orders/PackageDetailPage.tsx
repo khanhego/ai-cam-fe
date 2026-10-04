@@ -10,6 +10,8 @@ import { Alert, Button, cx, EmptyState, Skeleton, StatusChip, TrackingNumber } f
 
 import { useAuth } from "../auth/useAuth";
 import { COPY } from "./copy";
+import { ExportDialog } from "./ExportDialog";
+import { exportLayouts } from "./exportLayouts";
 import { HoldToggle } from "./HoldToggle";
 import { SessionPanel } from "./SessionPanel";
 
@@ -86,6 +88,7 @@ export default function PackageDetailPage() {
     refetchInterval: (q) => (hasPending(q.state.data) ? 10_000 : false),
   });
   const [picked, setPicked] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   if (query.isPending) {
     return (
@@ -176,6 +179,13 @@ export default function PackageDetailPage() {
               packageId={pkg.id}
               session={session}
               canRebuild={me.role === "ADMIN" || me.role === "SUPERVISOR"}
+              actions={
+                exportLayouts(session).length > 0 && (
+                  <Button icon="ios_share" onClick={() => setExporting(true)}>
+                    {C.export}
+                  </Button>
+                )
+              }
             />
           ) : (
             <EmptyState icon="inventory_2" title={C.noSession} />
@@ -192,6 +202,8 @@ export default function PackageDetailPage() {
           )}
         </section>
       </div>
+
+      {exporting && session && <ExportDialog session={session} onClose={() => setExporting(false)} />}
 
       <section className="card mb-4 p-4" aria-labelledby="d4-items">
         <h2 id="d4-items" className="mb-2 text-title-md text-on-surface">
