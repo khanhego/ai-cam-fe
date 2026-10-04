@@ -1,0 +1,7 @@
+dist
+coverage
+pnpm-lock.yaml
+src/lib/api/schema.d.ts
+public/mockServiceWorker.js
+test-results
+playwright-report

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Hệ thống X</title>
+    <script>
+      // Mặc định light; dark chỉ khi người dùng đã chọn (design system §Màu). Màn station luôn light.
+      try {
+        const dark =
+          !location.pathname.startsWith("/station") && localStorage.getItem("aicam-theme") === "dark";
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      } catch {
+        document.documentElement.dataset.theme = "light";
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

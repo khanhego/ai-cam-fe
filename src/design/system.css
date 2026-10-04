@@ -1,0 +1,421 @@
+/*
+ * Design system Hệ thống X — nền Material 3 (sao từ livesstream-ai-fe, docs/design-system/README.md).
+ * Vai trò màu lấy từ tokens.css (sinh từ seed); file này map vào Tailwind và định nghĩa thang chữ,
+ * hình khối, độ nổi, state layer và class dùng chung. Quy tắc màn station: README mục "Station kiosk".
+ */
+@import "./tokens.css";
+
+@theme inline {
+  /* colour roles: bg-primary, text-on-surface-variant, border-outline-variant, bg-success-container … */
+  --color-primary: var(--md-sys-color-primary);
+  --color-on-primary: var(--md-sys-color-on-primary);
+  --color-primary-container: var(--md-sys-color-primary-container);
+  --color-on-primary-container: var(--md-sys-color-on-primary-container);
+  --color-secondary: var(--md-sys-color-secondary);
+  --color-on-secondary: var(--md-sys-color-on-secondary);
+  --color-secondary-container: var(--md-sys-color-secondary-container);
+  --color-on-secondary-container: var(--md-sys-color-on-secondary-container);
+  --color-tertiary: var(--md-sys-color-tertiary);
+  --color-on-tertiary: var(--md-sys-color-on-tertiary);
+  --color-tertiary-container: var(--md-sys-color-tertiary-container);
+  --color-on-tertiary-container: var(--md-sys-color-on-tertiary-container);
+  --color-error: var(--md-sys-color-error);
+  --color-on-error: var(--md-sys-color-on-error);
+  --color-error-container: var(--md-sys-color-error-container);
+  --color-on-error-container: var(--md-sys-color-on-error-container);
+  --color-surface: var(--md-sys-color-surface);
+  --color-on-surface: var(--md-sys-color-on-surface);
+  --color-on-surface-variant: var(--md-sys-color-on-surface-variant);
+  --color-surface-dim: var(--md-sys-color-surface-dim);
+  --color-surface-bright: var(--md-sys-color-surface-bright);
+  --color-surface-container-lowest: var(--md-sys-color-surface-container-lowest);
+  --color-surface-container-low: var(--md-sys-color-surface-container-low);
+  --color-surface-container: var(--md-sys-color-surface-container);
+  --color-surface-container-high: var(--md-sys-color-surface-container-high);
+  --color-surface-container-highest: var(--md-sys-color-surface-container-highest);
+  --color-outline: var(--md-sys-color-outline);
+  --color-outline-variant: var(--md-sys-color-outline-variant);
+  --color-inverse-surface: var(--md-sys-color-inverse-surface);
+  --color-inverse-on-surface: var(--md-sys-color-inverse-on-surface);
+  --color-inverse-primary: var(--md-sys-color-inverse-primary);
+  --color-scrim: var(--md-sys-color-scrim);
+  --color-shadow: var(--md-sys-color-shadow);
+  --color-success: var(--md-sys-color-success);
+  --color-on-success: var(--md-sys-color-on-success);
+  --color-success-container: var(--md-sys-color-success-container);
+  --color-on-success-container: var(--md-sys-color-on-success-container);
+  --color-warning: var(--md-sys-color-warning);
+  --color-on-warning: var(--md-sys-color-on-warning);
+  --color-warning-container: var(--md-sys-color-warning-container);
+  --color-on-warning-container: var(--md-sys-color-on-warning-container);
+  /* live = chỉ báo ĐANG GHI HÌNH (REC). price giữ để tương thích, chưa dùng. */
+  --color-live: var(--md-sys-color-live);
+  --color-on-live: var(--md-sys-color-on-live);
+  --color-live-container: var(--md-sys-color-live-container);
+  --color-on-live-container: var(--md-sys-color-on-live-container);
+  --color-price: var(--md-sys-color-price);
+  --color-on-price: var(--md-sys-color-on-price);
+  --color-price-container: var(--md-sys-color-price-container);
+  --color-on-price-container: var(--md-sys-color-on-price-container);
+
+  /* type families */
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* M3 type scale (size / line-height / weight / tracking) */
+  --text-display-lg: 3.5625rem;
+  --text-display-lg--line-height: 4rem;
+  --text-display-lg--font-weight: 400;
+  --text-display-lg--letter-spacing: -0.016rem;
+  --text-display-md: 2.8125rem;
+  --text-display-md--line-height: 3.25rem;
+  --text-display-md--font-weight: 400;
+  --text-display-sm: 2.25rem;
+  --text-display-sm--line-height: 2.75rem;
+  --text-display-sm--font-weight: 400;
+  --text-headline-lg: 2rem;
+  --text-headline-lg--line-height: 2.5rem;
+  --text-headline-lg--font-weight: 500;
+  --text-headline-md: 1.75rem;
+  --text-headline-md--line-height: 2.25rem;
+  --text-headline-md--font-weight: 500;
+  --text-headline-sm: 1.5rem;
+  --text-headline-sm--line-height: 2rem;
+  --text-headline-sm--font-weight: 500;
+  --text-title-lg: 1.375rem;
+  --text-title-lg--line-height: 1.75rem;
+  --text-title-lg--font-weight: 500;
+  --text-title-md: 1rem;
+  --text-title-md--line-height: 1.5rem;
+  --text-title-md--font-weight: 600;
+  --text-title-md--letter-spacing: 0.009rem;
+  --text-title-sm: 0.875rem;
+  --text-title-sm--line-height: 1.25rem;
+  --text-title-sm--font-weight: 600;
+  --text-title-sm--letter-spacing: 0.006rem;
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.5rem;
+  --text-body-lg--letter-spacing: 0.031rem;
+  --text-body-md: 0.875rem;
+  --text-body-md--line-height: 1.25rem;
+  --text-body-md--letter-spacing: 0.016rem;
+  --text-body-sm: 0.75rem;
+  --text-body-sm--line-height: 1rem;
+  --text-body-sm--letter-spacing: 0.025rem;
+  --text-label-lg: 0.875rem;
+  --text-label-lg--line-height: 1.25rem;
+  --text-label-lg--font-weight: 500;
+  --text-label-lg--letter-spacing: 0.006rem;
+  --text-label-md: 0.75rem;
+  --text-label-md--line-height: 1rem;
+  --text-label-md--font-weight: 500;
+  --text-label-md--letter-spacing: 0.031rem;
+  --text-label-sm: 0.6875rem;
+  --text-label-sm--line-height: 1rem;
+  --text-label-sm--font-weight: 500;
+  --text-label-sm--letter-spacing: 0.031rem;
+
+  /* M3 shape scale */
+  --radius-none: 0px;
+  --radius-xs: 4px; /* chips' inner marks, badges */
+  --radius-sm: 8px; /* chips, text fields, menus */
+  --radius-md: 12px; /* cards, tables */
+  --radius-lg: 16px; /* navigation drawer items' container, large cards */
+  --radius-xl: 28px; /* dialogs, bottom sheets */
+  --radius-full: 9999px; /* buttons, nav indicators, avatars */
+
+  /* M3 elevation (shadow part; surfaces also step up through surface-container-*) */
+  --shadow-elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  --shadow-elevation-2: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+  --shadow-elevation-3: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+  --shadow-elevation-4: 0 2px 3px 0 rgb(0 0 0 / 0.3), 0 6px 10px 4px rgb(0 0 0 / 0.15);
+  --shadow-elevation-5: 0 4px 4px 0 rgb(0 0 0 / 0.3), 0 8px 12px 6px rgb(0 0 0 / 0.15);
+
+  /* M3 motion */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+  body {
+    background: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+  }
+  /* Tables: breathing room between columns; utilities still override. */
+  th,
+  td {
+    padding-inline: 0.5rem;
+  }
+  /* M3 focus indicator: 3px outline in secondary, 2px offset */
+  :focus-visible {
+    outline: 3px solid var(--md-sys-color-secondary);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* State layer: hover 8%, focus 10%, pressed 10% of the content colour (M3 interaction states). */
+  .state-layer {
+    position: relative;
+    isolation: isolate;
+  }
+  .state-layer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms var(--ease-standard);
+    z-index: -1;
+  }
+  .state-layer:hover::after {
+    opacity: 0.08;
+  }
+  .state-layer:focus-visible::after {
+    opacity: 0.1;
+  }
+  .state-layer:active::after {
+    opacity: 0.1;
+  }
+  .state-layer:disabled::after,
+  .state-layer[aria-disabled="true"]::after {
+    opacity: 0;
+  }
+
+  /* Material Symbols (Rounded) icon glyph, decorative by default */
+  .icon {
+    font-family: "Material Symbols Rounded";
+    font-weight: normal;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    font-variation-settings:
+      "FILL" 0,
+      "wght" 400,
+      "GRAD" 0,
+      "opsz" 20;
+    user-select: none;
+    flex: none;
+  }
+  .icon-filled {
+    font-variation-settings:
+      "FILL" 1,
+      "wght" 400,
+      "GRAD" 0,
+      "opsz" 20;
+  }
+
+  /* Surfaces publish their colour as --md-field-bg so an outlined field's label can cut the outline. */
+  :root {
+    --md-field-bg: var(--md-sys-color-surface);
+  }
+  .md-field {
+    position: relative;
+    margin-top: 0.375rem;
+  }
+  .md-field-label {
+    position: absolute;
+    top: -0.5rem;
+    left: 0.625rem;
+    z-index: 1;
+    padding: 0 0.25rem;
+    max-width: calc(100% - 1.5rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+    background: var(--md-field-bg);
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: var(--text-body-sm);
+    line-height: 1rem;
+    letter-spacing: 0.025rem;
+  }
+  .md-field:focus-within > .md-field-label {
+    color: var(--md-sys-color-primary);
+  }
+  .md-field[data-invalid] > .md-field-label {
+    color: var(--md-sys-color-error);
+  }
+  .md-field .md-input:not(.md-input-sm) {
+    padding-top: 0.625rem;
+  }
+
+  /* Cards */
+  .card {
+    --md-field-bg: var(--md-sys-color-surface-container-lowest);
+    background: var(--md-sys-color-surface-container-lowest);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: var(--radius-md);
+  }
+  .card-filled {
+    --md-field-bg: var(--md-sys-color-surface-container-low);
+    background: var(--md-sys-color-surface-container-low);
+    border-radius: var(--radius-md);
+  }
+
+  /* Outlined text field / select (label lives in a <label> above, see TextField) */
+  .md-input {
+    display: block;
+    width: 100%;
+    min-height: 2.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--md-sys-color-outline);
+    background: transparent;
+    color: var(--md-sys-color-on-surface);
+    padding: 0.5rem 0.75rem;
+    font-size: var(--text-body-lg);
+    line-height: 1.5rem;
+    transition:
+      border-color 150ms var(--ease-standard),
+      box-shadow 150ms var(--ease-standard);
+  }
+  .md-input::placeholder {
+    color: var(--md-sys-color-on-surface-variant);
+    opacity: 0.8;
+  }
+  .md-input:hover {
+    border-color: var(--md-sys-color-on-surface);
+  }
+  .md-input:focus {
+    outline: none;
+    border-color: var(--md-sys-color-primary);
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+  }
+  .md-input[aria-invalid="true"] {
+    border-color: var(--md-sys-color-error);
+  }
+  .md-input[aria-invalid="true"]:focus {
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-error);
+  }
+  .md-input:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+  select.md-input {
+    appearance: none;
+    padding-right: 2.25rem;
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 12px;
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-size:
+      5px 5px,
+      5px 5px;
+    background-position:
+      calc(100% - 17px) 50%,
+      calc(100% - 12px) 50%;
+  }
+  .md-input-sm {
+    min-height: 2.25rem;
+    padding-block: 0.375rem;
+    font-size: var(--text-body-md);
+    line-height: 1.25rem;
+  }
+  textarea.md-input {
+    min-height: 6rem;
+  }
+
+  /* Checkbox / radio accent */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--md-sys-color-primary);
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  /* Data table */
+  .md-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-body-md);
+    line-height: 1.25rem;
+    text-align: left;
+  }
+  .md-table thead th {
+    font-size: var(--text-label-md);
+    line-height: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.031rem;
+    color: var(--md-sys-color-on-surface-variant);
+    padding-block: 0.75rem;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+    white-space: nowrap;
+  }
+  .md-table tbody td {
+    padding-block: 0.625rem;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+    vertical-align: top;
+  }
+  .md-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .md-table tbody tr {
+    transition: background-color 150ms var(--ease-standard);
+  }
+  .md-table tbody tr:hover {
+    background: color-mix(in srgb, var(--md-sys-color-on-surface) 4%, transparent);
+  }
+
+  /* Inline link */
+  .md-link {
+    color: var(--md-sys-color-primary);
+    font-weight: 500;
+    text-underline-offset: 2px;
+  }
+  .md-link:hover {
+    text-decoration: underline;
+  }
+}
+
+/* Thanh tiến độ không xác định (LinearProgress không có value) — thêm cho Hệ thống X. */
+@layer components {
+  .md-progress-indeterminate {
+    width: 40%;
+    animation: md-progress-slide 1.2s var(--ease-standard) infinite;
+  }
+  @keyframes md-progress-slide {
+    from {
+      left: -40%;
+    }
+    to {
+      left: 100%;
+    }
+  }
+  /* Skeleton: khối giữ chỗ khi đang tải; nhấp nháy nhẹ, tắt theo prefers-reduced-motion (base layer). */
+  .md-skeleton {
+    background: var(--md-sys-color-surface-container-high);
+    border-radius: var(--radius-xs);
+    animation: md-skeleton-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes md-skeleton-pulse {
+    50% {
+      opacity: 0.55;
+    }
+  }
+}
