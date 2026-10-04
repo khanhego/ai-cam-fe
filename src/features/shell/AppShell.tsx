@@ -18,6 +18,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
     <NavLink
       key={item.to}
       to={item.to}
+      end={item.end}
       onClick={onNavigate}
       className={({ isActive }) =>
         cx(

@@ -34,7 +34,7 @@ export const routes: RouteObject[] = [
       </RequireRole>
     ),
     children: [
-      { index: true, Component: lazy(() => import("@/features/shell/AdminHome")) },
+      { index: true, Component: lazy(() => import("@/features/reports/DailyPage")) },
       {
         path: "settings/stations",
         element: (

@@ -6,7 +6,7 @@ function BackHome() {
   const navigate = useNavigate();
   return (
     <Button variant="tonal" onClick={() => navigate("/admin")}>
-      Về trang chính
+      Về Tổng quan
     </Button>
   );
 }

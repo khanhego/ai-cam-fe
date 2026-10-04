@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 
 import { login } from "@/lib/api/auth";
 import { renderApp } from "@/test/render";
@@ -42,13 +42,16 @@ test("tài khoản station mở /admin bị chuyển sang /station", async () =>
   await waitFor(() => expect(router.state.location.pathname).toBe("/station"));
 });
 
-test("ADMIN vào /admin → màn đầu tiên trong menu (Station)", async () => {
+test("ADMIN vào /admin → D2 Tổng quan; menu có Tổng quan và Station", async () => {
   await login("tst_admin", "matkhau123", "DASHBOARD");
 
   const router = renderApp("/admin");
 
-  await waitFor(() => expect(router.state.location.pathname).toBe("/admin/settings/stations"));
-  expect(await screen.findByRole("link", { name: /Station/ })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Tổng quan" })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/admin");
+  const nav = screen.getByRole("navigation", { name: "Điều hướng chính" });
+  expect(within(nav).getByRole("link", { name: /Tổng quan/ })).toHaveAttribute("aria-current", "page");
+  expect(within(nav).getByRole("link", { name: /Station/ })).toBeInTheDocument();
 });
 
 test("CSKH vào màn chỉ dành cho ADMIN → D12 không có quyền; menu không có Cài đặt", async () => {
@@ -59,6 +62,7 @@ test("CSKH vào màn chỉ dành cho ADMIN → D12 không có quyền; menu khô
   await waitFor(() => expect(router.state.location.pathname).toBe("/admin/forbidden"));
   expect(await screen.findByText("Tài khoản của bạn không có quyền xem trang này.")).toBeInTheDocument();
   expect(screen.queryByText("Cài đặt")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Về Tổng quan" })).toBeInTheDocument();
 });
 
 test("đường dẫn không tồn tại → 404", async () => {
