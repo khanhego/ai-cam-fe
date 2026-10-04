@@ -1,3 +1,8 @@
+import { http, HttpResponse } from "msw";
+
+import { server } from "@/test/server";
+
+import { onUnauthenticated } from "./api/client";
 import { useSession } from "./api/session";
 import { connectWs, type WsMessage } from "./ws";
 
@@ -95,5 +100,24 @@ test("close() dừng hẳn, không nối lại", async () => {
   await FakeSocket.all[0]!.onclose?.({ code: 1000 });
   vi.advanceTimersByTime(60_000);
 
+  expect(FakeSocket.all).toHaveLength(1);
+});
+
+test("review M1 #9: đóng 4401 mà refresh thất bại → dừng nối lại, báo hết phiên", async () => {
+  server.use(
+    http.post("/api/v1/auth/refresh", () =>
+      HttpResponse.json({ error: { code: "UNAUTHENTICATED", message: "x", details: {} } }, { status: 401 }),
+    ),
+  );
+  const unauth = vi.fn();
+  const off = onUnauthenticated(unauth);
+  connectWs({ path: "/ws/station", onMessage: () => {}, socketFactory: factory });
+
+  await FakeSocket.all[0]!.onclose?.({ code: 4401 });
+  vi.advanceTimersByTime(60_000);
+  off();
+
+  expect(unauth).toHaveBeenCalledOnce();
+  expect(useSession.getState().accessToken).toBeNull();
   expect(FakeSocket.all).toHaveLength(1);
 });

@@ -1,0 +1,43 @@
+import { api } from "./client";
+
+/** API-60..65, API-90 (02 §6). */
+export type CameraRole = "CAM1" | "CAM2";
+export type Roi = { x: number; y: number; w: number; h: number };
+export type Camera = {
+  id: string;
+  role: CameraRole;
+  rtsp_url_masked: string;
+  status: "ONLINE" | "OFFLINE";
+  roi: Roi | null;
+  clock_offset_ms: number | null;
+};
+export type Station = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  account: { id: string; username: string } | null;
+  cameras: Camera[];
+};
+export type CameraInput = { rtsp_url: string; username?: string; password?: string };
+export type UserItem = {
+  id: string;
+  username: string;
+  display_name: string;
+  role: "ADMIN" | "SUPERVISOR" | "CSKH" | "STATION";
+  is_active: boolean;
+  station: { id: string; name: string } | null;
+};
+export type Page<T> = { items: T[]; page: number; page_size: number; total: number };
+
+export const stationsApi = {
+  list: () => api.get<{ items: Station[] }>("/stations"),
+  get: (id: string) => api.get<Station>(`/stations/${id}`),
+  create: (body: { name: string; account_user_id?: string | null }) => api.post<Station>("/stations", body),
+  patch: (id: string, body: Partial<{ name: string; is_active: boolean; account_user_id: string | null }>) =>
+    api.patch<Station>(`/stations/${id}`, body),
+  setCamera: (stationId: string, role: CameraRole, body: CameraInput) =>
+    api.put<Camera>(`/stations/${stationId}/cameras/${role}`, body),
+  testCamera: (body: CameraInput) =>
+    api.post<{ ok: boolean; snapshot: string; clock_offset_ms: number | null }>("/cameras/test", body),
+  stationAccounts: () => api.get<Page<UserItem>>("/users", { query: { role: "STATION", page_size: 100 } }),
+};

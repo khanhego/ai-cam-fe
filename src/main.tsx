@@ -4,12 +4,17 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { routes } from "@/app/routes";
+import { useAuth } from "@/features/auth/useAuth";
+import { onUnauthenticated } from "@/lib/api/client";
 import { Toaster } from "@/shared/ui";
 
 import "./fonts";
 import "./index.css";
 
 const queryClient = new QueryClient();
+
+// Refresh thất bại → xóa user; guard tự chuyển về màn đăng nhập (02b §8: 401).
+onUnauthenticated(() => useAuth.setState({ me: null, status: "ready" }));
 const router = createBrowserRouter(routes);
 
 async function enableMocks() {
