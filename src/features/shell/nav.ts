@@ -17,6 +17,12 @@ export type NavItem = {
 export const NAV: NavItem[] = [
   { to: "/admin", label: "Tổng quan", icon: "dashboard", roles: ["ADMIN", "SUPERVISOR", "CSKH"], end: true },
   {
+    to: "/admin/packages",
+    label: "Tra cứu đơn",
+    icon: "manage_search",
+    roles: ["ADMIN", "SUPERVISOR", "CSKH"],
+  },
+  {
     to: "/admin/settings/stations",
     label: "Station",
     icon: "point_of_sale",

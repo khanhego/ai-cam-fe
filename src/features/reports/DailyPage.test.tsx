@@ -33,8 +33,12 @@ test("TC-09.01: 6 thẻ số theo API-32, station và mục Cần xử lý (CSKH
   expect(within(attention).getByText("Cam 2 TST Station 01 mất tín hiệu")).toBeInTheDocument();
   expect(within(attention).getByText("1 yêu cầu duyệt đang chờ")).toBeInTheDocument();
   expect(within(attention).getByText("Ổ lưu video đã dùng 83%")).toBeInTheDocument();
-  // CSKH: không có link tới màn cấu hình hay D13 (không có quyền / chưa có màn — DEC-51).
-  expect(within(attention).queryAllByRole("link")).toHaveLength(0);
+  // CSKH: chỉ có link tới D3; không có link tới màn cấu hình hay D13 (không có quyền / chưa có màn — DEC-51).
+  expect(within(attention).getAllByRole("link")).toHaveLength(1);
+  expect(within(attention).getByRole("link", { name: "Xem" })).toHaveAttribute(
+    "href",
+    "/admin/packages?warehouse_status=CANCELLED_AFTER_PACK",
+  );
   expect(screen.queryByText("Chưa có phiên đóng gói nào trong ngày.")).not.toBeInTheDocument();
 });
 
@@ -47,10 +51,18 @@ test("ADMIN: camera mất tín hiệu có link sang D6", async () => {
   expect(within(row).getByRole("link", { name: "Xem" })).toHaveAttribute("href", "/admin/settings/stations");
 });
 
-test("TC-09.02: bấm thẻ → D3 với bộ lọc tương ứng + ngày", async () => {
+test("TC-09.02: thẻ dẫn sang D3 với bộ lọc tương ứng + ngày", async () => {
   await login("tst_sup", "matkhau123", "DASHBOARD");
   const router = renderApp("/admin");
   const today = vnDay();
+  const day = `date_from=${today}&date_to=${today}`;
+
+  const href = async (name: RegExp) => (await card(name)).getAttribute("href");
+  expect(await href(/^Từng lệch mã:/)).toBe(`/admin/packages?session_flag=HAD_MISMATCH&${day}`);
+  expect(await href(/^Bỏ dở:/)).toBe(`/admin/packages?session_status=ABANDONED&${day}`);
+  expect(await href(/^Hủy phiên:/)).toBe(`/admin/packages?session_status=CANCELLED&${day}`);
+  expect(await href(/^Chưa bàn giao:/)).toBe("/admin/packages?warehouse_status=PACKED");
+  expect(await href(/^Hủy sau khi đóng:/)).toBe("/admin/packages?warehouse_status=CANCELLED_AFTER_PACK");
 
   await userEvent.click(await card(/^Đã đóng gói:/));
   await waitFor(() => expect(router.state.location.pathname).toBe("/admin/packages"));
@@ -59,14 +71,8 @@ test("TC-09.02: bấm thẻ → D3 với bộ lọc tương ứng + ngày", asyn
     date_from: today,
     date_to: today,
   });
-
-  await router.navigate("/admin");
-  await userEvent.click(await card(/^Chưa bàn giao:/));
-  await waitFor(() => expect(router.state.location.search).toBe("?warehouse_status=PACKED"));
-
-  await router.navigate("/admin");
-  await userEvent.click(await card(/^Từng lệch mã:/));
-  await waitFor(() => expect(router.state.location.search).toContain("session_flag=HAD_MISMATCH"));
+  // D3 nhận đúng bộ lọc: số dòng = số trên thẻ "Đã đóng gói" (8).
+  expect(await screen.findByText("8 kết quả")).toBeInTheDocument();
 });
 
 test("TC-09.04: ngày không có phiên → thẻ theo ngày = 0 và câu trống", async () => {

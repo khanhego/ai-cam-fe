@@ -35,6 +35,7 @@ export const routes: RouteObject[] = [
     ),
     children: [
       { index: true, Component: lazy(() => import("@/features/reports/DailyPage")) },
+      { path: "packages", Component: lazy(() => import("@/features/orders/PackagesPage")) },
       {
         path: "settings/stations",
         element: (
