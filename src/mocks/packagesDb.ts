@@ -147,7 +147,7 @@ function seeds(): PackageSeed[] {
       n: "0000013",
       status: "NEW",
       platform: "READY_TO_SHIP",
-      sessions: [today(80, { status: "CANCELLED", durationS: 40, clips: null })],
+      sessions: [today(80, { status: "CANCELLED", durationS: 40 })],
     },
     {
       n: "0000014",

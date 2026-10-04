@@ -72,12 +72,4 @@ export const stationHandlers = [
       return apiError(409, "ALREADY_RESOLVED", "Yêu cầu đã được xử lý.");
     return HttpResponse.json({ state: stationSim.state() });
   }),
-
-  // API-40 (mock): URL phát trỏ tới video mẫu trong public/mock (chỉ dev).
-  http.get(`${API}/clips/:id/play-url`, ({ params }) =>
-    HttpResponse.json({
-      url: String(params.id).endsWith("-2") ? "/mock/clip-cam2.mp4" : "/mock/clip-cam1.mp4",
-      expires_at: new Date(Date.now() + 600_000).toISOString(),
-    }),
-  ),
 ];
