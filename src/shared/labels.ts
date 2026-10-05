@@ -5,7 +5,19 @@ import type { ChipTone } from "@/shared/ui";
  * ("Trạng thái kiện" — README §Mẫu màn hình dashboard). Không hiện mã kỹ thuật lên giao diện.
  */
 export type WarehouseStatus =
-  "NEW" | "PACKING" | "PACKED" | "HANDED_OVER" | "DELIVERED" | "CANCELLED" | "CANCELLED_AFTER_PACK";
+  | "NEW"
+  | "PACKING"
+  | "PACKED"
+  | "HANDED_OVER"
+  | "DELIVERED"
+  | "CANCELLED"
+  | "CANCELLED_AFTER_PACK"
+  // item 02 (02 §5.2 `warehouse_status` thêm)
+  | "RETURN_EXPECTED"
+  | "RETURN_INSPECTING"
+  | "RETURN_RECEIVED_OK"
+  | "RETURN_RECEIVED_ISSUE"
+  | "RETURN_MISSING";
 
 export const WAREHOUSE_STATUS: Record<WarehouseStatus, [string, ChipTone]> = {
   NEW: ["Mới", "neutral"],
@@ -15,6 +27,11 @@ export const WAREHOUSE_STATUS: Record<WarehouseStatus, [string, ChipTone]> = {
   DELIVERED: ["Đã giao", "info"],
   CANCELLED: ["Đã hủy", "neutral"],
   CANCELLED_AFTER_PACK: ["Hủy sau khi đóng", "warning"],
+  RETURN_EXPECTED: ["Hoàn đang về", "info"],
+  RETURN_INSPECTING: ["Đang kiểm hoàn", "primary"],
+  RETURN_RECEIVED_OK: ["Đã nhận hoàn – nguyên vẹn", "success"],
+  RETURN_RECEIVED_ISSUE: ["Đã nhận hoàn – có vấn đề", "warning"],
+  RETURN_MISSING: ["Hoàn quá hạn", "error"],
 };
 
 export type SessionStatus =

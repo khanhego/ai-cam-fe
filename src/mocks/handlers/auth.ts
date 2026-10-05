@@ -10,6 +10,7 @@ import {
   userFromAuth,
 } from "../db";
 import { API, apiError } from "../http";
+import { stationSim } from "../stationSim";
 
 type LoginBody = { username: string; password: string; client: "STATION" | "DASHBOARD" };
 
@@ -44,6 +45,8 @@ export const authHandlers = [
   http.post(`${API}/auth/logout`, ({ request }) => {
     const user = userFromAuth(request.headers.get("Authorization"));
     if (user) mockRefresh.delete(user.role === "STATION" ? "STATION" : "DASHBOARD");
+    // BR-28 (02 §6.3 #17): station đăng xuất → xóa tên người kiểm.
+    if (user?.role === "STATION") stationSim.clearOperator();
     return new HttpResponse(null, { status: 204 });
   }),
 

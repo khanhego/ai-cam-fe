@@ -1,0 +1,726 @@
+import type { StationItem } from "@/lib/api/station";
+import type { WarehouseStatus } from "@/shared/labels";
+import type {
+  Conclusion,
+  Inspection,
+  LinesMode,
+  ReturnCaseStatus,
+  ReturnKind,
+  Snapshot,
+} from "@/shared/returns/types";
+
+import { mockPackages, startOfVnDay, type MockPackage, type MockSession } from "./packagesDb";
+
+/**
+ * Hồ sơ hàng hoàn + hồ sơ khiếu nại giả, dùng chung station (`StationSim` chế độ RETURN) và dashboard (D4, D14, D16,
+ * D17) — 02b-station §12, 02b-admin §12. Kiện nằm trong `packagesDb` (`SPXTST00000[4-5]x`, `TAM-000001`); file này giữ
+ * phần hàng hoàn và mô phỏng `returns.resolve_code` / đóng phiên (02 §6.2 API-11 RETURN, §6.3–§6.5).
+ */
+
+const DAY = 86_400_000;
+const iso = (ms: number) => new Date(ms).toISOString();
+
+export type MockReturnCase = {
+  id: string;
+  code: string;
+  kind: ReturnKind;
+  status: ReturnCaseStatus;
+  order: { id: string; platform_order_sn: string } | null;
+  platform_return_sn: string | null;
+  platform_status: string | null;
+  needs_parcel: boolean;
+  return_tracking_number: string | null;
+  reason: string | null;
+  reason_text: string | null;
+  reason_label: string | null;
+  requested_items: {
+    order_item_id: string;
+    product_name: string;
+    variation: string | null;
+    quantity: number;
+  }[];
+  seller_due_at: string | null;
+  reported_at: string | null;
+  expected_since: string | null;
+  received_at: string | null;
+  conclusion: Conclusion | null;
+  package_ids: string[];
+  source: "PLATFORM" | "WAREHOUSE";
+  merged_into: { id: string; code: string } | null;
+  created_at: string;
+  /** Hồ sơ một phiên (02 §6.4 #1): `BUYER_RETURN` hoặc đơn 1 kiện. */
+  single_session: boolean;
+  /** `force_new` (02 §6.5 #1) — chỉ gắn qua API-112. */
+  manual_link_only?: boolean;
+  /** Mã đã quét của hồ sơ chưa xác định (02 §6.4 #3). */
+  open_code?: string | null;
+  /** Phiên đã tạo hồ sơ (hủy phiên → hồ sơ `CANCELLED` nếu không còn phiên khác — API-12). */
+  created_by_session?: string | null;
+  /** Trạng thái kiện trước khi vào hồ sơ (trả một phần: kiện không về được trả lại — DEC-271). */
+  before: Record<string, WarehouseStatus>;
+};
+
+export type ClaimType =
+  "DAMAGED" | "MISSING_ITEM" | "WRONG_ITEM" | "EMPTY_BOX" | "OTHER" | "BUYER_CLAIM" | "LOST_IN_TRANSIT";
+export type ClaimStatus = "NEW" | "SUBMITTED" | "WAITING" | "WON" | "LOST" | "CLOSED";
+
+export type MockClaimNote = {
+  id: string;
+  kind: "NOTE" | "STATUS_CHANGE" | "SYSTEM";
+  text: string;
+  author: { id: string; display_name: string } | null;
+  at: string;
+};
+
+export type MockClaim = {
+  id: string;
+  code: string;
+  type: ClaimType;
+  counterparty: "PLATFORM" | "CARRIER";
+  status: ClaimStatus;
+  source: "AUTO_RETURN" | "MANUAL" | "RECON" | "LEGACY_HOLD";
+  version: number;
+  package_id: string;
+  return_case_id: string | null;
+  owner: { id: string; display_name: string } | null;
+  deadline_at: string | null;
+  deadline_source: "PLATFORM" | "DEFAULT" | "MANUAL";
+  platform_claim_ref: string | null;
+  recovered_amount: number | null;
+  close_reason: string | null;
+  created_at: string;
+  closed_at: string | null;
+  /** Bằng chứng: phiên / ảnh (auto = tự chọn). */
+  evidence: { id: string; kind: "SESSION" | "SNAPSHOT"; ref_id: string; auto: boolean; added_at: string }[];
+  notes: MockClaimNote[];
+};
+
+export const mockReturnCases: MockReturnCase[] = [];
+export const mockClaims: MockClaim[] = [];
+
+let caseSeq = 100;
+let claimSeq = 125;
+let placeholderSeq = 1;
+let idSeq = 0;
+const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${++idSeq}`;
+
+export const caseCode = (n: number) => `HH-${String(n).padStart(6, "0")}`;
+export const claimCode = (n: number) => `KN-${String(n).padStart(6, "0")}`;
+
+export const findPackage = (id: string) => mockPackages.find((p) => p.id === id);
+export const findPackageByCode = (code: string) =>
+  mockPackages.find((p) => p.tracking_number.toUpperCase() === code.toUpperCase());
+export const findCase = (id: string) => mockReturnCases.find((c) => c.id === id);
+
+const OPEN_CASE: ReturnCaseStatus[] = ["EXPECTED", "INSPECTING", "PARTIALLY_RECEIVED", "MISSING"];
+export const isCaseOpen = (c: MockReturnCase) => OPEN_CASE.includes(c.status);
+
+/** Hồ sơ hàng hoàn của kiện: hồ sơ đang mở trước, rồi hồ sơ gần nhất chưa hủy. */
+export function caseOfPackage(pkgId: string): MockReturnCase | undefined {
+  const all = mockReturnCases.filter((c) => c.package_ids.includes(pkgId) && c.status !== "CANCELLED");
+  return all.find(isCaseOpen) ?? all.at(-1);
+}
+
+/** Dòng sản phẩm của đơn có `order_item_id` ổn định (`oi-<mã đơn>-<thứ tự>`). */
+export function itemsOf(pkg: MockPackage): StationItem[] {
+  return (pkg.order?.items ?? []).map((it, i) => ({
+    order_item_id: `oi-${pkg.order!.platform_order_sn}-${i + 1}`,
+    product_name: it.product_name,
+    variation: it.variation,
+    quantity: it.quantity,
+    image_url: it.image_url,
+  }));
+}
+
+export const packagesOfOrder = (orderSn: string) =>
+  mockPackages.filter((p) => p.order?.platform_order_sn.toUpperCase() === orderSn.toUpperCase());
+
+const snapshotUrl = (id: string) => `/api/v1/media/snapshots/${id}?uid=mock&exp=1790000000&sig=mock`;
+export const mockSnapshot = (id: string, kind: Snapshot["kind"], takenAt: string): Snapshot => ({
+  id,
+  kind,
+  camera_role: "CAM1",
+  taken_at: takenAt,
+  sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  status: "READY",
+  url: snapshotUrl(id),
+});
+
+/** Phiên PACK hiệu lực gần nhất của kiện (cột "Lúc đóng gói" R2, bằng chứng hồ sơ). */
+export function packSessionOf(pkg: MockPackage): MockSession | undefined {
+  return pkg.sessions.find((s) => (s.type ?? "PACK") === "PACK" && s.status === "COMPLETED");
+}
+
+/** Ghi phiên RETURN vào kiện (D4 / bằng chứng thấy được). */
+export function recordReturnSession(pkg: MockPackage, session: MockSession) {
+  pkg.sessions.unshift(session);
+}
+
+function caseSeed(
+  n: number,
+  pkgs: string[],
+  patch: Partial<MockReturnCase> & Pick<MockReturnCase, "kind" | "status">,
+): MockReturnCase {
+  const first = findPackage(pkgs[0]!);
+  const order = first?.order
+    ? { id: first.order.id, platform_order_sn: first.order.platform_order_sn }
+    : null;
+  const now = Date.now();
+  const items = first ? itemsOf(first) : [];
+  return {
+    id: `rc-${String(n).padStart(6, "0")}`,
+    code: caseCode(n),
+    order,
+    platform_return_sn: null,
+    platform_status: null,
+    needs_parcel: true,
+    return_tracking_number: null,
+    reason: null,
+    reason_text: null,
+    reason_label: null,
+    requested_items:
+      patch.kind === "BUYER_RETURN" || patch.kind === "REFUND_ONLY"
+        ? items.map((it) => ({
+            order_item_id: it.order_item_id!,
+            product_name: it.product_name,
+            variation: it.variation,
+            quantity: it.quantity,
+          }))
+        : [],
+    seller_due_at: null,
+    reported_at: iso(now - 2 * DAY),
+    expected_since: iso(now - 2 * DAY),
+    received_at: null,
+    conclusion: null,
+    package_ids: pkgs,
+    source: "PLATFORM",
+    merged_into: null,
+    created_at: iso(now - 2 * DAY),
+    single_session: patch.kind === "BUYER_RETURN" || pkgs.length === 1,
+    before: Object.fromEntries(pkgs.map((p) => [p, "DELIVERED" as WarehouseStatus])),
+    ...patch,
+  };
+}
+
+/** Phiên RETURN đã đóng của dữ liệu mẫu (D4 / D17 có gì để xem). */
+function seedReturnSession(
+  pkg: MockPackage,
+  rc: MockReturnCase,
+  conclusion: Conclusion,
+  daysAgo: number,
+  operator: string,
+): MockSession {
+  const start = startOfVnDay(daysAgo) + 9 * 3600_000;
+  const id = `ses-rt-${pkg.tracking_number}`;
+  const lines = itemsOf(pkg).map((it) => ({
+    order_item_id: it.order_item_id!,
+    product_name: it.product_name,
+    variation: it.variation,
+    image_url: it.image_url,
+    quantity_sent: it.quantity,
+    quantity_requested: it.quantity,
+    quantity_received: conclusion === "OK" ? it.quantity : 0,
+    condition: (conclusion === "OK" ? "OK" : "MISSING_ITEM") as Conclusion,
+    note: null,
+  }));
+  return {
+    id,
+    package_id: pkg.id,
+    station_id: "st-1",
+    station_name: "TST Station 01",
+    status: "COMPLETED",
+    started_at: iso(start),
+    ended_at: iso(start + 140_000),
+    duration_s: 140,
+    flags: rc.kind === "UNIDENTIFIED" ? ["UNIDENTIFIED"] : [],
+    cancel_reason: null,
+    note: null,
+    type: "RETURN",
+    operator_name: operator,
+    return_case_id: rc.id,
+    inspection: {
+      conclusion,
+      note: conclusion === "EMPTY_BOX" ? "Hộp còn nguyên băng keo, bên trong trống" : "",
+      saved_at: iso(start + 120_000),
+      lines_mode: "FULL",
+      lines,
+      corrections: [],
+    },
+    snapshots: [
+      mockSnapshot(`snap-${id}-1`, "MANUAL", iso(start + 60_000)),
+      mockSnapshot(`snap-${id}-2`, "MANUAL", iso(start + 90_000)),
+    ],
+    clips: (["CAM1", "CAM2"] as const).map((role, i) => ({
+      id: `clip-rt-${pkg.tracking_number}-${i + 1}`,
+      session_id: id,
+      camera_role: role,
+      status: "READY" as const,
+      sha256: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+      duration_s: 150,
+      held: false,
+      retention_until: null,
+      deleted_at: null,
+      flags: [],
+    })),
+  };
+}
+
+export function resetMockReturns() {
+  caseSeq = 100;
+  claimSeq = 125;
+  placeholderSeq = 2;
+  idSeq = 0;
+  const now = Date.now();
+  const p = (n: string) => `pkg-${n}`;
+  mockClaims.splice(0, mockClaims.length);
+  mockReturnCases.splice(
+    0,
+    mockReturnCases.length,
+    caseSeed(41, [p("0000041")], {
+      kind: "BUYER_RETURN",
+      status: "EXPECTED",
+      platform_return_sn: "2410RTTST041",
+      platform_status: "ACCEPTED",
+      return_tracking_number: "SPXRTTST000041",
+      reason: "DAMAGED",
+      reason_text: "Áo bị rách ở tay",
+      reason_label: "Hàng bị hư",
+      seller_due_at: iso(now + 3 * DAY),
+    }),
+    caseSeed(42, [p("0000042")], {
+      kind: "FAILED_DELIVERY",
+      status: "EXPECTED",
+      before: { [p("0000042")]: "HANDED_OVER" },
+    }),
+    caseSeed(43, [p("0000043-1"), p("0000043-2")], {
+      kind: "FAILED_DELIVERY",
+      status: "EXPECTED",
+      before: { [p("0000043-1")]: "HANDED_OVER", [p("0000043-2")]: "HANDED_OVER" },
+    }),
+    caseSeed(44, [p("0000044")], {
+      kind: "REFUND_ONLY",
+      status: "NO_PARCEL",
+      needs_parcel: false,
+      platform_return_sn: "2410RTTST044",
+      platform_status: "REFUND_PAID",
+      reason: "MISSING_ITEM",
+      reason_label: "Thiếu hàng",
+      expected_since: null,
+    }),
+    caseSeed(45, [p("0000045")], {
+      kind: "BUYER_RETURN",
+      status: "EXPECTED",
+      platform_return_sn: "2410RTTST045",
+      platform_status: "ACCEPTED",
+      return_tracking_number: "SPXRTTST000045",
+      reason: "CHANGE_MIND",
+      reason_label: "Đổi ý",
+    }),
+    caseSeed(47, [p("0000047-1"), p("0000047-2")], {
+      kind: "BUYER_RETURN",
+      status: "EXPECTED",
+      platform_return_sn: "2410RTTST047",
+      platform_status: "ACCEPTED",
+      return_tracking_number: "SPXRTTST000047",
+      reason: "WRONG_ITEM",
+      reason_label: "Giao sai hàng",
+    }),
+    caseSeed(48, [p("0000048-1"), p("0000048-2")], {
+      kind: "BUYER_RETURN",
+      status: "EXPECTED",
+      platform_return_sn: "2410RTTST048",
+      platform_status: "ACCEPTED",
+      return_tracking_number: "SPXRTTST000048",
+      reason: "DAMAGED",
+      reason_label: "Hàng bị hư",
+      // Trả một phần: chỉ 1 áo (dòng 1).
+      requested_items: [
+        {
+          order_item_id: "oi-2410TST00048-1",
+          product_name: "Áo thun basic",
+          variation: "Đen / L",
+          quantity: 1,
+        },
+      ],
+    }),
+    caseSeed(49, [p("0000049")], {
+      kind: "FAILED_DELIVERY",
+      status: "MISSING",
+      expected_since: iso(now - 8 * DAY),
+      reported_at: iso(now - 8 * DAY),
+      before: { [p("0000049")]: "HANDED_OVER" },
+    }),
+    caseSeed(50, [p("0000050")], {
+      kind: "BUYER_RETURN",
+      status: "EXPECTED",
+      platform_return_sn: "2410RTTST050",
+      platform_status: "ACCEPTED",
+      return_tracking_number: "SPXRTTST000050",
+      reason: "NOT_AS_DESCRIBED",
+      reason_label: "Không đúng mô tả",
+      before: { [p("0000050")]: "NEW" },
+    }),
+    caseSeed(51, [p("0000051")], {
+      kind: "BUYER_RETURN",
+      status: "EXPECTED",
+      platform_return_sn: "2410RTTST051",
+      platform_status: "REFUND_PAID",
+      return_tracking_number: "SPXRTTST000051",
+      reason: "DAMAGED",
+      reason_label: "Hàng bị hư",
+    }),
+    caseSeed(53, [p("0000053")], {
+      kind: "BUYER_RETURN",
+      status: "RECEIVED_ISSUE",
+      platform_return_sn: "2410RTTST053",
+      platform_status: "ACCEPTED",
+      return_tracking_number: "SPXRTTST000053",
+      reason: "DAMAGED",
+      reason_label: "Hàng bị hư",
+      seller_due_at: iso(now + DAY),
+      received_at: iso(startOfVnDay(1) + 9 * 3600_000 + 140_000),
+      conclusion: "EMPTY_BOX",
+    }),
+    caseSeed(54, [p("0000054")], {
+      kind: "FAILED_DELIVERY",
+      status: "RECEIVED_OK",
+      received_at: iso(startOfVnDay(1) + 9 * 3600_000 + 140_000),
+      conclusion: "OK",
+      before: { [p("0000054")]: "HANDED_OVER" },
+    }),
+    caseSeed(55, [p("0000055")], {
+      kind: "BUYER_RETURN",
+      status: "INSPECTING",
+      platform_return_sn: "2410RTTST055",
+      platform_status: "ACCEPTED",
+      return_tracking_number: "SPXRTTST000055",
+    }),
+    caseSeed(56, [p("TAM-000001")], {
+      kind: "UNIDENTIFIED",
+      status: "RECEIVED_ISSUE",
+      source: "WAREHOUSE",
+      open_code: "SPXVN0000000001",
+      reported_at: null,
+      expected_since: null,
+      received_at: iso(startOfVnDay(1) + 9 * 3600_000 + 140_000),
+      conclusion: "DAMAGED",
+      single_session: true,
+    }),
+  );
+  // Phiên RETURN đã đóng của hồ sơ đã nhận + hồ sơ khiếu nại tự tạo.
+  const received: [string, string, number, string][] = [
+    ["0000053", "rc-000053", 1, "Lan"],
+    ["0000054", "rc-000054", 1, "Lan"],
+    ["TAM-000001", "rc-000056", 1, "Minh"],
+  ];
+  for (const [n, caseId, daysAgo, operator] of received) {
+    const pkg = findPackage(p(n))!;
+    const rc = findCase(caseId)!;
+    const session = seedReturnSession(pkg, rc, rc.conclusion!, daysAgo, operator);
+    recordReturnSession(pkg, session);
+    if (rc.conclusion !== "OK") createAutoClaim(rc, pkg, session, rc.conclusion!, 124 - mockClaims.length);
+  }
+}
+
+/** BR-08: kết luận có vấn đề → hồ sơ khiếu nại tự động (nếu kiện chưa có hồ sơ cùng loại đang mở — BR-27). */
+export function createAutoClaim(
+  rc: MockReturnCase,
+  pkg: MockPackage,
+  session: MockSession,
+  conclusion: Conclusion,
+  number?: number,
+): MockClaim | null {
+  if (conclusion === "OK") return null;
+  const dup = mockClaims.find(
+    (c) => c.package_id === pkg.id && c.type === conclusion && c.status !== "CLOSED",
+  );
+  if (dup) return dup;
+  const at = session.ended_at ?? new Date().toISOString();
+  const n = number ?? claimSeq++;
+  const pack = packSessionOf(pkg);
+  const claim: MockClaim = {
+    id: `cl-${String(n).padStart(6, "0")}`,
+    code: claimCode(n),
+    type: conclusion,
+    counterparty: rc.kind === "FAILED_DELIVERY" ? "CARRIER" : "PLATFORM",
+    status: "NEW",
+    source: "AUTO_RETURN",
+    version: 1,
+    package_id: pkg.id,
+    return_case_id: rc.id,
+    owner: null,
+    deadline_at: rc.seller_due_at ?? iso(Date.parse(at) + 7 * DAY),
+    deadline_source: rc.seller_due_at ? "PLATFORM" : "DEFAULT",
+    platform_claim_ref: null,
+    recovered_amount: null,
+    close_reason: null,
+    created_at: at,
+    closed_at: null,
+    evidence: [
+      ...(pack
+        ? [{ id: nextId("ev"), kind: "SESSION" as const, ref_id: pack.id, auto: true, added_at: at }]
+        : []),
+      { id: nextId("ev"), kind: "SESSION", ref_id: session.id, auto: true, added_at: at },
+      ...(session.snapshots ?? []).map((s) => ({
+        id: nextId("ev"),
+        kind: "SNAPSHOT" as const,
+        ref_id: s.id,
+        auto: true,
+        added_at: at,
+      })),
+    ],
+    notes: [
+      {
+        id: nextId("note"),
+        kind: "SYSTEM",
+        text: `Tạo tự động từ phiên mở hoàn (${CLAIM_SYSTEM_LABEL[conclusion]})`,
+        author: null,
+        at,
+      },
+    ],
+  };
+  mockClaims.push(claim);
+  return claim;
+}
+
+const CLAIM_SYSTEM_LABEL: Record<Conclusion, string> = {
+  OK: "Nguyên vẹn",
+  DAMAGED: "Hư hỏng",
+  MISSING_ITEM: "Thiếu hàng",
+  WRONG_ITEM: "Sai hàng / bị tráo",
+  EMPTY_BOX: "Hộp rỗng",
+  OTHER: "Khác",
+};
+
+/** Kiện của đơn có trạng thái mở được phiên hoàn (02 §5.3). `NEW` chỉ khi đơn đã giao (DEC-254). */
+const SHIPPED_PLATFORM = ["SHIPPED", "TO_CONFIRM_RECEIVE", "COMPLETED", "TO_RETURN"];
+export function blockedReason(pkg: MockPackage): string | null {
+  const s = pkg.warehouse_status;
+  if (s === "RETURN_RECEIVED_OK" || s === "RETURN_RECEIVED_ISSUE") return "RETURN_ALREADY_RECEIVED";
+  if (s === "RETURN_INSPECTING") return "RETURN_IN_PROGRESS_ELSEWHERE";
+  if (["RETURN_EXPECTED", "RETURN_MISSING", "HANDED_OVER", "DELIVERED"].includes(s)) return null;
+  if (s === "NEW" && SHIPPED_PLATFORM.includes(pkg.order?.platform_status ?? "")) return null;
+  return "NOT_SHIPPED";
+}
+
+export type ResolveResult =
+  | { kind: "PACKAGE"; pkg: MockPackage; rc: MockReturnCase | undefined }
+  | { kind: "MULTIPLE"; orderSn: string; count: number }
+  | { kind: "NOT_FOUND" };
+
+/**
+ * `returns.resolve_code` (02 §7 thứ tự tra): mã chiều về của hồ sơ → mã vận đơn của kiện → mã đơn sàn
+ * (đơn nhiều kiện chỉ ra một kiện khi hồ sơ là một phiên; còn lại `MULTIPLE`). Không có → `NOT_FOUND`.
+ */
+export function resolveReturnCode(raw: string): ResolveResult {
+  const code = raw.trim().toUpperCase();
+  const byReturn = mockReturnCases.find(
+    (c) => c.status !== "CANCELLED" && c.return_tracking_number?.toUpperCase() === code,
+  );
+  if (byReturn) {
+    const pkgs = byReturn.package_ids.map(findPackage).filter(Boolean) as MockPackage[];
+    const pkg = pkgs.find((p) => blockedReason(p) === null) ?? pkgs[0];
+    if (pkg) return { kind: "PACKAGE", pkg, rc: byReturn };
+  }
+  const pkg = findPackageByCode(code);
+  if (pkg) return { kind: "PACKAGE", pkg, rc: caseOfPackage(pkg.id) };
+  const pkgs = packagesOfOrder(code);
+  if (pkgs.length === 1) return { kind: "PACKAGE", pkg: pkgs[0]!, rc: caseOfPackage(pkgs[0]!.id) };
+  if (pkgs.length > 1) {
+    const rc = pkgs.map((p) => caseOfPackage(p.id)).find((c) => c && isCaseOpen(c) && c.single_session);
+    if (rc) {
+      const open = pkgs.find((p) => rc.package_ids.includes(p.id) && blockedReason(p) === null);
+      if (open) return { kind: "PACKAGE", pkg: open, rc };
+    }
+    return { kind: "MULTIPLE", orderSn: pkgs[0]!.order!.platform_order_sn, count: pkgs.length };
+  }
+  return { kind: "NOT_FOUND" };
+}
+
+/** Mọi mã thuộc hồ sơ / kiện đang kiểm (BR-23): mã chiều về, mã vận đơn các kiện của hồ sơ, mã đơn. */
+export function codesOf(rc: MockReturnCase, pkg: MockPackage): string[] {
+  const codes = new Set<string>([pkg.tracking_number]);
+  if (rc.return_tracking_number) codes.add(rc.return_tracking_number);
+  if (rc.open_code) codes.add(rc.open_code);
+  if (rc.single_session)
+    rc.package_ids.forEach((id) => {
+      const p = findPackage(id);
+      if (p) codes.add(p.tracking_number);
+    });
+  if (rc.order) codes.add(rc.order.platform_order_sn);
+  return [...codes].map((c) => c.toUpperCase());
+}
+
+/** Tạo hồ sơ khi kiện chưa có hồ sơ mở (`attach_or_create` với tín hiệu kho — `UNANNOUNCED`). */
+export function createWarehouseCase(pkg: MockPackage, sessionId: string): MockReturnCase {
+  const n = caseSeq++;
+  const now = new Date().toISOString();
+  const order = pkg.order ? { id: pkg.order.id, platform_order_sn: pkg.order.platform_order_sn } : null;
+  const siblings = order ? packagesOfOrder(order.platform_order_sn).length : 1;
+  const rc: MockReturnCase = {
+    id: `rc-${String(n).padStart(6, "0")}`,
+    code: caseCode(n),
+    kind: "UNANNOUNCED",
+    status: "INSPECTING",
+    order,
+    platform_return_sn: null,
+    platform_status: null,
+    needs_parcel: true,
+    return_tracking_number: null,
+    reason: null,
+    reason_text: null,
+    reason_label: null,
+    requested_items: [],
+    seller_due_at: null,
+    reported_at: null,
+    expected_since: null,
+    received_at: null,
+    conclusion: null,
+    package_ids: [pkg.id],
+    source: "WAREHOUSE",
+    merged_into: null,
+    created_at: now,
+    single_session: siblings === 1,
+    created_by_session: sessionId,
+    before: { [pkg.id]: pkg.warehouse_status },
+  };
+  mockReturnCases.push(rc);
+  return rc;
+}
+
+/** Kiện tạm + hồ sơ `UNIDENTIFIED` (API-105 `unidentified_code`, `force_new` — 02 §6.4 #2, §6.5 #1, #9). */
+export function createUnidentified(
+  code: string,
+  sessionId: string,
+  forceNote?: string,
+): { pkg: MockPackage; rc: MockReturnCase } {
+  const tracking = `TAM-${String(placeholderSeq++).padStart(6, "0")}`;
+  const now = new Date().toISOString();
+  const pkg: MockPackage = {
+    id: `pkg-${tracking}`,
+    tracking_number: tracking,
+    warehouse_status: "RETURN_INSPECTING",
+    platform_logistics_status: null,
+    verified: false,
+    created_at: now,
+    is_placeholder: true,
+    order: null,
+    sessions: [],
+    timeline: [],
+  };
+  mockPackages.push(pkg);
+  const n = caseSeq++;
+  const rc: MockReturnCase = {
+    id: `rc-${String(n).padStart(6, "0")}`,
+    code: caseCode(n),
+    kind: "UNIDENTIFIED",
+    status: "INSPECTING",
+    order: null,
+    platform_return_sn: null,
+    platform_status: null,
+    needs_parcel: true,
+    return_tracking_number: null,
+    reason: null,
+    reason_text: forceNote ?? null,
+    reason_label: null,
+    requested_items: [],
+    seller_due_at: null,
+    reported_at: null,
+    expected_since: null,
+    received_at: null,
+    conclusion: null,
+    package_ids: [pkg.id],
+    source: "WAREHOUSE",
+    merged_into: null,
+    created_at: now,
+    single_session: true,
+    manual_link_only: Boolean(forceNote),
+    open_code: code.toUpperCase(),
+    created_by_session: sessionId,
+    before: { [pkg.id]: "NEW" },
+  };
+  mockReturnCases.push(rc);
+  return { pkg, rc };
+}
+
+/** Dòng kiểm khởi tạo khi mở phiên (02 §6.2 API-10 ghi chú `inspection.lines`). */
+export function initialInspection(pkg: MockPackage, rc: MockReturnCase): Inspection {
+  const items = itemsOf(pkg);
+  const multi = rc.order ? packagesOfOrder(rc.order.platform_order_sn).length > 1 : false;
+  const mode: LinesMode = rc.kind !== "BUYER_RETURN" && multi ? "REFERENCE" : "FULL";
+  const requested = (orderItemId: string, sent: number) => {
+    if (rc.kind !== "BUYER_RETURN" || rc.requested_items.length === 0) return sent;
+    return rc.requested_items.find((r) => r.order_item_id === orderItemId)?.quantity ?? 0;
+  };
+  return {
+    conclusion: null,
+    note: "",
+    saved_at: null,
+    lines_mode: mode,
+    lines: items.map((it) => {
+      const q = requested(it.order_item_id!, it.quantity);
+      return {
+        order_item_id: it.order_item_id!,
+        product_name: it.product_name,
+        variation: it.variation,
+        image_url: it.image_url,
+        quantity_sent: it.quantity,
+        quantity_requested: q,
+        quantity_received: q,
+        condition: "OK",
+        note: null,
+      };
+    }),
+  };
+}
+
+/** Yêu cầu trả bao trọn mọi dòng × số lượng của đơn (DEC-271). */
+function coversWholeOrder(rc: MockReturnCase, pkg: MockPackage): boolean {
+  if (rc.kind !== "BUYER_RETURN") return false;
+  return itemsOf(pkg).every(
+    (it) =>
+      (rc.requested_items.find((r) => r.order_item_id === it.order_item_id)?.quantity ?? 0) >= it.quantity,
+  );
+}
+
+/**
+ * Đóng phiên hoàn (API-11 / J-07): kiện → `RETURN_RECEIVED_*`; hồ sơ một phiên trả trọn đơn → mọi kiện; trả một phần
+ * → kiện khác rời hồ sơ, về trạng thái trước (DEC-271); hồ sơ tính lại (BR-24).
+ */
+export function closeReturn(rc: MockReturnCase, pkg: MockPackage, conclusion: Conclusion) {
+  const to: WarehouseStatus = conclusion === "OK" ? "RETURN_RECEIVED_OK" : "RETURN_RECEIVED_ISSUE";
+  pkg.warehouse_status = to;
+  if (rc.single_session && rc.package_ids.length > 1) {
+    const whole = coversWholeOrder(rc, pkg);
+    for (const id of [...rc.package_ids]) {
+      if (id === pkg.id) continue;
+      const other = findPackage(id);
+      if (!other) continue;
+      if (whole) other.warehouse_status = to;
+      else {
+        other.warehouse_status = rc.before[id] ?? "DELIVERED";
+        rc.package_ids = rc.package_ids.filter((x) => x !== id);
+      }
+    }
+  }
+  recomputeCase(rc, conclusion);
+}
+
+/** BR-24: tính trạng thái hồ sơ từ trạng thái các kiện. */
+export function recomputeCase(rc: MockReturnCase, lastConclusion?: Conclusion) {
+  const pkgs = rc.package_ids.map(findPackage).filter(Boolean) as MockPackage[];
+  const received = pkgs.filter((p) => p.warehouse_status.startsWith("RETURN_RECEIVED"));
+  const anyIssue = received.some((p) => p.warehouse_status === "RETURN_RECEIVED_ISSUE");
+  if (received.length === pkgs.length && pkgs.length > 0) {
+    rc.status = anyIssue ? "RECEIVED_ISSUE" : "RECEIVED_OK";
+    rc.received_at = new Date().toISOString();
+  } else if (pkgs.some((p) => p.warehouse_status === "RETURN_INSPECTING")) rc.status = "INSPECTING";
+  else if (received.length > 0) rc.status = "PARTIALLY_RECEIVED";
+  else if (pkgs.some((p) => p.warehouse_status === "RETURN_MISSING")) rc.status = "MISSING";
+  else rc.status = "EXPECTED";
+  // Kết luận tổng: lần đóng có vấn đề → kết luận đó; OK mà hồ sơ đã có kiện có vấn đề → giữ kết luận cũ.
+  if (lastConclusion)
+    rc.conclusion = lastConclusion !== "OK" ? lastConclusion : anyIssue ? rc.conclusion : "OK";
+}
+
+resetMockReturns();

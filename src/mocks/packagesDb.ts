@@ -2,6 +2,7 @@ import type { Clip, ClipStatus, PackageDetail, PackageListItem, PackageSession }
 import type { SessionFlag } from "@/lib/api/station";
 import { vnDay } from "@/shared/format";
 import type { SessionStatus, WarehouseStatus } from "@/shared/labels";
+import type { Inspection, Snapshot } from "@/shared/returns/types";
 
 /**
  * Kiện, phiên, clip, bản xuất giả cho D2–D4 (02b-admin §12). Bám seed `aicam seed-demo --prefix TST`
@@ -12,8 +13,21 @@ export type MockSession = Omit<PackageSession, "clips"> & {
   station_id: string;
   package_id: string;
   clips: MockClip[];
+  /** item 02 (02 §6.2 API-31 `sessions[]` mở rộng). Thiếu → PACK. */
+  type?: "PACK" | "RETURN";
+  operator_name?: string | null;
+  return_case_id?: string | null;
+  inspection?: Inspection | null;
+  snapshots?: Snapshot[];
+  /** Ảnh Cam 1 lúc đóng gói (J-17, L8) — phiên PACK. */
+  pack_snapshot?: Snapshot | null;
 };
-export type MockPackage = Omit<PackageDetail, "sessions"> & { sessions: MockSession[]; created_at: string };
+export type MockPackage = Omit<PackageDetail, "sessions"> & {
+  sessions: MockSession[];
+  created_at: string;
+  /** Kiện tạm của hàng hoàn chưa xác định (`TAM-…`, 02 §6.3 #2). */
+  is_placeholder?: boolean;
+};
 export type MockExport = {
   id: string;
   session_id: string;
@@ -61,7 +75,12 @@ type SessionSeed = {
 };
 
 type PackageSeed = {
+  /** Phần sau `SPXTST` (vd. `0000043-1`); `tracking` ghi đè cả mã. */
   n: string;
+  tracking?: string;
+  /** Mã đơn sàn khi khác mặc định (đơn nhiều kiện). null → kiện không có đơn (kiện tạm). */
+  orderSn?: string | null;
+  placeholder?: boolean;
   status: WarehouseStatus;
   source?: "API" | "CSV";
   platform?: string | null;
@@ -166,6 +185,7 @@ function seeds(): PackageSeed[] {
   ];
   for (let i = 16; i <= 30; i++)
     list.push({ n: String(i).padStart(7, "0"), status: "NEW", platform: "READY_TO_SHIP" });
+  list.push(...returnSeeds());
   // Lịch sử: 6 kiện mỗi ngày trong 7 ngày trước, đã bàn giao / đã giao.
   for (let d = 1; d <= 7; d++) {
     for (let k = 0; k < 6; k++) {
@@ -186,6 +206,88 @@ function seeds(): PackageSeed[] {
     }
   }
   return list;
+}
+
+/**
+ * Kiện của dữ liệu hàng hoàn (04-test-cases §1 "Dữ liệu test", dải `SPXTST00000[4-5]x`) — trạng thái **sau khi** J-13 /
+ * J-06 đã đồng bộ (mock không chạy job). Hồ sơ hàng hoàn, cảnh báo, hồ sơ khiếu nại ở `returnsDb.ts`.
+ */
+function returnSeeds(): PackageSeed[] {
+  const packed = (daysAgo: number, minute = 30): SessionSeed => ({
+    station: "st-1",
+    status: "COMPLETED",
+    daysAgo,
+    minute,
+    clips: "READY",
+  });
+  const two: [string, string | null, number][] = [
+    ["Áo thun basic", "Đen / L", 1],
+    ["Tất cổ ngắn", "Trắng", 1],
+  ];
+  return [
+    { n: "0000041", status: "RETURN_EXPECTED", platform: "TO_RETURN", sessions: [packed(5)] },
+    { n: "0000042", status: "RETURN_EXPECTED", platform: "SHIPPED", sessions: [packed(3, 40)] },
+    {
+      n: "0000043-1",
+      orderSn: "2410TST00043",
+      status: "RETURN_EXPECTED",
+      platform: "TO_RETURN",
+      items: two,
+      sessions: [packed(4, 10)],
+    },
+    {
+      n: "0000043-2",
+      orderSn: "2410TST00043",
+      status: "RETURN_EXPECTED",
+      platform: "TO_RETURN",
+      items: two,
+      sessions: [packed(4, 12)],
+    },
+    { n: "0000044", status: "DELIVERED", platform: "COMPLETED", sessions: [packed(6)] },
+    { n: "0000045", status: "RETURN_EXPECTED", platform: "TO_RETURN", sessions: [packed(6, 50)] },
+    { n: "0000046", status: "HANDED_OVER", platform: "SHIPPED", sessions: [packed(2, 70)] },
+    {
+      n: "0000047-1",
+      orderSn: "2410TST00047",
+      status: "RETURN_EXPECTED",
+      platform: "TO_RETURN",
+      items: two,
+      sessions: [packed(5, 20)],
+    },
+    {
+      n: "0000047-2",
+      orderSn: "2410TST00047",
+      status: "RETURN_EXPECTED",
+      platform: "TO_RETURN",
+      items: two,
+      sessions: [packed(5, 22)],
+    },
+    {
+      n: "0000048-1",
+      orderSn: "2410TST00048",
+      status: "RETURN_EXPECTED",
+      platform: "TO_RETURN",
+      items: two,
+      sessions: [packed(5, 24)],
+    },
+    {
+      n: "0000048-2",
+      orderSn: "2410TST00048",
+      status: "RETURN_EXPECTED",
+      platform: "TO_RETURN",
+      items: two,
+      sessions: [packed(5, 26)],
+    },
+    { n: "0000049", status: "RETURN_MISSING", platform: "TO_RETURN", sessions: [packed(12)] },
+    // Đơn trước khi dùng hệ thống: không có phiên đóng gói (EX-R3, cờ NO_PACK_CLIP).
+    { n: "0000050", status: "RETURN_EXPECTED", platform: "TO_RETURN" },
+    { n: "0000051", status: "RETURN_EXPECTED", platform: "TO_RETURN", sessions: [packed(9)] },
+    { n: "0000052", status: "PACKED", platform: "READY_TO_SHIP", sessions: [packed(1, 0)] },
+    { n: "0000053", status: "RETURN_RECEIVED_ISSUE", platform: "TO_RETURN", sessions: [packed(8)] },
+    { n: "0000054", status: "RETURN_RECEIVED_OK", platform: "SHIPPED", sessions: [packed(4, 90)] },
+    { n: "0000055", status: "RETURN_INSPECTING", platform: "TO_RETURN", sessions: [packed(7)] },
+    { n: "", tracking: "TAM-000001", orderSn: null, placeholder: true, status: "RETURN_RECEIVED_ISSUE" },
+  ];
 }
 
 let clipSeq = 0;
@@ -231,7 +333,7 @@ function buildSession(pkgId: string, idx: number, s: SessionSeed): MockSession {
 }
 
 function buildPackage(seed: PackageSeed): MockPackage {
-  const id = `pkg-${seed.n}`;
+  const id = seed.tracking ? `pkg-${seed.tracking}` : `pkg-${seed.n}`;
   const sessions = (seed.sessions ?? []).map((s, i) => buildSession(id, i + 1, s));
   sessions.sort((a, b) => b.started_at.localeCompare(a.started_at));
   const first = sessions.at(-1);
@@ -297,27 +399,32 @@ function buildPackage(seed: PackageSeed): MockPackage {
     });
   timeline.sort((a, b) => b.at.localeCompare(a.at));
   const nn = Number(seed.n) % 100000;
+  const orderSn = seed.orderSn === undefined ? `2410TST${String(nn).padStart(5, "0")}` : seed.orderSn;
   return {
     id,
-    tracking_number: `SPXTST${seed.n}`,
+    tracking_number: seed.tracking ?? `SPXTST${seed.n}`,
     warehouse_status: seed.status,
     platform_logistics_status: null,
     verified: !seed.unverified,
     created_at: iso(created),
-    order: {
-      id: `ord-${seed.n}`,
-      platform: "SHOPEE",
-      platform_order_sn: `2410TST${String(nn).padStart(5, "0")}`,
-      platform_status: seed.platform ?? null,
-      buyer_note: seed.note !== undefined ? seed.note : nn % 5 === 0 ? "Gói kỹ giúp em" : null,
-      source: seed.source ?? "API",
-      items: (seed.items ?? DEFAULT_ITEMS).map(([product_name, variation, quantity]) => ({
-        product_name,
-        variation,
-        quantity,
-        image_url: null,
-      })),
-    },
+    ...(seed.placeholder ? { is_placeholder: true } : {}),
+    order:
+      orderSn === null
+        ? null
+        : {
+            id: `ord-${orderSn}`,
+            platform: "SHOPEE",
+            platform_order_sn: orderSn,
+            platform_status: seed.platform ?? null,
+            buyer_note: seed.note !== undefined ? seed.note : nn % 5 === 0 ? "Gói kỹ giúp em" : null,
+            source: seed.source ?? "API",
+            items: (seed.items ?? DEFAULT_ITEMS).map(([product_name, variation, quantity]) => ({
+              product_name,
+              variation,
+              quantity,
+              image_url: null,
+            })),
+          },
     sessions,
     timeline,
   };

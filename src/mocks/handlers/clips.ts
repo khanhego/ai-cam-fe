@@ -3,6 +3,7 @@ import { http, HttpResponse } from "msw";
 import type { ExportLayout } from "@/lib/api/clips";
 
 import { API, apiError } from "../http";
+import { stationSim } from "../stationSim";
 import {
   findClip,
   findSession,
@@ -68,10 +69,15 @@ function exportBody(e: MockExport, uid: string) {
 /** API-40, 41 (mock bằng video mẫu), 42, 43, 44, 45, 46 theo 02 §6.2. */
 export const clipsHandlers = [
   http.get(`${API}/clips/:id/play-url`, ({ request, params }) => {
-    const [, denied] = requireRole(request, [...DASHBOARD_ROLES, "STATION"]);
+    const [user, denied] = requireRole(request, [...DASHBOARD_ROLES, "STATION"]);
     if (denied) return denied;
     const id = String(params.id);
     const clip = findClip(id);
+    // Item 02 (02 §6.1 API-40): STATION chỉ xem clip PACK của kiện đang có phiên RETURN hoạt động ở station mình;
+    // clip phiên của chính station (phiên gần đây) vẫn xem được.
+    const ownRecent = stationSim.recent.some((r) => r.clips.some((c) => c.id === id));
+    if (user.role === "STATION" && clip && !ownRecent && !stationSim.canViewPackClip(id))
+      return apiError(403, "FORBIDDEN", "Tài khoản không có quyền thực hiện thao tác này.");
     if (clip) {
       const err = clipStateError(clip);
       if (err) return err;

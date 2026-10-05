@@ -43,7 +43,7 @@ export function CancelSessionDialog({ open, onClose }: { open: boolean; onClose:
       }
     >
       <fieldset className="mb-4 flex flex-col gap-3">
-        {(Object.keys(COPY.cancelDialog.reasons) as CancelReason[]).map((key) => (
+        {(Object.keys(COPY.cancelDialog.reasons) as (keyof typeof COPY.cancelDialog.reasons)[]).map((key) => (
           <label key={key} className="flex items-center gap-3 text-body-lg text-on-surface">
             <input type="radio" name="reason" checked={reason === key} onChange={() => setReason(key)} />
             {COPY.cancelDialog.reasons[key]}

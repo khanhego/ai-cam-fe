@@ -9,6 +9,7 @@ import { resetMockReports } from "./handlers/reports";
 import { resetMockStations } from "./handlers/stations";
 import { resetMockAudit } from "./handlers/users";
 import { resetMockPackages } from "./packagesDb";
+import { resetMockReturns } from "./returnsDb";
 import { resetStationSim } from "./stationSim";
 
 /** Dữ liệu giả theo seed `aicam seed-demo --prefix TST` (04-test-cases §1). Mật khẩu chung: matkhau123. */
@@ -97,6 +98,8 @@ export function resetMockDb() {
   resetStationSim();
   resetMockStations();
   resetMockPackages();
+  // Sau packagesDb: ghi phiên RETURN mẫu vào kiện.
+  resetMockReturns();
   resetMockReports();
   resetMockApprovals();
   resetMockExportRules();

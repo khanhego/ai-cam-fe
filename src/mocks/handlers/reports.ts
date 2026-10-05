@@ -18,7 +18,8 @@ resetMockReports();
 
 /** API-32 theo định nghĩa đếm trong 02 §6.2 (phiên theo ngày Việt Nam). */
 export function dailyReport(date: string): DailyReport {
-  const sessions = allSessions();
+  // Số Phase 1 chỉ đếm phiên đóng gói (phiên RETURN của item 02 có số riêng — 02 §6.2 API-32 mở rộng).
+  const sessions = allSessions().filter((s) => (s.type ?? "PACK") === "PACK");
   const endedOn = (status: string) =>
     sessions.filter((s) => s.status === status && s.ended_at && vnDay(s.ended_at) === date).length;
   const pkgCount = (status: string) => mockPackages.filter((p) => p.warehouse_status === status).length;
