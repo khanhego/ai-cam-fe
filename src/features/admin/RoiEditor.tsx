@@ -40,7 +40,7 @@ function useSnapshot(cameraId: string) {
 
 /**
  * Bước ROI của D6 (01 §10.5, FR-01.04): ảnh Cam 2 (API-63), kéo khung bằng pointer events (chuột, cảm ứng),
- * xuất tỉ lệ 0–1, lưu qua API-64. Bàn phím: mũi tên di chuyển, Shift + mũi tên đổi kích thước (DEC-105).
+ * xuất tỉ lệ 0–1, lưu qua API-64. Bàn phím: mũi tên di chuyển, Shift + mũi tên đổi kích thước (02b-admin DEC-175).
  * Khung < 5% → khóa nút Lưu; `422 VALIDATION_ERROR` → Alert trên ảnh (02b-admin §5).
  */
 export function RoiEditor({ stationId, camera }: { stationId: string; camera: Camera }) {
