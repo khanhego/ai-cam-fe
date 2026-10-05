@@ -165,12 +165,13 @@ test("ngày đến trước ngày từ → lỗi dưới ô, không đổi URL",
   expect(router.state.location.search).toBe("?date_from=2026-10-04");
 });
 
-test("API-30 lỗi → Alert + Thử lại", async () => {
+test("API-30 lỗi 5xx (hết 2 lần tự thử lại) → Alert + Thử lại", async () => {
   const user = userEvent.setup();
-  server.use(http.get("/api/v1/packages", () => apiError(500, "INTERNAL", "Lỗi"), { once: true }));
+  server.use(http.get("/api/v1/packages", () => apiError(500, "INTERNAL", "Lỗi")));
   renderApp("/admin/packages");
 
   expect(await screen.findByText("Không tải được danh sách kiện.")).toBeInTheDocument();
+  server.resetHandlers();
   await user.click(screen.getByRole("button", { name: "Thử lại" }));
   expect(await table()).toBeInTheDocument();
 });
