@@ -72,17 +72,59 @@ test("TC-05.10 (UI): ủy quyền hết hạn → chip Hết hạn + Kết nối
   expect(within(shop).queryByRole("button", { name: "Đồng bộ ngay" })).not.toBeInTheDocument();
 });
 
-test("TC-05.09 (UI): lỗi đồng bộ gần nhất → Alert kèm thời gian", async () => {
+test("TC-05.09 (UI): lỗi đồng bộ gần nhất → câu thân thiện theo code + thời gian; chi tiết kỹ thuật trong details", async () => {
   mockShops[0]!.last_error = {
-    code: "PLATFORM_ERROR",
-    message: "Shopee trả 503",
+    code: "SYNC_FAILED",
+    message: "HTTPStatusError 503 /api/v2/order/get_order_list",
     at: "2026-10-05T03:00:00Z",
   };
   renderApp("/admin/settings/shopee");
 
+  const shop = await card();
   expect(
-    await within(await card()).findByText("Đồng bộ lỗi lúc 05/10/2026 10:00:00: Shopee trả 503"),
+    await within(shop).findByText(
+      "Đồng bộ lỗi lúc 05/10/2026 10:00:00: Shopee không phản hồi sau nhiều lần thử. Bấm Đồng bộ ngay để thử lại.",
+    ),
   ).toBeInTheDocument();
+  const tech = within(shop).getByText("Chi tiết kỹ thuật").closest("details")!;
+  expect(tech).not.toHaveAttribute("open");
+  expect(tech).toHaveTextContent("SYNC_FAILED: HTTPStatusError 503 /api/v2/order/get_order_list");
+});
+
+test("P2-17: shop cũ DISCONNECTED (đã thay) không thành thẻ 'Chưa kết nối' — chỉ thẻ shop hiện hành + danh sách gọn", async () => {
+  mockShops.push({
+    id: "shop-0",
+    platform: "SHOPEE",
+    name: "Shop Cũ",
+    auth_status: "DISCONNECTED",
+    auth_expires_at: null,
+    last_synced_at: "2026-09-01T03:00:00Z",
+    today_synced_orders: 0,
+    last_error: null,
+  });
+  mockShops.reverse(); // shop cũ đứng trước trong danh sách API
+  renderApp("/admin/settings/shopee");
+
+  expect(await card()).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Shop Cũ" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Chưa kết nối")).not.toBeInTheDocument();
+  expect(screen.getByText("Shop đã thay (1)")).toBeInTheDocument();
+  expect(within(screen.getByRole("list", { name: "Shop đã thay" })).getByText(/Shop Cũ/)).toBeInTheDocument();
+});
+
+test("F34a: Đồng bộ ngay gặp 409 SHOP_NOT_CONNECTED → Alert + tải lại danh sách (thẻ về Hết hạn)", async () => {
+  const user = userEvent.setup();
+  renderApp("/admin/settings/shopee");
+  const shop = await card();
+  mockShops[0]!.auth_status = "EXPIRED"; // hết hạn sau khi trang đã tải
+
+  await user.click(within(shop).getByRole("button", { name: "Đồng bộ ngay" }));
+
+  expect(
+    await screen.findByText("Shop chưa kết nối hoặc ủy quyền đã hết hạn. Bấm Kết nối lại."),
+  ).toBeInTheDocument();
+  expect(await within(await card()).findByText("Hết hạn")).toBeInTheDocument();
+  expect(within(await card()).queryByRole("button", { name: "Đồng bộ ngay" })).not.toBeInTheDocument();
 });
 
 test("D7: Đồng bộ ngay → toast, số liệu làm mới; bấm lại khi đang chạy → Đang đồng bộ", async () => {

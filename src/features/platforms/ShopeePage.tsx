@@ -13,11 +13,36 @@ import { COPY } from "./copy";
 const SYNC_POLL_MS = 5000;
 const SYNC_POLL_WINDOW_MS = 30_000;
 
-const errorText = (shop: Shop) => {
+/**
+ * `last_error` (02 v0.5 DEC-62: `SYNC_FAILED` / `AUTH_EXPIRED` / `REFRESH_FAILED`) → câu cho người dùng; chi tiết kỹ
+ * thuật (`code`, `message` server) để trong `<details>` (review P2-17).
+ */
+function SyncError({ shop }: { shop: Shop }) {
   const e = shop.last_error;
   if (!e) return null;
-  return COPY.syncError(e.at ? fmtDateTime(e.at) : null, e.message ?? e.code ?? null);
-};
+  const at = e.at ? fmtDateTime(e.at) : null;
+  const tech = [e.code, e.message].filter(Boolean).join(": ");
+  return (
+    <Alert kind="error">
+      <span>{COPY.syncError(at, e.code)}</span>
+      {tech && (
+        <details className="mt-1 text-body-sm">
+          <summary className="cursor-pointer">{COPY.techDetails}</summary>
+          <span className="font-mono">{tech}</span>
+        </details>
+      )}
+    </Alert>
+  );
+}
+
+/**
+ * MVP một shop (DEC-12, 02 DEC-62 d): kết nối shop khác → shop cũ `DISCONNECTED`. Thẻ chính là shop hiện hành
+ * (đầu tiên không `DISCONNECTED`; không có thì shop đầu danh sách), các shop cũ gom vào danh sách gọn.
+ */
+function splitShops(items: Shop[]): { current: Shop | null; past: Shop[] } {
+  const current = items.find((s) => s.auth_status !== "DISCONNECTED") ?? items[0] ?? null;
+  return { current, past: items.filter((s) => s !== current) };
+}
 
 function ShopCard({
   shop,
@@ -35,7 +60,6 @@ function ShopCard({
   const [label, tone] = COPY.status[shop.auth_status] ?? [shop.auth_status, "neutral"];
   const connected = shop.auth_status === "CONNECTED";
   const name = shop.name ?? COPY.unnamed;
-  const error = errorText(shop);
   return (
     <section aria-label={name} className="card p-4 sm:p-6">
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -43,7 +67,7 @@ function ShopCard({
         <StatusChip tone={tone}>{label}</StatusChip>
       </div>
       {shop.auth_status === "EXPIRED" && <Alert kind="warning">{COPY.expiredHint}</Alert>}
-      {error && <Alert kind="error">{error}</Alert>}
+      <SyncError shop={shop} />
       <dl className="mb-6 grid gap-4 sm:grid-cols-3">
         <div>
           <dt className="text-body-sm text-on-surface-variant">{COPY.field.expires}</dt>
@@ -129,10 +153,16 @@ export default function ShopeePage() {
             ? { text: COPY.notConfigured, toImports: true }
             : { text: isApiError(e) ? e.message : COPY.result.error! },
       ),
+    // 409 SHOP_NOT_CONNECTED (02 v0.5): shop vừa hết hạn / bị thay → tải lại danh sách để thẻ đúng trạng thái.
+    onSettled: (_d, e) => {
+      if (isApiError(e) && e.code === "SHOP_NOT_CONNECTED")
+        void qc.invalidateQueries({ queryKey: ["shops"] });
+    },
   });
 
   const resultText = result ? COPY.result[result] : undefined;
   const items = shops.data?.items ?? [];
+  const { current, past } = splitShops(items);
   const connectButton = (
     <Button icon="link" disabled={connect.isPending} onClick={() => connect.mutate()}>
       {COPY.connect}
@@ -179,18 +209,27 @@ export default function ShopeePage() {
           {COPY.emptyHint}
         </EmptyState>
       )}
-      <div className="flex flex-col gap-4">
-        {items.map((shop) => (
-          <ShopCard
-            key={shop.id}
-            shop={shop}
-            connecting={connect.isPending}
-            onConnect={() => connect.mutate()}
-            syncing={sync.isPending}
-            onSync={() => sync.mutate(shop)}
-          />
-        ))}
-      </div>
+      {current && (
+        <ShopCard
+          shop={current}
+          connecting={connect.isPending}
+          onConnect={() => connect.mutate()}
+          syncing={sync.isPending}
+          onSync={() => sync.mutate(current)}
+        />
+      )}
+      {past.length > 0 && (
+        <details className="mt-4 text-body-md text-on-surface-variant">
+          <summary className="cursor-pointer">{COPY.past(past.length)}</summary>
+          <ul className="mt-2 flex flex-col gap-1" aria-label={COPY.pastLabel}>
+            {past.map((s) => (
+              <li key={s.id}>
+                {s.name ?? COPY.unnamed} · {COPY.field.lastSync.toLowerCase()} {fmtDateTime(s.last_synced_at)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </>
   );
 }

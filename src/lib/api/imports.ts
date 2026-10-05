@@ -14,7 +14,8 @@ export type ImportSampleRow = {
   quantity: number;
   action: ImportRowAction;
 };
-export type ImportStatus = "PREVIEW" | "COMMITTED" | "EXPIRED";
+/** `REJECTED`: file có dòng lỗi, không nhập được (02 §6.2 API-50, v0.5). */
+export type ImportStatus = "PREVIEW" | "COMMITTED" | "EXPIRED" | "REJECTED";
 
 export type ImportPreview = {
   id: string;

@@ -13,7 +13,7 @@ test("TC-03.43 / 03.44 (UI): D2 → Duyệt → D13, khóa Đóng phiên khi kha
   await page.getByRole("button", { name: "Đăng nhập" }).click();
 
   const nav = page.getByRole("navigation", { name: "Điều hướng chính" });
-  await expect(nav.getByRole("status", { name: "1 yêu cầu đang chờ" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: /^Yêu cầu duyệt\s*,\s*1 yêu cầu đang chờ$/ })).toBeVisible();
   const attention = page.getByRole("region", { name: "Cần xử lý" });
   await attention.getByRole("link", { name: "Duyệt" }).click();
 
@@ -29,5 +29,5 @@ test("TC-03.43 / 03.44 (UI): D2 → Duyệt → D13, khóa Đóng phiên khi kha
   await card.getByRole("button", { name: "Cho tiếp tục" }).click();
   await expect(page.getByText("Đã cho station tiếp tục.")).toBeVisible();
   await expect(page.getByText("Không có yêu cầu nào đang chờ.")).toBeVisible();
-  await expect(nav.getByRole("status", { name: /yêu cầu đang chờ/ })).toHaveCount(0);
+  await expect(nav.getByText(/yêu cầu đang chờ/)).toHaveCount(0);
 });

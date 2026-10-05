@@ -23,7 +23,12 @@ export type WhepDeps = {
   refresh?: () => Promise<boolean>;
   /** Chờ gom ICE tối đa (ms) trước khi gửi offer — MediaMTX nhận offer không trickle. */
   iceGatherMs?: number;
+  /** ICE `disconnected` là tạm thời: chờ tối đa (ms) để tự phục hồi trước khi báo `lost` (G3 F35). */
+  disconnectGraceMs?: number;
 };
+
+/** Mặc định chờ ICE `disconnected` tự phục hồi. */
+export const DISCONNECT_GRACE_MS = 5000;
 
 export type WhepSession = { close: () => void };
 
@@ -57,7 +62,7 @@ function waitIceGathering(pc: RTCPeerConnection, ms: number): Promise<void> {
 
 /**
  * Mở luồng xem trực tiếp. `onStream` nhận MediaStream khi có track; `onStatus` báo `playing` khi kết nối ICE xong,
- * `lost` khi kết nối hỏng / bị đóng. Lỗi lúc bắt tay (HTTP ≠ 201, SDP lỗi) → reject `WhepError` và đã dọn kết nối.
+ * `lost` khi kết nối hỏng / bị đóng (`disconnected` quá `disconnectGraceMs` mới tính là mất). Lỗi lúc bắt tay (HTTP ≠ 201, SDP lỗi) → reject `WhepError` và đã dọn kết nối.
  */
 export async function connectWhep(
   url: string,
@@ -69,6 +74,11 @@ export async function connectWhep(
   const pc = createPeer();
   let closed = false;
   let location: string | null = null;
+  let graceTimer: ReturnType<typeof setTimeout> | undefined;
+  const stopGrace = () => {
+    clearTimeout(graceTimer);
+    graceTimer = undefined;
+  };
 
   /** Báo server giải phóng phiên WHEP (best effort). */
   const release = () => {
@@ -82,6 +92,7 @@ export async function connectWhep(
   const close = () => {
     if (closed) return;
     closed = true;
+    stopGrace();
     pc.close();
     release();
   };
@@ -95,8 +106,16 @@ export async function connectWhep(
   pc.onconnectionstatechange = () => {
     if (closed) return;
     const s = pc.connectionState;
+    if (s !== "disconnected") stopGrace();
     if (s === "connected") handlers.onStatus("playing");
-    else if (s === "failed" || s === "disconnected" || s === "closed") handlers.onStatus("lost");
+    else if (s === "failed" || s === "closed") handlers.onStatus("lost");
+    else if (s === "disconnected" && !graceTimer) {
+      // Mạng chập chờn: ICE thường tự về `connected`; chỉ báo mất tín hiệu khi quá hạn chờ.
+      graceTimer = setTimeout(() => {
+        graceTimer = undefined;
+        if (!closed && pc.connectionState === "disconnected") handlers.onStatus("lost");
+      }, deps.disconnectGraceMs ?? DISCONNECT_GRACE_MS);
+    }
   };
 
   try {

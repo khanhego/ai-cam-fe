@@ -32,8 +32,8 @@ function HashLine({ clip }: { clip: Clip }) {
       <button
         type="button"
         className="state-layer inline-flex h-8 w-8 items-center justify-center rounded-full"
-        aria-label={copied ? "Đã copy" : `Copy SHA-256 ${CAMERA_ROLE[clip.camera_role]}`}
-        title={copied ? "Đã copy" : "Copy"}
+        aria-label={copied ? COPY.detail.copied : COPY.detail.copyHash(CAMERA_ROLE[clip.camera_role])}
+        title={copied ? COPY.detail.copied : COPY.detail.copy}
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(clip.sha256!);
@@ -79,7 +79,7 @@ export function SessionPanel({
           ? COPY.detail.notFailed
           : isApiError(err)
             ? err.message
-            : "Có lỗi hệ thống. Thử lại sau ít phút.",
+            : COPY.generic,
       ),
     onSettled: () => qc.invalidateQueries({ queryKey: ["package", packageId] }),
   });
@@ -106,7 +106,7 @@ export function SessionPanel({
                 disabled={rebuild.isPending}
                 onClick={() => rebuild.mutate()}
               >
-                Thử lại
+                {COPY.detail.rebuild}
               </Button>
             ) : undefined
           }

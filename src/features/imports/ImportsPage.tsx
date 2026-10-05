@@ -55,6 +55,12 @@ export default function ImportsPage() {
         setFlash({ kind: "error", text: e.message });
         return;
       }
+      if (isApiError(e) && e.code === "IMPORT_CONFLICT") {
+        // Bản xem trước vẫn PREVIEW (02a DEC-133: 2 bản xem trước của cùng file ghi đụng nhau) → giữ nguyên,
+        // người dùng bấm Nhập lại; server phân loại lại khi commit (BR-17).
+        setFlash({ kind: "error", text: COPY.conflict });
+        return;
+      }
       setPreview(null);
       setFlash({
         kind: "error",

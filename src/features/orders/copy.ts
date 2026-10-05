@@ -53,6 +53,15 @@ export const COPY = {
     unholdOk: "Đã bỏ giữ clip. Clip sẽ bị xóa theo chính sách lưu trữ.",
     rebuildOk: "Đang cắt lại clip. Clip sẵn sàng trong khoảng 1 phút.",
     notFailed: "Clip không ở trạng thái lỗi.",
+    rebuild: "Thử lại",
+    copy: "Copy",
+    copied: "Đã copy",
+    copyHash: (role: string) => `Copy SHA-256 ${role}`,
+    holdFailed: (held: boolean, failed: string[], ok: string[], reason: string) => {
+      const verb = held ? "giữ" : "bỏ giữ";
+      const done = ok.length > 0 ? ` Đã ${verb} ${ok.join(", ")}.` : "";
+      return `Không ${verb} được clip ${failed.join(", ")}: ${reason}${done}`;
+    },
     export: "Xuất clip",
     unverified: "Chưa xác minh với Shopee",
     warehouse: "Kho",
@@ -79,6 +88,7 @@ export const COPY = {
     generic: "Có lỗi hệ thống. Thử lại sau ít phút.",
     expires: "Liên kết tải hết hạn lúc",
   },
+  generic: "Có lỗi hệ thống. Thử lại sau ít phút.",
   hasClip: "Có clip",
   noClip: "Chưa có clip",
   validate: {

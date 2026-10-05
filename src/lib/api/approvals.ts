@@ -22,6 +22,11 @@ export type ApprovalItem = {
   tracking_number: string;
   context: ApprovalContext | null;
   created_at: string;
+  /** v0.4 (DEC-61): có khi đã xử lý; `decided_at` có cả khi `WITHDRAWN` (DEC-60). */
+  decision: ApprovalAction | null;
+  decided_by: { id: string; display_name: string } | null;
+  decided_at: string | null;
+  note: string | null;
 };
 
 export type ApprovalDecision = {

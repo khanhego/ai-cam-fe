@@ -71,22 +71,7 @@ test("TC-01.06 (FE): khung rộng < 5% → khóa nút Lưu + nhắc", async () =
   expect(within(section).getByRole("button", { name: /Lưu vùng đọc mã/ })).toBeDisabled();
 });
 
-test("ROI_INVALID từ server → Alert trên ảnh", async () => {
-  server.use(
-    http.put("/api/v1/cameras/:id/roi", () => apiError(422, "ROI_INVALID", "Vùng đọc mã không hợp lệ.")),
-  );
-  const user = userEvent.setup();
-  renderApp("/admin/settings/stations/st-1");
-
-  drag(await surface(), [0, 0], [320, 180]);
-  await user.click(within(roiSection()).getByRole("button", { name: /Lưu vùng đọc mã/ }));
-
-  expect(await within(roiSection()).findByRole("alert")).toHaveTextContent(
-    "Vùng đọc mã không hợp lệ: khung phải nằm trong ảnh, rộng và cao ít nhất 5%.",
-  );
-});
-
-test("BE thật trả VALIDATION_ERROR (TC-01.06 ghi chú) → cùng Alert", async () => {
+test("API-64 ROI sai → 422 VALIDATION_ERROR (02 v0.4) → Alert trên ảnh", async () => {
   server.use(
     http.put("/api/v1/cameras/:id/roi", () =>
       apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", { fields: { w: "≥ 0.05" } }),
@@ -138,4 +123,29 @@ test("TC-01.12: chỉ Cam 2 có công cụ ROI; station chưa có Cam 2 → nh�
 
   expect(await screen.findByText("Lưu Cam 2 trước rồi vẽ vùng đọc mã.")).toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Vùng đọc mã Cam 2" })).not.toBeInTheDocument();
+});
+
+test("F37 a11y: bàn phím — mũi tên tạo khung mặc định và di chuyển, Shift + mũi tên đổi kích thước, Lưu", async () => {
+  let sent: unknown;
+  server.events.on("request:start", async ({ request }) => {
+    if (request.method === "PUT" && request.url.endsWith("/cameras/cam-2/roi"))
+      sent = await request.clone().json();
+  });
+  const user = userEvent.setup();
+  renderApp("/admin/settings/stations/st-1");
+
+  const area = await surface();
+  area.focus();
+  expect(area).toHaveFocus();
+  await user.keyboard("{ArrowRight}"); // chưa có khung → khung mặc định giữa ảnh
+  expect(within(roiSection()).getByText("Khung: x 25% · y 25% · rộng 50% · cao 50%")).toBeInTheDocument();
+  await user.keyboard("{ArrowRight}{ArrowRight}{ArrowDown}");
+  expect(within(roiSection()).getByText("Khung: x 27% · y 26% · rộng 50% · cao 50%")).toBeInTheDocument();
+  await user.keyboard("{Shift>}{ArrowLeft}{ArrowUp}{/Shift}");
+  expect(within(roiSection()).getByText("Khung: x 27% · y 26% · rộng 49% · cao 49%")).toBeInTheDocument();
+
+  await user.click(within(roiSection()).getByRole("button", { name: /Lưu vùng đọc mã/ }));
+  expect(await screen.findByText("Đã lưu vùng đọc mã.")).toBeInTheDocument();
+  expect(sent).toEqual({ x: 0.27, y: 0.26, w: 0.49, h: 0.49 });
+  server.events.removeAllListeners();
 });

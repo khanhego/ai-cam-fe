@@ -30,7 +30,7 @@ test("TC-03.51: đóng gói lại — station gửi REPACK → Supervisor duyệ
   const card = sup.locator("article", { has: sup.getByRole("heading", { name: "TST Station 01" }) });
   await expect(card.getByText("Đóng gói lại", { exact: true })).toBeVisible({ timeout: 2_000 });
   await expect(card.getByText("SPXTST0000010")).toBeVisible();
-  await expect(sup.getByRole("status", { name: "1 yêu cầu đang chờ" })).toBeVisible();
+  await expect(sup.getByRole("link", { name: /^Yêu cầu duyệt\s*,\s*1 yêu cầu đang chờ$/ })).toBeVisible();
 
   await card.getByRole("button", { name: "Duyệt đóng gói lại" }).click();
   await expect(sup.getByText("Đã duyệt đóng gói lại.")).toBeVisible();

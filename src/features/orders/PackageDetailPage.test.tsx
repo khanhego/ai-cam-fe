@@ -141,8 +141,53 @@ test("Giữ clip lỗi → hoàn tác + toast lỗi", async () => {
   renderApp("/admin/packages/pkg-0000001");
 
   await userEvent.click(await screen.findByRole("button", { name: "Giữ clip" }));
-  expect(await screen.findByText("Có lỗi hệ thống. Thử lại sau ít phút.")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Không giữ được clip Cam 1, Cam 2: Có lỗi hệ thống. Thử lại sau ít phút."),
+  ).toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "Giữ clip" })).toBeInTheDocument();
+});
+
+test("F33: Giữ clip — Cam 1 thành công, Cam 2 lỗi → Cam 1 giữ, Cam 2 hoàn tác, toast nêu Cam 2", async () => {
+  await as();
+  server.use(
+    http.put("/api/v1/clips/clip-0000001-1-2/hold", () =>
+      apiError(500, "INTERNAL", "Có lỗi hệ thống. Thử lại sau ít phút."),
+    ),
+  );
+  renderApp("/admin/packages/pkg-0000001");
+
+  await userEvent.click(await screen.findByRole("button", { name: "Giữ clip" }));
+  expect(
+    await screen.findByText("Không giữ được clip Cam 2: Có lỗi hệ thống. Thử lại sau ít phút. Đã giữ Cam 1."),
+  ).toBeInTheDocument();
+  await waitFor(() => expect(findClip("clip-0000001-1-1")?.held).toBe(true));
+  expect(findClip("clip-0000001-1-2")?.held).toBe(false);
+  // Chưa giữ đủ mọi clip → nút vẫn là "Giữ clip", không có chip "Đang giữ".
+  expect(await screen.findByRole("button", { name: "Giữ clip" })).toBeInTheDocument();
+  expect(within(await clipRegion()).queryByText("Đang giữ")).not.toBeInTheDocument();
+});
+
+test("F32: API-40 410 CLIP_DELETED → 'Clip đã bị xóa ngày …'; 409 FAILED → cắt lỗi", async () => {
+  await as();
+  server.use(
+    http.get("/api/v1/clips/:id/play-url", () =>
+      apiError(410, "CLIP_DELETED", "x", { deleted_at: "2026-09-01T03:00:00Z", retention_clip_days: 90 }),
+    ),
+  );
+  renderApp("/admin/packages/pkg-0000001");
+  expect(
+    await screen.findByText("Clip đã bị xóa ngày 01/09/2026 theo chính sách lưu trữ 90 ngày."),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/Không phát được clip/)).not.toBeInTheDocument();
+});
+
+test("F32: API-40 409 CLIP_NOT_READY FAILED → 'Clip cắt lỗi — Admin/Supervisor có thể cắt lại.'", async () => {
+  await as();
+  server.use(
+    http.get("/api/v1/clips/:id/play-url", () => apiError(409, "CLIP_NOT_READY", "x", { status: "FAILED" })),
+  );
+  renderApp("/admin/packages/pkg-0000001");
+  expect(await screen.findByText("Clip cắt lỗi — Admin/Supervisor có thể cắt lại.")).toBeInTheDocument();
 });
 
 test("clip đang giữ + cờ Thiếu video", async () => {

@@ -37,7 +37,9 @@ test("TC-03.40: Lệch mã — thẻ đủ thông tin, badge, Cho tiếp tục �
   expect(within(row).getByText("SPXTST0000002")).toBeInTheDocument();
   expect(within(row).getByText("Vừa gửi")).toBeInTheDocument();
   // Badge drawer: yêu cầu của Station 01 + yêu cầu seed của Station 02.
-  expect(await screen.findByRole("status", { name: "2 yêu cầu đang chờ" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("link", { name: /^Yêu cầu duyệt\s*,\s*2 yêu cầu đang chờ$/ }),
+  ).toBeInTheDocument();
 
   await user.click(within(row).getByRole("button", { name: "Cho tiếp tục" }));
 
@@ -46,7 +48,9 @@ test("TC-03.40: Lệch mã — thẻ đủ thông tin, badge, Cho tiếp tục �
     expect(screen.queryByRole("heading", { name: "TST Station 01" })).not.toBeInTheDocument(),
   );
   expect(stationSim.state().state).toBe("PACKING");
-  expect(await screen.findByRole("status", { name: "1 yêu cầu đang chờ" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("link", { name: /^Yêu cầu duyệt\s*,\s*1 yêu cầu đang chờ$/ }),
+  ).toBeInTheDocument();
 });
 
 test("TC-03.43 / 03.44: Cam 2 còn thấy phiếu sai → khóa Đóng phiên có ghi chú, cảnh báo, Cho tiếp tục vẫn bấm được", async () => {
@@ -201,7 +205,8 @@ test("D13 trống + D2 có link 'Duyệt' cho Supervisor", async () => {
   renderApp("/admin/approvals");
 
   expect(await screen.findByText("Không có yêu cầu nào đang chờ.")).toBeInTheDocument();
-  expect(screen.queryByRole("status", { name: /yêu cầu đang chờ/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Yêu cầu duyệt" })).toBeInTheDocument();
+  expect(screen.queryByText(/yêu cầu đang chờ/)).not.toBeInTheDocument();
 });
 
 test("D2 (Supervisor): mục 'Cần xử lý' có link 'Duyệt' tới D13; drawer có 'Yêu cầu duyệt' + badge", async () => {
@@ -216,7 +221,10 @@ test("D2 (Supervisor): mục 'Cần xử lý' có link 'Duyệt' tới D13; draw
     "href",
     "/admin/approvals",
   );
-  expect(await within(nav).findByRole("status", { name: "1 yêu cầu đang chờ" })).toHaveTextContent("1");
+  const link = await within(nav).findByRole("link", { name: /^Yêu cầu duyệt\s*,\s*1 yêu cầu đang chờ$/ });
+  expect(link).toHaveTextContent("1");
+  // Không còn live region trùng ở hai drawer (review G3).
+  expect(within(nav).queryByRole("status")).not.toBeInTheDocument();
 });
 
 test("D13 lỗi tải → Alert + Thử lại", async () => {

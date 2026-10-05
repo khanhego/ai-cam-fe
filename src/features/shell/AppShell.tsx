@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { logout } from "@/lib/api/auth";
@@ -43,6 +43,58 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
         </>
       )}
     </nav>
+  );
+}
+
+const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Drawer modal dưới lg (02b-admin §9 a11y, review P2-15): mở → focus mục đầu tiên; Tab / Shift+Tab vòng trong drawer;
+ * Esc đóng; đóng → trả focus về phần tử đã mở drawer (nút "Mở menu").
+ */
+function MobileDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    root.current?.querySelector("aside")?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    return () => opener?.focus();
+  }, []);
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      onClose();
+      return;
+    }
+    if (e.key !== "Tab" || !root.current) return;
+    const items = [...root.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+    const first = items[0];
+    const last = items.at(-1);
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+  return (
+    <div
+      ref={root}
+      className="fixed inset-0 z-40 lg:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Menu"
+      onKeyDown={onKeyDown}
+    >
+      <button
+        type="button"
+        aria-label="Đóng menu"
+        className="absolute inset-0 bg-scrim/40"
+        onClick={onClose}
+      />
+      <aside className="relative h-full w-72 bg-surface-container-low shadow-elevation-3">{children}</aside>
+    </div>
   );
 }
 
@@ -92,17 +144,9 @@ export function AppShell() {
           <NavList items={items} />
         </aside>
         {drawerOpen && (
-          <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
-            <button
-              type="button"
-              aria-label="Đóng menu"
-              className="absolute inset-0 bg-scrim/40"
-              onClick={() => setDrawerOpen(false)}
-            />
-            <aside className="relative h-full w-72 bg-surface-container-low shadow-elevation-3">
-              <NavList items={items} onNavigate={() => setDrawerOpen(false)} />
-            </aside>
-          </div>
+          <MobileDrawer onClose={() => setDrawerOpen(false)}>
+            <NavList items={items} onNavigate={() => setDrawerOpen(false)} />
+          </MobileDrawer>
         )}
         <main className="mx-auto w-full max-w-7xl min-w-0 px-4 py-6 sm:px-6 lg:px-8">
           <Outlet />

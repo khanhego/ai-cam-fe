@@ -17,6 +17,9 @@ import { requireRole } from "./session";
  * (`stationSim`, TST Station 01 — đồng bộ station ↔ dashboard trong cùng trang) + yêu cầu seed của TST Station 02.
  */
 export const mockApprovals: ApprovalItem[] = [];
+/** Trường quyết định của yêu cầu đang chờ (API-20 v0.4, DEC-61). */
+const UNDECIDED = { decision: null, decided_by: null, decided_at: null, note: null } as const;
+
 /** Yêu cầu đã đóng → `details` của 409 ALREADY_RESOLVED. */
 export const closedApprovals = new Map<string, AlreadyResolvedDetails>();
 
@@ -31,6 +34,7 @@ export function resetMockApprovals() {
     tracking_number: "SPXTST0000020",
     context: { expected: "SPXTST0000020", actual: "SPXTST0000021", source: "CAM2", tray_match: "DIFFERENT" },
     created_at: new Date(Date.now() - 3 * 60_000).toISOString(),
+    ...UNDECIDED,
   });
 }
 resetMockApprovals();
@@ -52,6 +56,7 @@ function simApproval(): ApprovalItem | null {
     tracking_number: a.tracking_number,
     context: stationSim.approvalContext,
     created_at: a.created_at,
+    ...UNDECIDED,
   };
 }
 
@@ -68,7 +73,12 @@ export function announceApprovalCreated() {
 
 /** Station rút yêu cầu (API-14) → lần duyệt sau nhận ALREADY_RESOLVED `WITHDRAWN`. */
 export function recordWithdrawn(item: ApprovalItem) {
-  closedApprovals.set(item.id, { status: "WITHDRAWN", decided_by: null, decided_at: null });
+  // DEC-60: WITHDRAWN vẫn có `decided_at` (lúc rút), không có người quyết định.
+  closedApprovals.set(item.id, {
+    status: "WITHDRAWN",
+    decided_by: null,
+    decided_at: new Date().toISOString(),
+  });
   dashboardWs.broadcast(event("approval.resolved", { ...item, status: "WITHDRAWN" }));
 }
 
@@ -113,7 +123,9 @@ export const approvalsHandlers = [
       const err = stationSim.decide(id, body.action);
       if (err === "TRAY_STILL_DIFFERENT")
         return apiError(409, err, "Cam 2 vẫn thấy phiếu sai trên khay. Yêu cầu bỏ phiếu sai trước.");
-      if (err) return apiError(422, err, "Không xử lý được yêu cầu.");
+      if (err === "NOT_FOUND") return apiError(404, err, "Không tìm thấy yêu cầu.");
+      if (err === "INVALID_ACTION") return apiError(422, err, "Thao tác không hợp với loại yêu cầu.");
+      if (err) return apiError(409, err, "Không xử lý được yêu cầu.");
       stationWs.broadcast(event("station.state", stationSim.state()));
       if (body.action === "CANCEL_SESSION")
         stationWs.broadcast(event("alert", { code: "SESSION_CANCELLED_BY_SUPERVISOR" }));

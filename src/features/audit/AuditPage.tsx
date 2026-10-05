@@ -62,7 +62,9 @@ export default function AuditPage() {
     setParams(next, { replace: true });
   };
 
-  const rows = logs.data?.items ?? [];
+  // Khoảng ngày sai: không hiện kết quả của bộ lọc trước (placeholderData) — chỉ lỗi dưới ô (G3 F36).
+  const data = badRange ? undefined : logs.data;
+  const rows = data?.items ?? [];
   const who = (r: AuditLogItem) => r.user?.display_name ?? COPY.system;
 
   return (
@@ -76,7 +78,7 @@ export default function AuditPage() {
           onChange={(e) => update("user_id", e.target.value)}
         >
           <option value="">{COPY.allUsers}</option>
-          {people.data?.items.map((u) => (
+          {people.data?.map((u) => (
             <option key={u.id} value={u.id}>
               {u.display_name} ({u.username})
             </option>
@@ -124,7 +126,7 @@ export default function AuditPage() {
           <Skeleton lines={8} className="h-8" />
         </div>
       )}
-      {logs.isError && (
+      {logs.isError && !badRange && (
         <Alert
           kind="error"
           action={
@@ -136,10 +138,8 @@ export default function AuditPage() {
           {COPY.loadError}
         </Alert>
       )}
-      {logs.data?.total === 0 && (
-        <EmptyState icon="history" title={filtered ? COPY.emptyFiltered : COPY.empty} />
-      )}
-      {logs.data && logs.data.total > 0 && (
+      {data?.total === 0 && <EmptyState icon="history" title={filtered ? COPY.emptyFiltered : COPY.empty} />}
+      {data && data.total > 0 && (
         <div className="card overflow-hidden">
           <div className="hidden overflow-x-auto md:block">
             <table className="md-table" aria-label={COPY.title}>
@@ -179,9 +179,9 @@ export default function AuditPage() {
             ))}
           </ul>
           <Pagination
-            page={logs.data.page}
-            pageSize={logs.data.page_size}
-            total={logs.data.total}
+            page={data.page}
+            pageSize={data.page_size}
+            total={data.total}
             onPage={(p) => update("page", String(p))}
           />
         </div>

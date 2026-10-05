@@ -43,3 +43,21 @@ export function describeRoi(roi: Roi): string {
   const pct = (v: number) => `${Math.round(v * 1000) / 10}%`.replace(".", ",");
   return `x ${pct(roi.x)} · y ${pct(roi.y)} · rộng ${pct(roi.w)} · cao ${pct(roi.h)}`;
 }
+
+/** Khung mặc định khi bắt đầu bằng bàn phím (chưa có khung): giữa ảnh, 50% × 50%. */
+export const ROI_DEFAULT: Roi = { x: 0.25, y: 0.25, w: 0.5, h: 0.5 };
+
+/**
+ * Bàn phím (a11y 02b §9, review G3 F37): `move` dời khung `dx`, `dy`; `resize` đổi rộng / cao. Luôn nằm trong ảnh,
+ * cạnh không nhỏ hơn 1% (vẫn có thể < 5% để nút Lưu khóa như khi kéo chuột).
+ */
+export function nudgeRoi(roi: Roi, mode: "move" | "resize", dx: number, dy: number): Roi {
+  if (mode === "move") {
+    const x = Math.min(Math.max(0, roi.x + dx), 1 - roi.w);
+    const y = Math.min(Math.max(0, roi.y + dy), 1 - roi.h);
+    return { x: round4(x), y: round4(y), w: roi.w, h: roi.h };
+  }
+  const w = Math.min(Math.max(0.01, roi.w + dx), 1 - roi.x);
+  const h = Math.min(Math.max(0.01, roi.h + dy), 1 - roi.y);
+  return { x: roi.x, y: roi.y, w: round4(w), h: round4(h) };
+}

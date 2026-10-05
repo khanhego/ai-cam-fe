@@ -7,6 +7,9 @@ export type ExportJob = {
   id: string;
   status: "QUEUED" | "RUNNING" | "READY" | "FAILED";
   progress: number;
+  /** API-44 (02 v0.3 DEC-57); API-43 không trả. */
+  session_id?: string;
+  layout?: ExportLayout;
   sha256?: string | null;
   source_clip_sha256?: Partial<Record<"CAM1" | "CAM2", string>>;
   files?: { video: string; info: string } | null;

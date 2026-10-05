@@ -1,5 +1,7 @@
 import type { Role } from "@/lib/api/session";
 
+import { COPY as LIVE_COPY } from "../liveview/copy";
+
 /**
  * Drawer dashboard (02b-admin §2). Chỉ mục có màn thật mới vào menu (không route tạm — DEC-51);
  * mục mới được thêm ở task tương ứng.
@@ -32,7 +34,7 @@ export const NAV: NavItem[] = [
     badge: "approvals",
   },
   { to: "/admin/imports", label: "Nhập đơn", icon: "upload_file", roles: ["ADMIN", "SUPERVISOR"] },
-  { to: "/admin/live", label: "Live view", icon: "live_tv", roles: ["ADMIN", "SUPERVISOR"] },
+  { to: "/admin/live", label: LIVE_COPY.title, icon: "live_tv", roles: ["ADMIN", "SUPERVISOR"] },
   {
     to: "/admin/settings/stations",
     label: "Station",

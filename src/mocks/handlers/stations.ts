@@ -186,7 +186,10 @@ export const stationsHandlers = [
     const roi = (await request.json()) as Roi;
     const inRange = [roi.x, roi.y, roi.w, roi.h].every((v) => typeof v === "number" && v >= 0 && v <= 1);
     if (!inRange || roi.w < 0.05 || roi.h < 0.05 || roi.x + roi.w > 1.0001 || roi.y + roi.h > 1.0001)
-      return apiError(422, "ROI_INVALID", "Vùng đọc mã không hợp lệ.");
+      // 02 v0.4 (DEC-61): 422 VALIDATION_ERROR kèm `details.fields` (không còn ROI_INVALID).
+      return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
+        fields: { roi: "Khung phải nằm trong ảnh, rộng và cao ít nhất 0.05." },
+      });
     camera.roi = { x: roi.x, y: roi.y, w: roi.w, h: roi.h };
     return HttpResponse.json(camera);
   }),

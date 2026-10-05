@@ -98,3 +98,19 @@ test("TC-03.40 (âm báo): approval.created gọi onApprovalCreated; approval.re
   emit("approval.created", { id: "a2" });
   expect(onApprovalCreated).toHaveBeenCalledTimes(1);
 });
+
+test("F34b: WS nối lại → làm mới ngay D13 + D2 (không đợi poll 60 giây); lần mở đầu thì không", async () => {
+  vi.useFakeTimers();
+  const { spy } = setup();
+  FakeSocket.last.onopen?.();
+  expect(calledWith(spy, ["approvals"])).toBe(0);
+
+  const first = FakeSocket.last;
+  first.onclose?.({ code: 1006 });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(FakeSocket.last).not.toBe(first);
+  FakeSocket.last.onopen?.();
+
+  expect(calledWith(spy, ["approvals"])).toBe(1);
+  expect(calledWith(spy, ["daily"])).toBe(1);
+});

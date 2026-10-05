@@ -31,7 +31,22 @@ export const COPY = {
     lastSync: "Lần đồng bộ gần nhất",
     today: "Đơn đồng bộ hôm nay",
   },
-  syncError: (at: string | null, message: string | null) =>
-    `Đồng bộ lỗi${at ? ` lúc ${at}` : ""}${message ? `: ${message}` : "."}`,
+  /** Câu theo `last_error.code` (02 v0.5 DEC-62); mã lạ → câu chung. */
+  syncError: (at: string | null, code: string | null | undefined) => {
+    const when = at ? ` lúc ${at}` : "";
+    switch (code) {
+      case "SYNC_FAILED":
+        return `Đồng bộ lỗi${when}: Shopee không phản hồi sau nhiều lần thử. Bấm Đồng bộ ngay để thử lại.`;
+      case "AUTH_EXPIRED":
+        return `Shopee từ chối ủy quyền${when}. Bấm Kết nối lại để tiếp tục đồng bộ.`;
+      case "REFRESH_FAILED":
+        return `Làm mới ủy quyền Shopee lỗi${when}. Hệ thống sẽ tự thử lại.`;
+      default:
+        return `Đồng bộ lỗi${when}. Thử lại sau ít phút.`;
+    }
+  },
+  techDetails: "Chi tiết kỹ thuật",
+  past: (n: number) => `Shop đã thay (${n})`,
+  pastLabel: "Shop đã thay",
   unnamed: "Shop Shopee",
 };

@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 
 import { File as NodeFile } from "node:buffer";
 
+import { http } from "msw";
+
 import { login } from "@/lib/api/auth";
+import { apiError } from "@/mocks/http";
+import { server } from "@/test/server";
 import { mockImports, TEMPLATE_COLUMNS } from "@/mocks/handlers/imports";
 import { mockPackages } from "@/mocks/packagesDb";
 import { renderApp } from "@/test/render";
@@ -124,6 +128,29 @@ test("TC-05.17 (UI): xem trước hết hạn → Alert, quay về bước chọ
   expect(screen.getByRole("button", { name: "Chọn file" })).toBeInTheDocument();
 });
 
+test("F31: 409 IMPORT_CONFLICT → giữ bản xem trước + 'Bấm Nhập lại'; bấm lại → nhập được", async () => {
+  const user = userEvent.setup();
+  server.use(
+    http.post(
+      "/api/v1/imports/:id/commit",
+      () => apiError(409, "IMPORT_CONFLICT", "Dữ liệu đơn vừa thay đổi trong lúc nhập. Bấm Nhập lại."),
+      { once: true },
+    ),
+  );
+  renderApp("/admin/imports");
+  await pick(csv([row(1)]));
+  await user.click(await screen.findByRole("button", { name: "Nhập 1 đơn" }));
+
+  expect(
+    await screen.findByText("Dữ liệu đơn vừa thay đổi trong lúc nhập. Bấm Nhập lại."),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Nhập 1 đơn" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Chọn file" })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Nhập 1 đơn" }));
+  expect(await screen.findByText("Đã nhập 1 đơn.")).toBeInTheDocument();
+});
+
 test("Chọn file khác → bỏ bản xem trước", async () => {
   const user = userEvent.setup();
   renderApp("/admin/imports");
@@ -184,4 +211,12 @@ test("Supervisor: menu có Nhập đơn", async () => {
 
   const nav = await screen.findByRole("navigation", { name: "Điều hướng chính" });
   expect(within(nav).getByRole("link", { name: /Nhập đơn/ })).toHaveAttribute("aria-current", "page");
+});
+
+test("P2-16: lịch sử có bản REJECTED (file có dòng lỗi) → chip 'Có dòng lỗi'", async () => {
+  mockImports[0]!.status = "REJECTED";
+  mockImports[0]!.committed_at = null;
+  renderApp("/admin/imports");
+
+  expect((await screen.findAllByText("Có dòng lỗi")).length).toBeGreaterThan(0);
 });

@@ -53,8 +53,16 @@ export type AuditFilters = {
 export const usersApi = {
   list: (page: number, role?: Role) =>
     api.get<Page<UserListItem>>("/users", { query: { page, page_size: 20, role } }),
-  /** Mọi tài khoản (bộ lọc "Người" ở D10). */
-  all: () => api.get<Page<UserListItem>>("/users", { query: { page: 1, page_size: 100 } }),
+  /** Mọi tài khoản (bộ lọc "Người" ở D10): đọc hết các trang 100 dòng (review G3 F36 — trước chỉ 100 đầu). */
+  all: async (): Promise<UserListItem[]> => {
+    const items: UserListItem[] = [];
+    for (let page = 1; page <= 50; page += 1) {
+      const res = await api.get<Page<UserListItem>>("/users", { query: { page, page_size: 100 } });
+      items.push(...res.items);
+      if (res.items.length === 0 || items.length >= res.total) break;
+    }
+    return items;
+  },
   create: (body: UserCreate) => api.post<UserListItem>("/users", body),
   patch: (id: string, body: UserPatch) => api.patch<UserListItem>(`/users/${id}`, body),
   /** API-91: 204. Station về đăng nhập khi access token hết hạn (≤ 15 phút, DEC-55). */

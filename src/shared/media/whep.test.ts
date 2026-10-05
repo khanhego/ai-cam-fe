@@ -99,6 +99,60 @@ test("TC-01.14 (logic): kết nối hỏng giữa chừng → lost", async () =>
   expect(statuses.at(-1)).toBe("lost");
 });
 
+test("F35: ICE disconnected là tạm thời — tự về connected trong 5 giây thì không báo lost", async () => {
+  vi.useFakeTimers();
+  try {
+    const { peer, statuses, run } = setup([answer()]);
+    await run();
+    peer.setState("connected");
+    peer.setState("disconnected");
+    vi.advanceTimersByTime(4000);
+    expect(statuses.at(-1)).toBe("playing");
+    peer.setState("connected");
+    vi.advanceTimersByTime(5000);
+    expect(statuses).not.toContain("lost");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("F35: ICE disconnected quá 5 giây → lost; failed → lost ngay", async () => {
+  vi.useFakeTimers();
+  try {
+    const { peer, statuses, run } = setup([answer()]);
+    await run();
+    peer.setState("connected");
+    peer.setState("disconnected");
+    vi.advanceTimersByTime(4999);
+    expect(statuses.at(-1)).toBe("playing");
+    vi.advanceTimersByTime(1);
+    expect(statuses.at(-1)).toBe("lost");
+
+    const b = setup([answer()]);
+    await b.run();
+    b.peer.setState("connected");
+    b.peer.setState("failed");
+    expect(b.statuses.at(-1)).toBe("lost");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("F35: đóng chủ động trong lúc chờ phục hồi → không báo lost", async () => {
+  vi.useFakeTimers();
+  try {
+    const { peer, statuses, run } = setup([answer(), new Response(null, { status: 200 })]);
+    const session = await run();
+    peer.setState("connected");
+    peer.setState("disconnected");
+    session.close();
+    vi.advanceTimersByTime(6000);
+    expect(statuses).not.toContain("lost");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("401 → refresh token một lần rồi gửi lại với token mới", async () => {
   const { calls, refresh, run } = setup([new Response(null, { status: 401 }), answer()]);
   await run();

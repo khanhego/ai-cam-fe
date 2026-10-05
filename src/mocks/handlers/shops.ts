@@ -79,6 +79,12 @@ export const shopsHandlers = [
     if (!mockShopee.configured) return NOT_CONFIGURED();
     const shop = mockShops.find((s) => s.id === params.id);
     if (!shop) return apiError(404, "NOT_FOUND", "Không tìm thấy shop.");
+    if (shop.auth_status !== "CONNECTED")
+      return apiError(
+        409,
+        "SHOP_NOT_CONNECTED",
+        "Shop chưa kết nối hoặc ủy quyền đã hết hạn. Bấm Kết nối lại.",
+      );
     if (mockShopee.syncing) return apiError(409, "SYNC_IN_PROGRESS", "Đang đồng bộ, thử lại sau.");
     mockShopee.syncing = true;
     return HttpResponse.json({ queued: true }, { status: 202 });

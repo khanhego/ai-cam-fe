@@ -1,26 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 import { isApiError } from "@/lib/api/errors";
 import { stationsApi, type Camera, type Roi } from "@/lib/api/stations";
 import { Alert, Button, LinearProgress, toast } from "@/shared/ui";
 
-import { describeRoi, rectFromPoints, roiValid, sameRoi, toRatio, type Point } from "./roi";
+import { ROI_COPY as COPY } from "./copy";
+import {
+  describeRoi,
+  nudgeRoi,
+  rectFromPoints,
+  ROI_DEFAULT,
+  roiValid,
+  sameRoi,
+  toRatio,
+  type Point,
+} from "./roi";
 
-const COPY = {
-  title: "Vùng đọc mã Cam 2",
-  hint: "Kéo trên ảnh để vẽ khung chữ nhật quanh chỗ đặt phiếu trên khay. Cam 2 chỉ đọc mã trong khung này.",
-  imgAlt: "Ảnh chụp Cam 2 để vẽ vùng đọc mã",
-  loading: "Đang chụp ảnh từ Cam 2…",
-  snapshotError: "Không chụp được ảnh từ Cam 2. Kiểm tra camera rồi bấm Chụp lại.",
-  retake: "Chụp lại",
-  save: "Lưu vùng đọc mã",
-  reset: "Bỏ thay đổi",
-  saved: "Đã lưu vùng đọc mã.",
-  none: "Chưa có vùng đọc mã.",
-  current: "Khung",
-  tooSmall: "Khung phải rộng và cao ít nhất 5% ảnh.",
-  invalid: "Vùng đọc mã không hợp lệ: khung phải nằm trong ảnh, rộng và cao ít nhất 5%.",
+const ARROWS: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
 };
 
 /** Ảnh API-63 (cần token → tải Blob rồi tạo object URL, thu hồi khi đổi ảnh / rời trang). */
@@ -39,7 +40,8 @@ function useSnapshot(cameraId: string) {
 
 /**
  * Bước ROI của D6 (01 §10.5, FR-01.04): ảnh Cam 2 (API-63), kéo khung bằng pointer events (chuột, cảm ứng),
- * xuất tỉ lệ 0–1, lưu qua API-64. Khung < 5% → khóa nút Lưu; `ROI_INVALID` → Alert trên ảnh (02b-admin §5).
+ * xuất tỉ lệ 0–1, lưu qua API-64. Bàn phím: mũi tên di chuyển, Shift + mũi tên đổi kích thước (DEC-105).
+ * Khung < 5% → khóa nút Lưu; `422 VALIDATION_ERROR` → Alert trên ảnh (02b-admin §5).
  */
 export function RoiEditor({ stationId, camera }: { stationId: string; camera: Camera }) {
   const queryClient = useQueryClient();
@@ -58,8 +60,8 @@ export function RoiEditor({ stationId, camera }: { stationId: string; camera: Ca
       void queryClient.invalidateQueries({ queryKey: ["stations"] });
     },
     onError: (e) => {
-      if (isApiError(e) && (e.code === "ROI_INVALID" || e.code === "VALIDATION_ERROR"))
-        return setError(COPY.invalid);
+      // 02 v0.4 (DEC-61): ROI sai → 422 VALIDATION_ERROR (bỏ ROI_INVALID cũ).
+      if (isApiError(e) && e.code === "VALIDATION_ERROR") return setError(COPY.invalid);
       setError(isApiError(e) ? e.message : COPY.invalid);
     },
   });
@@ -84,6 +86,18 @@ export function RoiEditor({ stationId, camera }: { stationId: string; camera: Ca
     start.current = null;
   }
 
+  /** Mũi tên: di chuyển; Shift + mũi tên: đổi kích thước; bước 1% (Alt: 5%). Chưa có khung → khung mặc định. */
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const dir = ARROWS[e.key];
+    if (!dir) return;
+    e.preventDefault();
+    setError(null);
+    const step = e.altKey ? 0.05 : 0.01;
+    setDraft((cur) =>
+      cur ? nudgeRoi(cur, e.shiftKey ? "resize" : "move", dir[0] * step, dir[1] * step) : ROI_DEFAULT,
+    );
+  }
+
   const valid = roiValid(draft);
   const changed = !sameRoi(draft, camera.roi);
 
@@ -93,7 +107,7 @@ export function RoiEditor({ stationId, camera }: { stationId: string; camera: Ca
         {COPY.title}
       </h2>
       <p id="roi-hint" className="mb-4 text-body-md text-on-surface-variant">
-        {COPY.hint}
+        {COPY.hint} {COPY.keyboardHint}
       </p>
       <div className="relative w-full max-w-3xl overflow-hidden rounded-md bg-inverse-surface">
         {error && (
@@ -109,7 +123,9 @@ export function RoiEditor({ stationId, camera }: { stationId: string; camera: Ca
               aria-label={COPY.title}
               aria-describedby="roi-hint"
               data-testid="roi-surface"
-              className="absolute inset-0 cursor-crosshair touch-none select-none"
+              tabIndex={0}
+              className="absolute inset-0 cursor-crosshair touch-none select-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+              onKeyDown={onKeyDown}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
