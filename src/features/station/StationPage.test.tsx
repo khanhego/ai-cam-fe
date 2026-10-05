@@ -7,6 +7,7 @@ import { login } from "@/lib/api/auth";
 import { server } from "@/test/server";
 import { useSession } from "@/lib/api/session";
 import { renderApp } from "@/test/render";
+import { hidScan } from "@/test/scan";
 
 import { sound } from "./sound";
 import { resetStationStore, useStationStore } from "./stationStore";
@@ -21,8 +22,7 @@ beforeEach(async () => {
 
 /** Máy quét: gõ liền không độ trễ + Enter. */
 async function scan(code: string) {
-  const user = userEvent.setup({ delay: null });
-  await user.keyboard(`${code}{Enter}`);
+  await hidScan(code);
 }
 
 async function ready() {

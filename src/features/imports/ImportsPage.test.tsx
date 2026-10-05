@@ -7,6 +7,9 @@ import { login } from "@/lib/api/auth";
 import { mockImports, TEMPLATE_COLUMNS } from "@/mocks/handlers/imports";
 import { mockPackages } from "@/mocks/packagesDb";
 import { renderApp } from "@/test/render";
+import { withNodeFormData } from "@/test/nodeFormData";
+
+withNodeFormData();
 
 /** File của Node: FormData (undici) trong jsdom không đọc được Blob của jsdom. */
 const mkFile = (content: string, name: string) => new NodeFile([content], name) as unknown as File;

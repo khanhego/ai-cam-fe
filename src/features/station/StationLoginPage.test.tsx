@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderApp } from "@/test/render";
+import { hidScan } from "@/test/scan";
 
 async function submit(username: string, password: string) {
   const user = userEvent.setup();
@@ -54,7 +55,7 @@ test("EX-P9: quét mã khi chưa đăng nhập → nhắc đăng nhập, không 
   renderApp("/station/login");
   await screen.findByRole("heading", { name: "Đăng nhập station" });
 
-  await userEvent.setup({ delay: null }).keyboard("SPXTST0000001{Enter}");
+  await hidScan("SPXTST0000001");
 
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Station chưa đăng nhập. Đăng nhập rồi quét lại.",

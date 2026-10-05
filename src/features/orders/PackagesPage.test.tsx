@@ -7,6 +7,7 @@ import { login } from "@/lib/api/auth";
 import { apiError } from "@/mocks/http";
 import { vnDay } from "@/shared/format";
 import { renderApp } from "@/test/render";
+import { hidScan } from "@/test/scan";
 import { server } from "@/test/server";
 
 beforeEach(async () => {
@@ -31,13 +32,12 @@ test("TC-07.01: ô tìm tự focus; nhập mã + Enter ra 1 kiện → mở th�
 });
 
 test("TC-07.01: máy quét khi focus ngoài ô nhập vẫn tìm được", async () => {
-  const user = userEvent.setup({ delay: null });
   const router = renderApp("/admin/packages");
   const q = await screen.findByLabelText("Mã vận đơn hoặc mã đơn");
   await waitFor(() => expect(q).toHaveFocus());
   q.blur();
 
-  await user.keyboard("spxtst0000001{Enter}");
+  await hidScan("spxtst0000001");
 
   await waitFor(() => expect(router.state.location.pathname).toBe("/admin/packages/pkg-0000001"));
 });
