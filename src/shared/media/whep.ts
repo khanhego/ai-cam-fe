@@ -87,7 +87,11 @@ export async function connectWhep(
   };
 
   pc.addTransceiver("video", { direction: "recvonly" });
-  pc.ontrack = (ev) => handlers.onStream(ev.streams[0] ?? new MediaStream([ev.track]));
+  pc.ontrack = (ev) => {
+    // Kết nối đã đóng (tile mount lại, đổi station, "Thử lại"): track đến muộn không được đè luồng mới → màn đen.
+    if (closed) return;
+    handlers.onStream(ev.streams[0] ?? new MediaStream([ev.track]));
+  };
   pc.onconnectionstatechange = () => {
     if (closed) return;
     const s = pc.connectionState;

@@ -117,3 +117,13 @@ test("sessionUrl: giữ tiền tố /live khi MediaMTX trả Location từ gốc
   expect(sessionUrl("/live/cam-1/whep", null)).toBeNull();
   expect(sessionUrl("/live/cam-1/whep", "/other/session")).toMatch(/^http:\/\/[^/]+\/other\/session$/);
 });
+
+test("track đến sau khi đã đóng → bỏ qua, không đè luồng của kết nối mới (E2E D11 màn đen chập chờn)", async () => {
+  const { peer, streams, run } = setup([answer()]);
+  const session = await run();
+
+  session.close();
+  peer.ontrack?.({ streams: [{} as MediaStream], track: {} as MediaStreamTrack });
+
+  expect(streams).toEqual([]);
+});

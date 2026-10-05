@@ -27,6 +27,8 @@ export function useLiveStream(url: string, offline: boolean) {
       url,
       {
         onStream: (stream) => {
+          // Lượt kết nối cũ (đã hủy) không được gắn luồng chết vào <video> của lượt mới.
+          if (cancelled) return;
           if (videoRef.current) videoRef.current.srcObject = stream;
         },
         onStatus: (s) => {
