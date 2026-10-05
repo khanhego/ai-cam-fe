@@ -11,6 +11,11 @@ import { server } from "./server";
 
 configure({ asyncUtilTimeout: 3000 });
 
+// jsdom thay FormData toàn cục bằng bản của nó; fetch (undici) không tuần tự hoá được → multipart (API-50) hỏng.
+// Dùng FormData gốc của Node; test tạo file bằng `File` của `node:buffer`.
+globalThis.FormData = (await new Response(new URLSearchParams("a=1")).formData())
+  .constructor as typeof FormData;
+
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => {
   cleanup();

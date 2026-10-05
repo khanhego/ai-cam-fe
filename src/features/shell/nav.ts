@@ -31,6 +31,7 @@ export const NAV: NavItem[] = [
     roles: ["ADMIN", "SUPERVISOR"],
     badge: "approvals",
   },
+  { to: "/admin/imports", label: "Nhập đơn", icon: "upload_file", roles: ["ADMIN", "SUPERVISOR"] },
   { to: "/admin/live", label: "Live view", icon: "live_tv", roles: ["ADMIN", "SUPERVISOR"] },
   {
     to: "/admin/settings/stations",
