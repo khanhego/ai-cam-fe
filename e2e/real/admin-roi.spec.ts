@@ -13,8 +13,10 @@ test("TC-01.05: kéo khung x=0.2, y=0.2, w=0.6, h=0.6 trên ảnh Cam 2 → API-
   await page.getByRole("button", { name: "Sửa TST Station 01" }).click();
 
   const section = page.getByRole("region", { name: "Vùng đọc mã Cam 2" });
+  // API-63 chụp bằng FFmpeg từ RTSP (~2 giây lúc rảnh); khi máy dev chạy cùng encode bản xuất + vision có lần > 20 giây
+  // (QA G4) → chờ tới 40 giây. Trên server kho chưa đo (chưa test — thiếu phần cứng).
   await expect(section.getByRole("img", { name: "Ảnh chụp Cam 2 để vẽ vùng đọc mã" })).toBeVisible({
-    timeout: 20_000,
+    timeout: 40_000,
   });
   const surface = section.getByTestId("roi-surface");
   await surface.scrollIntoViewIfNeeded();
@@ -45,8 +47,10 @@ test("TC-01.06 (UI): khung quá nhỏ → nút Lưu bị khóa", async ({ page }
   await page.getByRole("button", { name: "Sửa TST Station 01" }).click();
 
   const section = page.getByRole("region", { name: "Vùng đọc mã Cam 2" });
+  // API-63 chụp bằng FFmpeg từ RTSP (~2 giây lúc rảnh); khi máy dev chạy cùng encode bản xuất + vision có lần > 20 giây
+  // (QA G4) → chờ tới 40 giây. Trên server kho chưa đo (chưa test — thiếu phần cứng).
   await expect(section.getByRole("img", { name: "Ảnh chụp Cam 2 để vẽ vùng đọc mã" })).toBeVisible({
-    timeout: 20_000,
+    timeout: 40_000,
   });
   const surface = section.getByTestId("roi-surface");
   await surface.scrollIntoViewIfNeeded();
