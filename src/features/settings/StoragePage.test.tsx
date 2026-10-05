@@ -110,6 +110,17 @@ test("API-81: ổ ≥ 80% → cảnh báo; dịch vụ lỗi; camera mất tín 
   expect(within(cam2).getByText("Mất tín hiệu")).toBeInTheDocument();
 });
 
+test("TC-09.05 (UI): D8 ổ 85% → LinearProgress màu cảnh báo + Alert kèm %", async () => {
+  mockHealth.diskPercent = 85;
+  renderApp("/admin/settings/storage");
+
+  const panel = await screen.findByRole("region", { name: "Sức khỏe hệ thống" });
+  expect(await within(panel).findByText(/Ổ lưu video đã dùng 85%/)).toBeInTheDocument();
+  const bar = within(panel).getByRole("progressbar", { name: "Ổ lưu video" });
+  expect(bar).toHaveAttribute("aria-valuenow", "85");
+  expect(bar.firstElementChild).toHaveClass("bg-error");
+});
+
 test("API-81: ổ dưới 80% → không cảnh báo", async () => {
   mockHealth.diskPercent = 30;
   renderApp("/admin/settings/storage");

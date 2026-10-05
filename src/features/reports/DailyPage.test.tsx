@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 
 import { login } from "@/lib/api/auth";
+import { mockAttentionExtra } from "@/mocks/handlers/reports";
 import { apiError } from "@/mocks/http";
 import { vnDay } from "@/shared/format";
 import { renderApp } from "@/test/render";
@@ -190,4 +191,14 @@ test("F12: chỉ có kind lạ → câu 'Không có việc cần xử lý.'", as
   renderApp("/admin");
 
   expect(await screen.findByText("Không có việc cần xử lý.")).toBeInTheDocument();
+});
+
+test("TC-09.05 (UI): D2 Cần xử lý có dòng ổ đĩa kèm % khi API-32 trả DISK_USAGE > 80", async () => {
+  mockAttentionExtra.splice(0, mockAttentionExtra.length, { kind: "DISK_USAGE", percent: 85 });
+  await login("tst_admin", "matkhau123", "DASHBOARD");
+  renderApp("/admin");
+
+  const attention = await screen.findByRole("region", { name: "Cần xử lý" });
+  const row = (await within(attention).findByText("Ổ lưu video đã dùng 85%")).closest("li")!;
+  expect(within(row).getByRole("link", { name: "Xem" })).toHaveAttribute("href", "/admin/settings/storage");
 });

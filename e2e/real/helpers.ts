@@ -19,6 +19,31 @@ export async function scan(page: Page, code: string) {
   await page.keyboard.press("Enter");
 }
 
+/**
+ * Máy quét HID có mốc thời gian phần cứng: mỗi phím mang `timestamp` cách nhau 5 ms (như sự kiện OS của máy quét
+ * thật), không phụ thuộc lúc Playwright giao phím. `keyboard.type` lấy mốc = lúc giao, nên khi luồng chính của
+ * trang khựng ~80 ms (thấy ở /station/login có ô mật khẩu) một khoảng cách bị đo > 50 ms dù máy quét thật vẫn nhận.
+ */
+export async function hidScan(page: Page, code: string) {
+  const cdp = await page.context().newCDPSession(page);
+  const base = Date.now() / 1000;
+  for (const [i, key] of [...code, "Enter"].entries()) {
+    const enter = key === "Enter";
+    const vk = enter ? 13 : key.toUpperCase().charCodeAt(0);
+    const timestamp = base + i * 0.005;
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key,
+      code: enter ? "Enter" : undefined,
+      text: enter ? "\r" : key,
+      windowsVirtualKeyCode: vk,
+      timestamp,
+    });
+    await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key, windowsVirtualKeyCode: vk, timestamp });
+  }
+  await cdp.detach();
+}
+
 export async function loginStation(page: Page, username = "tst_station01") {
   await page.goto("/station/login");
   await page.getByLabel("Tài khoản station").fill(username);
