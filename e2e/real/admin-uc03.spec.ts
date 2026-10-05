@@ -1,15 +1,10 @@
 /**
- * UC-03 với BE thật (04-test-cases M07, M09): D2 → D3 → D4 → xuất. Chạy sau khi BE M2 (API-30..46, WS-02) xong:
- * `E2E_M2_BE=1 pnpm e2e:real admin-uc03`. Cần stack dev + camera giả (clip READY ≤ 60 giây sau khi đóng phiên).
+ * UC-03 với BE thật (04-test-cases M07, M09): D2 → D3 → D4 → xuất. `pnpm e2e:real admin-uc03`.
+ * Cần stack dev + camera giả (clip READY ≤ 60 giây sau khi đóng phiên).
  */
 import { expect, test } from "@playwright/test";
 
 import { loginAdmin, resetData, scan, stationReady } from "./helpers";
-
-test.skip(
-  !process.env.E2E_M2_BE,
-  "BE M2 (API-30..46, WS-02) đang làm song song — bật E2E_M2_BE=1 khi BE xong",
-);
 
 test.beforeEach(() => resetData());
 
