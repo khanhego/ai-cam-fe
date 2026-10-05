@@ -2,7 +2,7 @@ import type { Role } from "@/lib/api/session";
 
 /**
  * Drawer dashboard (02b-admin §2). Chỉ mục có màn thật mới vào menu (không route tạm — DEC-51);
- * mục mới được thêm ở task tương ứng (D5 T-56, D7/D8 T-58, D9/D10 T-59).
+ * mục mới được thêm ở task tương ứng.
  * `end`: chỉ sáng khi đúng đường dẫn (Tổng quan là `/admin`, cha của mọi route khác).
  */
 export type NavItem = {
@@ -51,6 +51,14 @@ export const NAV: NavItem[] = [
     to: "/admin/settings/storage",
     label: "Lưu trữ video",
     icon: "hard_drive",
+    roles: ["ADMIN"],
+    group: "settings",
+  },
+  { to: "/admin/settings/users", label: "Người dùng", icon: "group", roles: ["ADMIN"], group: "settings" },
+  {
+    to: "/admin/settings/audit",
+    label: "Nhật ký thao tác",
+    icon: "history",
     roles: ["ADMIN"],
     group: "settings",
   },

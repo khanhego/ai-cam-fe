@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { logout } from "@/lib/api/auth";
+import { ROLE_LABEL } from "@/shared/labels";
 import { cx, Icon, IconButton } from "@/shared/ui";
 
 import { useAuth } from "../auth/useAuth";
@@ -10,8 +11,6 @@ import { playApprovalChime } from "../approvals/chime";
 import { canApprove, navFor, type NavItem } from "./nav";
 import { currentTheme, setTheme } from "./theme";
 import { useDashboardSocket } from "./useDashboardSocket";
-
-const ROLE_LABEL = { ADMIN: "Admin", SUPERVISOR: "Supervisor", CSKH: "CSKH", STATION: "Station" } as const;
 
 function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   const main = items.filter((i) => !i.group);

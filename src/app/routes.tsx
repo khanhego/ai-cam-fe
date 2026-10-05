@@ -87,6 +87,8 @@ export const routes: RouteObject[] = [
         children: [
           { path: "shopee", Component: lazy(() => import("@/features/platforms/ShopeePage")) },
           { path: "storage", Component: lazy(() => import("@/features/settings/StoragePage")) },
+          { path: "users", Component: lazy(() => import("@/features/users/UsersPage")) },
+          { path: "audit", Component: lazy(() => import("@/features/audit/AuditPage")) },
         ],
       },
       { path: "forbidden", element: <ForbiddenPage /> },

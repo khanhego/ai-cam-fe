@@ -80,3 +80,48 @@ export const APPROVAL_TYPE: Record<"MISMATCH" | "ASSIST" | "REPACK", [string, Ch
   ASSIST: ["Gọi quản lý", "warning"],
   REPACK: ["Đóng gói lại", "info"],
 };
+
+/** Vai trò (01 §5.1, FR-10.01). */
+export const ROLE_LABEL = {
+  ADMIN: "Admin",
+  SUPERVISOR: "Supervisor",
+  CSKH: "CSKH",
+  STATION: "Station",
+} as const;
+
+/** Hành động nhật ký (02 §6.2 API-92). Mã lạ → hiện nguyên mã. */
+export const AUDIT_ACTION: Record<string, string> = {
+  LOGIN: "Đăng nhập",
+  VIEW_CLIP: "Xem clip",
+  EXPORT_CLIP: "Xuất clip",
+  DOWNLOAD_EXPORT: "Tải file xuất",
+  HOLD_CLIP: "Giữ clip",
+  UNHOLD_CLIP: "Bỏ giữ clip",
+  DELETE_CLIP: "Xóa clip",
+  REBUILD_CLIP: "Cắt lại clip",
+  APPROVAL_DECISION: "Xử lý yêu cầu duyệt",
+  IMPORT_COMMIT: "Nhập đơn từ file",
+  SETTINGS_UPDATE: "Đổi cài đặt",
+  STATION_UPDATE: "Sửa station",
+  CAMERA_UPDATE: "Sửa camera",
+  USER_UPDATE: "Sửa tài khoản",
+  SESSIONS_REVOKED: "Thu hồi đăng nhập",
+  SHOP_CONNECT: "Kết nối Shopee",
+  ORDER_OVERWRITTEN_BY_API: "Shopee ghi đè đơn từ file",
+};
+
+/** Loại đối tượng nhật ký (`audit_log.object_type` do BE ghi). */
+export const AUDIT_OBJECT: Record<string, string> = {
+  USER: "Tài khoản",
+  CLIP: "Clip",
+  SESSION: "Phiên",
+  EXPORT: "Bản xuất",
+  STATION: "Station",
+  CAMERA: "Camera",
+  SETTING: "Cài đặt",
+  SHOP: "Shop",
+  ORDER: "Đơn",
+  PACKAGE: "Kiện",
+  CSV_IMPORT: "Lần nhập file",
+  APPROVAL_REQUEST: "Yêu cầu duyệt",
+};

@@ -6,7 +6,7 @@ import { mockUsers, userFromAuth } from "../db";
 import { API, apiError } from "../http";
 import { requireRole } from "./session";
 
-/** API-60..62, API-90 (role=STATION) theo 02 §6 — dữ liệu trong bộ nhớ. */
+/** API-60..65 theo 02 §6 (API-90 ở `users.ts`) — dữ liệu trong bộ nhớ. */
 export const mockStations: Station[] = [];
 
 export function resetMockStations() {
@@ -207,27 +207,5 @@ export const stationsHandlers = [
         })),
       })),
     });
-  }),
-
-  http.get(`${API}/users`, ({ request }) => {
-    const denied = admin(request);
-    if (denied) return denied;
-    const role = new URL(request.url).searchParams.get("role");
-    const items = mockUsers
-      .filter((u) => !role || u.role === role)
-      .map((u) => ({
-        id: u.id,
-        username: u.username,
-        display_name: u.display_name,
-        role: u.role,
-        is_active: !u.disabled,
-        // Như BE: station suy ra từ station đang gắn tài khoản.
-        station: (() => {
-          const st = mockStations.find((x) => x.account?.id === u.id);
-          return st ? { id: st.id, name: st.name } : null;
-        })(),
-        created_at: "2026-10-01T00:00:00Z",
-      }));
-    return HttpResponse.json({ items, page: 1, page_size: 100, total: items.length });
   }),
 ];

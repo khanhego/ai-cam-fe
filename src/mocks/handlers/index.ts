@@ -9,6 +9,7 @@ import { settingsHandlers } from "./settings";
 import { shopsHandlers } from "./shops";
 import { stationHandlers } from "./station";
 import { stationsHandlers } from "./stations";
+import { usersHandlers } from "./users";
 
 /** Handler MSW theo contract 02 §6 — thêm theo từng task (DEC-19). */
 export const handlers = [
@@ -22,5 +23,6 @@ export const handlers = [
   ...importsHandlers,
   ...shopsHandlers,
   ...settingsHandlers,
+  ...usersHandlers,
   ...wsHandlers,
 ];
