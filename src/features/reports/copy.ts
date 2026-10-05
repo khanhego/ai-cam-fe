@@ -44,6 +44,8 @@ export function attentionText(item: AttentionItem): string {
     }
     case "APPROVAL_PENDING":
       return `${fmtNumber(item.count)} yêu cầu duyệt đang chờ`;
+    case "CLIP_FAILED":
+      return `${fmtNumber(item.count)} clip cắt lỗi — cần cắt lại`;
     case "SYNC_ERROR":
       return `Đồng bộ Shopee lỗi lúc ${fmtShort(item.at)}`;
     case "DISK_USAGE":

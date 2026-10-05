@@ -91,12 +91,20 @@ test("TC-09.04: ngày không có phiên → thẻ theo ngày = 0 và câu trốn
   expect(router.state.location.search).toBe("?date=2026-01-01");
 });
 
-test("API-32 lỗi → Alert + Thử lại tải lại được", async () => {
+test("API-32 lỗi 5xx → tự thử lại 2 lần (02b §8) → Alert + Thử lại tải lại được", async () => {
   await login("tst_cskh", "matkhau123", "DASHBOARD");
-  server.use(http.get("/api/v1/reports/daily", () => apiError(500, "INTERNAL", "Lỗi"), { once: true }));
+  let calls = 0;
+  server.use(
+    http.get("/api/v1/reports/daily", () => {
+      calls += 1;
+      return apiError(500, "INTERNAL", "Lỗi");
+    }),
+  );
   renderApp("/admin");
 
   expect(await screen.findByText("Không tải được số liệu ngày.")).toBeInTheDocument();
+  expect(calls).toBe(3);
+  server.resetHandlers();
   await userEvent.click(screen.getByRole("button", { name: "Thử lại" }));
   expect(await card(/^Đã đóng gói: 8\./)).toBeInTheDocument();
 });
@@ -128,4 +136,58 @@ test("Cần xử lý: lệch giờ camera và lỗi đồng bộ", async () => {
   expect(await screen.findByText("Camera lệch giờ 1,4 giây")).toBeInTheDocument();
   expect(screen.getByText("Đồng bộ Shopee lỗi lúc 04/10 14:27")).toBeInTheDocument();
   expect(screen.getByText("Chưa có station nào.")).toBeInTheDocument();
+});
+
+test("F12: CLIP_FAILED → '2 clip cắt lỗi — cần cắt lại' + link D3; kind lạ bị bỏ qua (không dòng trống)", async () => {
+  await login("tst_cskh", "matkhau123", "DASHBOARD");
+  server.use(
+    http.get("/api/v1/reports/daily", () =>
+      Response.json({
+        date: "2026-10-04",
+        counts: {
+          packed: 1,
+          had_mismatch: 0,
+          abandoned: 0,
+          cancelled: 0,
+          packed_not_handed_over: 0,
+          cancelled_after_pack: 0,
+        },
+        stations: [],
+        attention: [
+          { kind: "CLIP_FAILED", count: 2 },
+          { kind: "SOMETHING_NEW", foo: 1 },
+        ],
+      }),
+    ),
+  );
+  renderApp("/admin");
+
+  const attention = await screen.findByRole("region", { name: "Cần xử lý" });
+  const row = (await within(attention).findByText("2 clip cắt lỗi — cần cắt lại")).closest("li")!;
+  expect(within(row).getByRole("link", { name: "Xem" })).toHaveAttribute("href", "/admin/packages");
+  expect(within(attention).getAllByRole("listitem")).toHaveLength(1);
+});
+
+test("F12: chỉ có kind lạ → câu 'Không có việc cần xử lý.'", async () => {
+  await login("tst_cskh", "matkhau123", "DASHBOARD");
+  server.use(
+    http.get("/api/v1/reports/daily", () =>
+      Response.json({
+        date: "2026-10-04",
+        counts: {
+          packed: 1,
+          had_mismatch: 0,
+          abandoned: 0,
+          cancelled: 0,
+          packed_not_handed_over: 0,
+          cancelled_after_pack: 0,
+        },
+        stations: [],
+        attention: [{ kind: "SOMETHING_NEW" }],
+      }),
+    ),
+  );
+  renderApp("/admin");
+
+  expect(await screen.findByText("Không có việc cần xử lý.")).toBeInTheDocument();
 });

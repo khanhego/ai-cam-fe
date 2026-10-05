@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import type { AttentionItem } from "@/lib/api/reports";
+import { isKnownAttention, type AttentionItem } from "@/lib/api/reports";
 import { Icon } from "@/shared/ui";
 
 import { attentionText, COPY } from "./copy";
@@ -10,21 +10,24 @@ const ICON: Record<AttentionItem["kind"], string> = {
   CAMERA_OFFLINE: "videocam_off",
   CLOCK_DRIFT: "schedule",
   APPROVAL_PENDING: "pending_actions",
+  CLIP_FAILED: "error",
   SYNC_ERROR: "cloud_off",
   DISK_USAGE: "storage",
 };
 
 /**
- * Khối "Cần xử lý" của D2. `canOpen(path)`: chỉ hiện nút tới màn mà vai này có và đã xây (DEC-51) —
+ * Khối "Cần xử lý" của D2 (kind lạ bị bỏ qua). `canOpen(path)`: chỉ hiện nút tới màn mà vai này có và đã xây (DEC-51) —
  * vd. "Duyệt" chỉ có khi D13 có trong menu.
  */
 export function AttentionList({
-  items,
+  items: all,
   canOpen,
 }: {
-  items: AttentionItem[];
+  items: { kind: string }[];
   canOpen: (path: string) => boolean;
 }) {
+  // Contract API-32: client bỏ qua kind không biết (không render dòng trống — review G3 F12).
+  const items = all.filter(isKnownAttention);
   if (items.length === 0) return <p className="text-body-md text-on-surface-variant">{COPY.noAttention}</p>;
   const action = (item: AttentionItem): [string, string] | null => {
     if (item.kind === "CANCELLED_AFTER_PACK")
@@ -32,6 +35,8 @@ export function AttentionList({
     if (item.kind === "APPROVAL_PENDING") return [COPY.approve, "/admin/approvals"];
     if (item.kind === "CAMERA_OFFLINE" || item.kind === "CLOCK_DRIFT")
       return [COPY.view, "/admin/settings/stations"];
+    // API-30 chưa có bộ lọc trạng thái clip → mở D3 không lọc (DEC-101).
+    if (item.kind === "CLIP_FAILED") return [COPY.view, "/admin/packages"];
     if (item.kind === "SYNC_ERROR") return [COPY.view, "/admin/settings/shopee"];
     if (item.kind === "DISK_USAGE") return [COPY.view, "/admin/settings/storage"];
     return null;
