@@ -1,5 +1,6 @@
 import type { Role, SessionUser } from "@/lib/api/session";
 
+import { resetMockApprovals } from "./handlers/approvals";
 import { resetMockExportRules } from "./handlers/clips";
 import { resetMockReports } from "./handlers/reports";
 import { resetMockStations } from "./handlers/stations";
@@ -83,5 +84,6 @@ export function resetMockDb() {
   resetMockStations();
   resetMockPackages();
   resetMockReports();
+  resetMockApprovals();
   resetMockExportRules();
 }

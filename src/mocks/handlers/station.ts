@@ -3,6 +3,7 @@ import { http, HttpResponse } from "msw";
 import { userFromAuth } from "../db";
 import { API, apiError } from "../http";
 import { stationSim } from "../stationSim";
+import { announceApprovalCreated, pendingApprovals, recordWithdrawn } from "./approvals";
 
 /** API-10, 11, 12, 15 theo 02 §6.2, chạy trên StationSim. */
 function requireStation(request: Request) {
@@ -59,6 +60,7 @@ export const stationHandlers = [
     const error = stationSim.requestApproval(body);
     if (error === "APPROVAL_ALREADY_PENDING") return apiError(409, error, "Station đã có yêu cầu đang chờ.");
     if (error) return apiError(409, error, "Không gửi được yêu cầu duyệt lúc này.");
+    announceApprovalCreated();
     return HttpResponse.json(
       { approval_request: { ...stationSim.approval, status: "PENDING" }, state: stationSim.state() },
       { status: 201 },
@@ -68,8 +70,10 @@ export const stationHandlers = [
   http.post(`${API}/station/approval-requests/:id/withdraw`, ({ request, params }) => {
     const denied = requireStation(request);
     if (denied) return denied;
-    if (!stationSim.withdraw(String(params.id)))
+    const pending = pendingApprovals().find((a) => a.id === params.id);
+    if (!pending || !stationSim.withdraw(String(params.id)))
       return apiError(409, "ALREADY_RESOLVED", "Yêu cầu đã được xử lý.");
+    recordWithdrawn(pending);
     return HttpResponse.json({ state: stationSim.state() });
   }),
 ];

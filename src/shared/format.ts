@@ -69,6 +69,13 @@ export function fmtTime(iso: string | null | undefined): string {
   return `${p.hour}:${p.minute}:${p.second}`;
 }
 
+/** `14:27` (01 §10.5 D13 "xử lý lúc 14:31"). */
+export function fmtHourMinute(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const p = parts(TIME, new Date(iso));
+  return `${p.hour}:${p.minute}`;
+}
+
 /** `04/10 14:27` cho danh sách dày. */
 export function fmtShort(iso: string | null | undefined): string {
   if (!iso) return "—";

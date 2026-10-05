@@ -2,7 +2,7 @@ import type { Role } from "@/lib/api/session";
 
 /**
  * Drawer dashboard (02b-admin §2). Chỉ mục có màn thật mới vào menu (không route tạm — DEC-51);
- * mục mới được thêm ở task tương ứng (D13 T-55, D5 T-56, D11 T-60, D7/D8 T-58, D9/D10 T-59).
+ * mục mới được thêm ở task tương ứng (D5 T-56, D7/D8 T-58, D9/D10 T-59).
  * `end`: chỉ sáng khi đúng đường dẫn (Tổng quan là `/admin`, cha của mọi route khác).
  */
 export type NavItem = {
@@ -12,6 +12,8 @@ export type NavItem = {
   roles: Role[];
   group?: "settings";
   end?: boolean;
+  /** Badge số yêu cầu PENDING (D13). */
+  badge?: "approvals";
 };
 
 export const NAV: NavItem[] = [
@@ -23,6 +25,13 @@ export const NAV: NavItem[] = [
     roles: ["ADMIN", "SUPERVISOR", "CSKH"],
   },
   {
+    to: "/admin/approvals",
+    label: "Yêu cầu duyệt",
+    icon: "pending_actions",
+    roles: ["ADMIN", "SUPERVISOR"],
+    badge: "approvals",
+  },
+  {
     to: "/admin/settings/stations",
     label: "Station",
     icon: "point_of_sale",
@@ -32,3 +41,6 @@ export const NAV: NavItem[] = [
 ];
 
 export const navFor = (role: Role) => NAV.filter((item) => item.roles.includes(role));
+
+/** Vai được duyệt yêu cầu (01 §5.1): nhận badge + âm báo `approval.created`. */
+export const canApprove = (role: Role) => role === "ADMIN" || role === "SUPERVISOR";

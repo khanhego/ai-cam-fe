@@ -1,4 +1,5 @@
 import { wsHandlers } from "../ws";
+import { approvalsHandlers } from "./approvals";
 import { authHandlers } from "./auth";
 import { clipsHandlers } from "./clips";
 import { packagesHandlers } from "./packages";
@@ -10,6 +11,7 @@ import { stationsHandlers } from "./stations";
 export const handlers = [
   ...authHandlers,
   ...stationHandlers,
+  ...approvalsHandlers,
   ...stationsHandlers,
   ...reportsHandlers,
   ...packagesHandlers,

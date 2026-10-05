@@ -21,14 +21,16 @@ class FakeSocket {
   close() {}
 }
 
-function setup() {
+function setup(events?: { onApprovalCreated?: () => void }) {
   useSession.getState().setSession("tok", null);
   const client = new QueryClient();
   const spy = vi.spyOn(client, "invalidateQueries");
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  renderHook(() => useDashboardSocket((url) => new FakeSocket(url) as unknown as WebSocket), { wrapper });
+  renderHook(() => useDashboardSocket((url) => new FakeSocket(url) as unknown as WebSocket, events), {
+    wrapper,
+  });
   const emit = (type: string, data: unknown = {}) =>
     FakeSocket.last.onmessage?.({ data: JSON.stringify({ type, data, at: "" }) });
   return { spy, emit };
@@ -82,4 +84,17 @@ test("session.* / clip.* → làm mới tra cứu và chi tiết kiện; export.
 
   emit("approval.created", { id: "a1" });
   expect(spy).toHaveBeenCalledWith({ queryKey: ["approvals"] });
+});
+
+test("TC-03.40 (âm báo): approval.created gọi onApprovalCreated; approval.resolved chỉ làm mới D13 + D2", () => {
+  const onApprovalCreated = vi.fn();
+  const { spy, emit } = setup({ onApprovalCreated });
+
+  emit("approval.resolved", { id: "a1", status: "RESOLVED" });
+  expect(onApprovalCreated).not.toHaveBeenCalled();
+  expect(spy).toHaveBeenCalledWith({ queryKey: ["approvals"] });
+  expect(spy).toHaveBeenCalledWith({ queryKey: ["daily"] });
+
+  emit("approval.created", { id: "a2" });
+  expect(onApprovalCreated).toHaveBeenCalledTimes(1);
 });

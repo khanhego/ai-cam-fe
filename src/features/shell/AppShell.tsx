@@ -5,7 +5,9 @@ import { logout } from "@/lib/api/auth";
 import { cx, Icon, IconButton } from "@/shared/ui";
 
 import { useAuth } from "../auth/useAuth";
-import { navFor, type NavItem } from "./nav";
+import { ApprovalBadge } from "../approvals/ApprovalBadge";
+import { playApprovalChime } from "../approvals/chime";
+import { canApprove, navFor, type NavItem } from "./nav";
 import { currentTheme, setTheme } from "./theme";
 import { useDashboardSocket } from "./useDashboardSocket";
 
@@ -29,6 +31,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
     >
       <Icon name={item.icon} />
       {item.label}
+      {item.badge === "approvals" && <ApprovalBadge />}
     </NavLink>
   );
   return (
@@ -51,7 +54,8 @@ export function AppShell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [theme, setThemeState] = useState(currentTheme);
   const items = navFor(me.role);
-  useDashboardSocket();
+  // Âm báo yêu cầu duyệt mới chỉ cho vai được duyệt (server cũng chỉ gửi `approval.*` cho ADMIN, SUPERVISOR).
+  useDashboardSocket(undefined, canApprove(me.role) ? { onApprovalCreated: playApprovalChime } : undefined);
 
   async function onLogout() {
     await logout().catch(() => undefined);

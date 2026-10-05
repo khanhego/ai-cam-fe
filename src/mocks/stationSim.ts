@@ -1,4 +1,5 @@
-import type { ScanAlert, ScanResult, StationSession, StationState } from "@/lib/api/station";
+import { ACTIONS_BY_TYPE, type ApprovalAction, type ApprovalContext } from "@/lib/api/approvals";
+import type { ScanAlert, ScanResult, SessionFlag, StationSession, StationState } from "@/lib/api/station";
 
 /**
  * Mô phỏng state machine phiên của BE (02a §4.1) cho `pnpm dev:mock` và test.
@@ -20,6 +21,8 @@ export class StationSim {
   tray: string[] | null = null;
   todayCount = 0;
   approval: StationState["approval_request"] = null;
+  /** `context` của yêu cầu đang chờ (API-20): mã liên quan + `tray_match` lúc gửi. */
+  approvalContext: ApprovalContext | null = null;
   private beforeApproval: "OPEN" | "MISMATCH" | null = null;
   recent: {
     id: string;
@@ -158,23 +161,7 @@ export class StationSim {
       return { outcome: "MISMATCH", alert: null };
     }
     if (code === expected) {
-      this.pkg(code).status = "PACKED";
-      const done = new Date().toISOString();
-      this.recent.unshift({
-        id: s.id,
-        tracking_number: code,
-        status: "COMPLETED",
-        flags: s.flags,
-        started_at: s.started_at,
-        ended_at: done,
-        clips: [
-          { id: `clip-${s.id}-1`, camera_role: "CAM1", status: "READY" },
-          { id: `clip-${s.id}-2`, camera_role: "CAM2", status: "READY" },
-        ],
-      });
-      this.recent = this.recent.slice(0, 5);
-      this.session = null;
-      this.todayCount += 1;
+      this.complete(s);
       return { outcome: "SESSION_COMPLETED", alert: null };
     }
     s.status = "MISMATCH";
@@ -205,6 +192,12 @@ export class StationSim {
       tracking_number: s ? s.package.tracking_number : String(body.tracking_number),
       created_at: new Date().toISOString(),
     };
+    this.approvalContext = {
+      expected: s?.mismatch?.expected ?? (s ? s.package.tracking_number : String(body.tracking_number)),
+      actual: s?.mismatch?.actual ?? null,
+      source: s?.mismatch?.source ?? null,
+      tray_match: this.match(),
+    };
     if (s) {
       this.beforeApproval = s.status as "OPEN" | "MISMATCH";
       s.status = "WAITING_APPROVAL";
@@ -215,6 +208,7 @@ export class StationSim {
   withdraw(id: string): boolean {
     if (!this.approval || this.approval.id !== id) return false;
     this.approval = null;
+    this.approvalContext = null;
     if (this.session && this.beforeApproval) this.session.status = this.beforeApproval;
     this.beforeApproval = null;
     return true;
@@ -223,9 +217,97 @@ export class StationSim {
   cancel(sessionId: string): boolean {
     if (!this.session || this.session.id !== sessionId || this.session.status === "WAITING_APPROVAL")
       return false;
-    this.pkg(this.session.package.tracking_number).status = "NEW";
-    this.session = null;
+    this.dropSession();
     return true;
+  }
+
+  /** Kết thúc phiên `COMPLETED` (quét lại đúng mã hoặc quản lý đóng phiên có ghi chú). */
+  private complete(s: StationSession & { cam2Seen: boolean }, extraFlags: SessionFlag[] = []) {
+    const code = s.package.tracking_number;
+    this.pkg(code).status = "PACKED";
+    const done = new Date().toISOString();
+    this.recent.unshift({
+      id: s.id,
+      tracking_number: code,
+      status: "COMPLETED",
+      flags: [...s.flags, ...extraFlags],
+      started_at: s.started_at,
+      ended_at: done,
+      clips: [
+        { id: `clip-${s.id}-1`, camera_role: "CAM1", status: "READY" },
+        { id: `clip-${s.id}-2`, camera_role: "CAM2", status: "READY" },
+      ],
+    });
+    this.recent = this.recent.slice(0, 5);
+    this.session = null;
+    this.todayCount += 1;
+  }
+
+  /** Hủy phiên: kiện về `NEW`, riêng phiên đóng gói lại trả kiện về `PACKED` (BR-03). */
+  private dropSession() {
+    const s = this.session;
+    if (!s) return;
+    this.pkg(s.package.tracking_number).status = s.flags.includes("REPACK") ? "PACKED" : "NEW";
+    this.session = null;
+  }
+
+  /**
+   * API-21 trên station giả (02a API-21): trả mã lỗi hoặc null. CONTINUE đưa phiên về OPEN rồi đánh giá lại khay;
+   * CLOSE_WITH_NOTE bị chặn khi khay còn phiếu sai; APPROVE_REPACK mở phiên mới cờ REPACK.
+   */
+  decide(id: string, action: ApprovalAction): "TRAY_STILL_DIFFERENT" | "INVALID_ACTION" | "NOT_FOUND" | null {
+    const a = this.approval;
+    if (!a || a.id !== id) return "NOT_FOUND";
+    if (!ACTIONS_BY_TYPE[a.type].includes(action)) return "INVALID_ACTION";
+    const s = this.session;
+    const m = this.match();
+    if (action === "CLOSE_WITH_NOTE" && (m === "DIFFERENT" || m === "MULTIPLE"))
+      return "TRAY_STILL_DIFFERENT";
+    this.approval = null;
+    this.approvalContext = null;
+    this.beforeApproval = null;
+    if (action === "CONTINUE" && s) {
+      s.status = "OPEN";
+      s.mismatch = null;
+      if (m === "DIFFERENT" || m === "MULTIPLE") {
+        const expected = s.package.tracking_number;
+        s.status = "MISMATCH";
+        s.mismatch = {
+          source: "CAM2",
+          expected,
+          actual: (this.tray ?? []).filter((c) => c !== expected).join(", "),
+        };
+      }
+    } else if (action === "CLOSE_WITH_NOTE" && s) {
+      this.complete(s, ["CLOSED_BY_SUPERVISOR"]);
+    } else if (action === "CANCEL_SESSION") {
+      this.dropSession();
+    } else if (action === "APPROVE_REPACK") {
+      const now = Date.now();
+      const p = this.pkg(a.tracking_number);
+      p.status = "PACKING";
+      this.session = {
+        id: `ses-${now}`,
+        status: "OPEN",
+        started_at: new Date(now).toISOString(),
+        flags: ["REPACK"],
+        package: {
+          id: `pkg-${a.tracking_number}`,
+          tracking_number: a.tracking_number,
+          order: {
+            platform: "SHOPEE",
+            platform_order_sn: a.tracking_number.replace("SPXTST", "2410TST"),
+            buyer_note: null,
+          },
+          items: ITEMS_DEFAULT,
+        },
+        mismatch: null,
+        warn_at: new Date(now + 15 * 60_000).toISOString(),
+        abandon_at: new Date(now + 30 * 60_000).toISOString(),
+        cam2Seen: false,
+      };
+    }
+    return null;
   }
 }
 

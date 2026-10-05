@@ -5,21 +5,14 @@ import { vnDay } from "@/shared/format";
 
 import { API, apiError } from "../http";
 import { allSessions, mockPackages, STATIONS } from "../packagesDb";
+import { pendingApprovals } from "./approvals";
 import { DASHBOARD_ROLES, requireRole } from "./session";
 import { mockStations } from "./stations";
 
-/** Mục "Cần xử lý" không suy ra được từ dữ liệu mock (yêu cầu duyệt T-55, ổ đĩa, đồng bộ) — test đổi được. */
+/** Mục "Cần xử lý" không suy ra được từ dữ liệu mock (ổ đĩa, đồng bộ) — test đổi được. */
 export const mockAttentionExtra: AttentionItem[] = [];
 export function resetMockReports() {
-  mockAttentionExtra.splice(
-    0,
-    mockAttentionExtra.length,
-    { kind: "APPROVAL_PENDING", count: 1 },
-    {
-      kind: "DISK_USAGE",
-      percent: 83,
-    },
-  );
+  mockAttentionExtra.splice(0, mockAttentionExtra.length, { kind: "DISK_USAGE", percent: 83 });
 }
 resetMockReports();
 
@@ -56,6 +49,8 @@ export function dailyReport(date: string): DailyReport {
       if (c.clock_offset_ms !== null && Math.abs(c.clock_offset_ms) > 1000)
         attention.push({ kind: "CLOCK_DRIFT", camera_id: c.id, offset_ms: c.clock_offset_ms });
     }
+  const approvals = pendingApprovals().length;
+  if (approvals > 0) attention.push({ kind: "APPROVAL_PENDING", count: approvals });
   attention.push(...mockAttentionExtra);
 
   return {

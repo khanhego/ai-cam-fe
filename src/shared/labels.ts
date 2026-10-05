@@ -73,3 +73,10 @@ const PLATFORM_STATUS: Record<string, string> = {
 export const platformStatus = (s: string | null | undefined) => (s ? (PLATFORM_STATUS[s] ?? "Khác") : "—");
 
 export const CAMERA_ROLE = { CAM1: "Cam 1", CAM2: "Cam 2" } as const;
+
+/** Loại yêu cầu duyệt (02 §5 `approval_request.type`, 01 §10.5 D13). */
+export const APPROVAL_TYPE: Record<"MISMATCH" | "ASSIST" | "REPACK", [string, ChipTone]> = {
+  MISMATCH: ["Lệch mã", "error"],
+  ASSIST: ["Gọi quản lý", "warning"],
+  REPACK: ["Đóng gói lại", "info"],
+};
