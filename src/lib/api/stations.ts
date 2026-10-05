@@ -39,5 +39,9 @@ export const stationsApi = {
     api.put<Camera>(`/stations/${stationId}/cameras/${role}`, body),
   testCamera: (body: CameraInput) =>
     api.post<{ ok: boolean; snapshot: string; clock_offset_ms: number | null }>("/cameras/test", body),
+  /** API-63: ảnh hiện tại (JPEG). 422 CAMERA_UNREACHABLE. */
+  snapshot: (cameraId: string) => api.blob(`/cameras/${cameraId}/snapshot`),
+  /** API-64: vùng đọc mã Cam 2 (tỉ lệ 0–1). 422 ROI_INVALID, 409 ROI_ONLY_CAM2. */
+  setRoi: (cameraId: string, roi: Roi) => api.put<Camera>(`/cameras/${cameraId}/roi`, roi),
   stationAccounts: () => api.get<Page<UserItem>>("/users", { query: { role: "STATION", page_size: 100 } }),
 };

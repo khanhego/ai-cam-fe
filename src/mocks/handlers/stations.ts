@@ -1,9 +1,10 @@
 import { http, HttpResponse } from "msw";
 
-import type { Camera, Station } from "@/lib/api/stations";
+import type { Camera, Roi, Station } from "@/lib/api/stations";
 
 import { mockUsers, userFromAuth } from "../db";
 import { API, apiError } from "../http";
+import { requireRole } from "./session";
 
 /** API-60..62, API-90 (role=STATION) theo 02 §6 — dữ liệu trong bộ nhớ. */
 export const mockStations: Station[] = [];
@@ -36,11 +37,11 @@ export function resetMockStations() {
 }
 resetMockStations();
 
-const SNAPSHOT =
-  "data:image/svg+xml;base64," +
-  btoa(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#5c544a"/><rect x="180" y="90" width="280" height="180" fill="#8c8276"/><rect x="240" y="150" width="160" height="60" fill="#fff"/></svg>',
-  );
+const SNAPSHOT_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#5c544a"/><rect x="180" y="90" width="280" height="180" fill="#8c8276"/><rect x="240" y="150" width="160" height="60" fill="#fff"/></svg>';
+const SNAPSHOT = "data:image/svg+xml;base64," + btoa(SNAPSHOT_SVG);
+
+const findCamera = (id: string) => mockStations.flatMap((s) => s.cameras).find((c) => c.id === id);
 
 function admin(request: Request) {
   const user = userFromAuth(request.headers.get("Authorization"));
@@ -162,6 +163,32 @@ export const stationsHandlers = [
     if (body.password === "sai")
       return apiError(422, "CAMERA_UNREACHABLE", "Không kết nối được camera.", { reason: "AUTH" });
     return HttpResponse.json({ ok: true, snapshot: SNAPSHOT, clock_offset_ms: 120 });
+  }),
+
+  // API-63: ảnh hiện tại. Mock trả SVG (FE không phụ thuộc định dạng); camera trỏ tới 10.0.0.x → CAMERA_UNREACHABLE.
+  http.get(`${API}/cameras/:id/snapshot`, ({ request, params }) => {
+    const [, denied] = requireRole(request, ["ADMIN", "SUPERVISOR"]);
+    if (denied) return denied;
+    const camera = findCamera(String(params.id));
+    if (!camera) return apiError(404, "NOT_FOUND", "Không tìm thấy camera.");
+    if (camera.rtsp_url_masked.includes("10.0.0."))
+      return apiError(422, "CAMERA_UNREACHABLE", "Không kết nối được camera.", { reason: "TIMEOUT" });
+    return new HttpResponse(SNAPSHOT_SVG, { headers: { "Content-Type": "image/svg+xml" } });
+  }),
+
+  // API-64: vùng đọc mã — chỉ Cam 2, trong [0,1], w,h ≥ 0.05 (02 §6.2).
+  http.put(`${API}/cameras/:id/roi`, async ({ request, params }) => {
+    const denied = admin(request);
+    if (denied) return denied;
+    const camera = findCamera(String(params.id));
+    if (!camera) return apiError(404, "NOT_FOUND", "Không tìm thấy camera.");
+    if (camera.role !== "CAM2") return apiError(409, "ROI_ONLY_CAM2", "Chỉ Cam 2 có vùng đọc mã.");
+    const roi = (await request.json()) as Roi;
+    const inRange = [roi.x, roi.y, roi.w, roi.h].every((v) => typeof v === "number" && v >= 0 && v <= 1);
+    if (!inRange || roi.w < 0.05 || roi.h < 0.05 || roi.x + roi.w > 1.0001 || roi.y + roi.h > 1.0001)
+      return apiError(422, "ROI_INVALID", "Vùng đọc mã không hợp lệ.");
+    camera.roi = { x: roi.x, y: roi.y, w: roi.w, h: roi.h };
+    return HttpResponse.json(camera);
   }),
 
   http.get(`${API}/users`, ({ request }) => {

@@ -7,6 +7,7 @@ import { stationsApi, type Station } from "@/lib/api/stations";
 import { Alert, Button, EmptyState, PageHeader, SelectField, Skeleton, TextField, toast } from "@/shared/ui";
 
 import { CameraForm } from "./CameraForm";
+import { RoiEditor } from "./RoiEditor";
 
 function StationForm({ station }: { station?: Station }) {
   const navigate = useNavigate();
@@ -103,7 +104,7 @@ function StationForm({ station }: { station?: Station }) {
   );
 }
 
-/** D6 — thêm / sửa station và camera (01 §10.5, FR-01.01, UC-07). ROI Cam 2 ở T-62. */
+/** D6 — thêm / sửa station và camera (01 §10.5, FR-01.01, 01.04, UC-07); ROI chỉ cho Cam 2 (ROI_ONLY_CAM2). */
 export default function StationEditPage() {
   const { id } = useParams();
   const isNew = id === undefined;
@@ -137,6 +138,11 @@ export default function StationEditPage() {
           <CameraForm stationId={station.data.id} role="CAM1" camera={cam("CAM1")} />
           <CameraForm stationId={station.data.id} role="CAM2" camera={cam("CAM2")} />
         </div>
+        {cam("CAM2") ? (
+          <RoiEditor key={cam("CAM2")!.id} stationId={station.data.id} camera={cam("CAM2")!} />
+        ) : (
+          <p className="text-body-md text-on-surface-variant">Lưu Cam 2 trước rồi vẽ vùng đọc mã.</p>
+        )}
       </div>
     </>
   );

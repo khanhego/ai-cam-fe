@@ -12,6 +12,8 @@ export type RequestOptions = {
   /** false: không gắn token, không tự refresh (đăng nhập, refresh). */
   auth?: boolean;
   headers?: Record<string, string>;
+  /** `blob`: trả `Blob` (ảnh API-63) thay vì JSON. */
+  responseType?: "json" | "blob";
 };
 
 type Listener = () => void;
@@ -113,6 +115,7 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
   }
   if (!res.ok) throw await toApiError(res);
   if (res.status === 204) return undefined as T;
+  if (opts.responseType === "blob") return (await res.blob()) as T;
   return (await res.json()) as T;
 }
 
@@ -124,4 +127,11 @@ export const api = {
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>("PATCH", path, { ...opts, body }),
   delete: <T>(path: string, opts?: RequestOptions) => request<T>("DELETE", path, opts),
+  /** GET nhận file (có token, tự refresh như JSON). */
+  blob: (path: string, opts?: RequestOptions) =>
+    request<Blob>("GET", path, {
+      ...opts,
+      responseType: "blob",
+      headers: { Accept: "*/*", ...opts?.headers },
+    }),
 };
