@@ -24,7 +24,9 @@ export function useScanListener(
     const buffer = new ScanBuffer();
     const onKeyDown = (e: KeyboardEvent) => {
       if (!allowInInputs && isTyping(e.target)) return;
-      const code = buffer.push(e.key, performance.now());
+      // Đo theo lúc phím được tạo (timeStamp), không theo lúc JS xử lý: máy trạm bận (encode, live view) làm luồng
+      // chính trễ > 50 ms giữa hai phím thì lần quét vẫn được nhận (lỗi thấy ở QA G4 với E2E dưới tải).
+      const code = buffer.push(e.key, e.timeStamp > 0 ? e.timeStamp : performance.now());
       if (code) {
         e.preventDefault();
         handler.current(code);

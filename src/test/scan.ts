@@ -11,9 +11,13 @@ export async function hidScan(code: string): Promise<void> {
   const tick = () => (t += 5);
   window.addEventListener("keydown", tick, { capture: true });
   const spy = vi.spyOn(performance, "now").mockImplementation(() => t);
+  // jsdom đặt `KeyboardEvent.timeStamp` = Date.now() lúc tạo event → cũng cố định theo cùng đồng hồ.
+  const base = Date.now();
+  const dateSpy = vi.spyOn(Date, "now").mockImplementation(() => base + t);
   try {
     await userEvent.setup({ delay: null }).keyboard(`${code}{Enter}`);
   } finally {
+    dateSpy.mockRestore();
     spy.mockRestore();
     window.removeEventListener("keydown", tick, { capture: true });
   }
