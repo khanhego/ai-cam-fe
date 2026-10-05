@@ -17,6 +17,7 @@ const dropMockWorker = (): Plugin => ({
 });
 
 const API_URL = process.env.API_URL ?? "http://localhost:8180";
+const WEBRTC_URL = process.env.MEDIAMTX_WEBRTC_URL ?? "http://localhost:58889";
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), dropMockWorker()],
@@ -28,6 +29,8 @@ export default defineConfig({
     proxy: {
       "/api": { target: API_URL, changeOrigin: false },
       "/ws": { target: API_URL.replace(/^http/, "ws"), ws: true },
+      // WHEP (API-65 `whep_url` = /live/<path>/whep): production qua Caddy; dev thẳng tới MediaMTX WebRTC.
+      "/live": { target: WEBRTC_URL, changeOrigin: true, rewrite: (p) => p.replace(/^\/live/, "") },
     },
   },
   build: { sourcemap: "hidden", target: "es2022" },

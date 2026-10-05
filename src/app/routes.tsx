@@ -47,6 +47,15 @@ export const routes: RouteObject[] = [
         children: [{ index: true, Component: lazy(() => import("@/features/approvals/ApprovalsPage")) }],
       },
       {
+        path: "live",
+        element: (
+          <RequireRole roles={["ADMIN", "SUPERVISOR"]}>
+            <Outlet />
+          </RequireRole>
+        ),
+        children: [{ index: true, Component: lazy(() => import("@/features/liveview/LivePage")) }],
+      },
+      {
         path: "settings/stations",
         element: (
           <RequireRole roles={["ADMIN"]}>

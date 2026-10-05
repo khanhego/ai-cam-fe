@@ -191,6 +191,24 @@ export const stationsHandlers = [
     return HttpResponse.json(camera);
   }),
 
+  // API-65: mock không có MediaMTX → `whep_url` là video mẫu, CameraTile phát lặp khi VITE_MOCK=1 (02b-admin §12).
+  http.get(`${API}/live`, ({ request }) => {
+    const [, denied] = requireRole(request, ["ADMIN", "SUPERVISOR"]);
+    if (denied) return denied;
+    return HttpResponse.json({
+      stations: mockStations.map((s) => ({
+        id: s.id,
+        name: s.name,
+        cameras: s.cameras.map((c) => ({
+          id: c.id,
+          role: c.role,
+          status: c.status,
+          whep_url: c.role === "CAM2" ? "/mock/clip-cam2.mp4" : "/mock/clip-cam1.mp4",
+        })),
+      })),
+    });
+  }),
+
   http.get(`${API}/users`, ({ request }) => {
     const denied = admin(request);
     if (denied) return denied;

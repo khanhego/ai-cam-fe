@@ -31,7 +31,7 @@ const invalidate = (qc: QueryClient, ...keys: unknown[][]) =>
 /**
  * WS-02 cho dashboard (02b-admin §4, DEC-20): sự kiện chỉ để invalidate query, không giữ state song song.
  * - `report.updated` → D2 (throttle 5 giây).
- * - `camera.status` → D6 (station) + D2 (chip camera, mục Cần xử lý).
+ * - `camera.status` → D6 (station) + D2 (chip camera, mục Cần xử lý) + D11 (ô camera nối lại / "Mất tín hiệu").
  * - `approval.created` / `approval.resolved` → D13 + badge + D2 (số yêu cầu đang chờ); `approval.created` còn gọi
  *   `onApprovalCreated` (âm báo D13).
  * - `export.updated` → bản xuất đang theo dõi (ExportDialog vẫn poll 2 giây dự phòng).
@@ -53,7 +53,8 @@ export function useDashboardSocket(
     const onMessage = (msg: WsMessage) => {
       const data = (msg.data ?? {}) as { id?: string };
       if (msg.type === "report.updated") report.fire();
-      else if (msg.type === "camera.status") invalidate(queryClient, ["stations"], ["station"], ["daily"]);
+      else if (msg.type === "camera.status")
+        invalidate(queryClient, ["stations"], ["station"], ["daily"], ["live"]);
       else if (msg.type.startsWith("approval.")) {
         invalidate(queryClient, ["approvals"], ["daily"]);
         if (msg.type === "approval.created") eventsRef.current?.onApprovalCreated?.();
