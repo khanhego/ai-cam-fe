@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState, type ReactNode } from "react";
 
+import { useAuth } from "@/features/auth/useAuth";
 import { api } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import { Alert, Button, EmptyState, Tabs } from "@/shared/ui";
 
-import { CLIP_COPY } from "./copy";
+import { CLIP_COPY, clipStateError } from "./copy";
 
 export type ClipRef = {
   id: string;
@@ -17,10 +18,14 @@ export type ClipRef = {
 
 type Tab = "CAM1" | "CAM2" | "SIDE";
 
-/** URL phát có chữ ký (API-40), hết hạn 10 phút → giữ 8 phút. */
+/**
+ * URL phát có chữ ký (API-40), hết hạn 10 phút → giữ 8 phút. URL ký theo uid người xem (audit VIEW_CLIP) → uid nằm
+ * trong query key để người đăng nhập sau không dùng lại URL của người trước (review G3 F15).
+ */
 function useClipUrl(clipId: string | undefined) {
+  const uid = useAuth((s) => s.me?.id ?? null);
   return useQuery({
-    queryKey: ["clip-url", clipId],
+    queryKey: ["clip-url", uid, clipId],
     enabled: Boolean(clipId),
     staleTime: 8 * 60_000,
     retry: (count, error) => isApiError(error) && error.code === "SIGNATURE_INVALID" && count < 1,
@@ -53,6 +58,11 @@ function SignedVideo({
   const [failures, setFailures] = useState(0);
   if (url.isPending)
     return <div className="aspect-video w-full animate-pulse rounded-md bg-surface-container-highest" />;
+  const state = url.isError ? clipStateError(url.error) : null;
+  if (state?.kind === "deleted")
+    return <EmptyState icon="delete" title={CLIP_COPY.deleted(state.deletedAt, state.days)} />;
+  if (state?.kind === "pending") return <EmptyState icon="autorenew" title={CLIP_COPY.pending} />;
+  if (state?.kind === "failed") return <Alert kind="error">{CLIP_COPY.failedRebuild}</Alert>;
   if (url.isError || failures > 1) {
     return (
       <Alert
