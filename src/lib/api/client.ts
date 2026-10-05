@@ -12,10 +12,18 @@ export type RequestOptions = {
   /** false: không gắn token, không tự refresh (đăng nhập, refresh). */
   auth?: boolean;
   headers?: Record<string, string>;
+  /** `blob`: trả `Blob` (ảnh API-63) thay vì JSON. */
+  responseType?: "json" | "blob";
 };
 
 type Listener = () => void;
 const unauthenticatedListeners = new Set<Listener>();
+
+/** Phiên hết hạn hẳn (refresh thất bại / server từ chối): xóa token, báo guard về màn đăng nhập. */
+export function signalUnauthenticated(): void {
+  useSession.getState().clear();
+  unauthenticatedListeners.forEach((l) => l());
+}
 
 /** Đăng ký xử lý khi refresh thất bại (guard chuyển về màn đăng nhập). */
 export function onUnauthenticated(listener: Listener): () => void {
@@ -25,23 +33,34 @@ export function onUnauthenticated(listener: Listener): () => void {
 
 let refreshing: Promise<boolean> | null = null;
 
-/** Một lần refresh cho mọi request cùng gặp 401 (02b-station §4). */
+async function doRefresh(): Promise<boolean> {
+  try {
+    const { client, setAccessToken } = useSession.getState();
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { access_token: string };
+    setAccessToken(data.access_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Một lần refresh cho mọi request cùng gặp 401 (02b-station §4). Refresh token xoay vòng: hai tab cùng refresh
+ * sẽ làm tab sau dùng token đã bị thay → Web Locks tuần tự hóa giữa các tab (review M1 #14).
+ */
 export function refreshAccessToken(): Promise<boolean> {
   refreshing ??= (async () => {
     try {
-      const { client, setAccessToken } = useSession.getState();
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client }),
-      });
-      if (!res.ok) return false;
-      const data = (await res.json()) as { access_token: string };
-      setAccessToken(data.access_token);
-      return true;
-    } catch {
-      return false;
+      const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+      if (!locks) return await doRefresh();
+      return await locks.request(`aicam-refresh-${useSession.getState().client}`, doRefresh);
     } finally {
       refreshing = null;
     }
@@ -92,13 +111,11 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
     if (await refreshAccessToken()) {
       res = await send(method, path, opts);
     }
-    if (res.status === 401) {
-      useSession.getState().clear();
-      unauthenticatedListeners.forEach((l) => l());
-    }
+    if (res.status === 401) signalUnauthenticated();
   }
   if (!res.ok) throw await toApiError(res);
   if (res.status === 204) return undefined as T;
+  if (opts.responseType === "blob") return (await res.blob()) as T;
   return (await res.json()) as T;
 }
 
@@ -110,4 +127,11 @@ export const api = {
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>("PATCH", path, { ...opts, body }),
   delete: <T>(path: string, opts?: RequestOptions) => request<T>("DELETE", path, opts),
+  /** GET nhận file (có token, tự refresh như JSON). */
+  blob: (path: string, opts?: RequestOptions) =>
+    request<Blob>("GET", path, {
+      ...opts,
+      responseType: "blob",
+      headers: { Accept: "*/*", ...opts?.headers },
+    }),
 };

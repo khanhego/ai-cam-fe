@@ -1,20 +1,99 @@
 import { lazy } from "react";
-import { Navigate, type RouteObject } from "react-router-dom";
+import { Navigate, Outlet, type RouteObject } from "react-router-dom";
 
-import { ShellPlaceholder } from "./ShellPlaceholder";
+import { RequireRole } from "@/features/auth/RequireRole";
+import { AppShell } from "@/features/shell/AppShell";
+import { ForbiddenPage, NotFoundPage } from "@/features/shell/ErrorPages";
 
 /** Trang công cụ chỉ có khi `pnpm dev`; Vite thay `import.meta.env.DEV` = false lúc build nên nhánh này bị loại. */
 const devRoutes: RouteObject[] = import.meta.env.DEV
   ? [{ path: "/_ui", Component: lazy(() => import("./UiGallery")) }]
   : [];
 
-/**
- * Khung route (02b-station §2, 02b-admin §2). Trang thật thay thế ở T-34 (station) và T-50 (admin).
- * Không có menu điều hướng ở khung này.
- */
+const DASHBOARD = ["ADMIN", "SUPERVISOR", "CSKH"] as const;
+
+/** Route (02b-station §2, 02b-admin §2). Guard theo vai ở từng nhánh; server vẫn chặn bằng 403. */
 export const routes: RouteObject[] = [
   { path: "/", element: <Navigate to="/admin" replace /> },
-  { path: "/station/*", element: <ShellPlaceholder area="station" /> },
-  { path: "/admin/*", element: <ShellPlaceholder area="admin" /> },
+  { path: "/station/login", Component: lazy(() => import("@/features/station/StationLoginPage")) },
+  {
+    path: "/station",
+    element: (
+      <RequireRole roles={["STATION"]}>
+        <Outlet />
+      </RequireRole>
+    ),
+    children: [{ index: true, Component: lazy(() => import("@/features/station/StationPage")) }],
+  },
+  { path: "/admin/login", Component: lazy(() => import("@/features/admin/AdminLoginPage")) },
+  {
+    path: "/admin",
+    element: (
+      <RequireRole roles={[...DASHBOARD]}>
+        <AppShell />
+      </RequireRole>
+    ),
+    children: [
+      { index: true, Component: lazy(() => import("@/features/reports/DailyPage")) },
+      { path: "packages", Component: lazy(() => import("@/features/orders/PackagesPage")) },
+      { path: "packages/:id", Component: lazy(() => import("@/features/orders/PackageDetailPage")) },
+      {
+        path: "approvals",
+        element: (
+          <RequireRole roles={["ADMIN", "SUPERVISOR"]}>
+            <Outlet />
+          </RequireRole>
+        ),
+        children: [{ index: true, Component: lazy(() => import("@/features/approvals/ApprovalsPage")) }],
+      },
+      {
+        path: "imports",
+        element: (
+          <RequireRole roles={["ADMIN", "SUPERVISOR"]}>
+            <Outlet />
+          </RequireRole>
+        ),
+        children: [{ index: true, Component: lazy(() => import("@/features/imports/ImportsPage")) }],
+      },
+      {
+        path: "live",
+        element: (
+          <RequireRole roles={["ADMIN", "SUPERVISOR"]}>
+            <Outlet />
+          </RequireRole>
+        ),
+        children: [{ index: true, Component: lazy(() => import("@/features/liveview/LivePage")) }],
+      },
+      {
+        path: "settings/stations",
+        element: (
+          <RequireRole roles={["ADMIN"]}>
+            <Outlet />
+          </RequireRole>
+        ),
+        children: [
+          { index: true, Component: lazy(() => import("@/features/admin/StationsListPage")) },
+          { path: "new", Component: lazy(() => import("@/features/admin/StationEditPage")) },
+          { path: ":id", Component: lazy(() => import("@/features/admin/StationEditPage")) },
+        ],
+      },
+      {
+        path: "settings",
+        element: (
+          <RequireRole roles={["ADMIN"]}>
+            <Outlet />
+          </RequireRole>
+        ),
+        children: [
+          { path: "shopee", Component: lazy(() => import("@/features/platforms/ShopeePage")) },
+          { path: "storage", Component: lazy(() => import("@/features/settings/StoragePage")) },
+          { path: "users", Component: lazy(() => import("@/features/users/UsersPage")) },
+          { path: "audit", Component: lazy(() => import("@/features/audit/AuditPage")) },
+        ],
+      },
+      { path: "forbidden", element: <ForbiddenPage /> },
+      { path: "*", element: <NotFoundPage /> },
+    ],
+  },
   ...devRoutes,
 ];

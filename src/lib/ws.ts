@@ -1,4 +1,4 @@
-import { refreshAccessToken } from "./api/client";
+import { refreshAccessToken, signalUnauthenticated } from "./api/client";
 import { useSession } from "./api/session";
 
 /** Sự kiện server → client (02 §6 WS-01, WS-02). */
@@ -72,7 +72,12 @@ export function connectWs(opts: WsOptions): { close: () => void } {
       clearInterval(pingTimer);
       socket = null;
       if (stopped) return;
-      if (ev.code === CLOSE_TOKEN_EXPIRED) await refreshAccessToken();
+      // Refresh thất bại → phiên đã hết hẳn: về màn đăng nhập, không nối lại vô hạn (review M1 #9).
+      if (ev.code === CLOSE_TOKEN_EXPIRED && !(await refreshAccessToken())) {
+        stopped = true;
+        signalUnauthenticated();
+        return;
+      }
       scheduleReconnect();
     };
   }

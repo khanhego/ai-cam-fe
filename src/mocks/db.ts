@@ -1,13 +1,30 @@
 import type { Role, SessionUser } from "@/lib/api/session";
 
+import { resetMockApprovals } from "./handlers/approvals";
+import { resetMockExportRules } from "./handlers/clips";
+import { resetMockImports } from "./handlers/imports";
+import { resetMockSettings } from "./handlers/settings";
+import { resetMockShops } from "./handlers/shops";
+import { resetMockReports } from "./handlers/reports";
+import { resetMockStations } from "./handlers/stations";
+import { resetMockAudit } from "./handlers/users";
+import { resetMockPackages } from "./packagesDb";
+import { resetStationSim } from "./stationSim";
+
 /** Dữ liệu giả theo seed `aicam seed-demo --prefix TST` (04-test-cases §1). Mật khẩu chung: matkhau123. */
 export const MOCK_PASSWORD = "matkhau123";
 
-type MockUser = SessionUser & { locked?: boolean; disabled?: boolean };
+export type MockUser = SessionUser & {
+  locked?: boolean;
+  disabled?: boolean;
+  /** Mật khẩu riêng (tài khoản tạo / đặt lại qua D9); không có → MOCK_PASSWORD. */
+  password?: string;
+  created_at?: string;
+};
 
 const station = (id: string, name: string) => ({ id, name });
 
-export const mockUsers: MockUser[] = [
+const seedUsers = (): MockUser[] => [
   { id: "u-admin", username: "tst_admin", display_name: "Quản trị", role: "ADMIN", station: null },
   { id: "u-sup", username: "tst_sup", display_name: "Nguyễn B", role: "SUPERVISOR", station: null },
   { id: "u-cskh", username: "tst_cskh", display_name: "Lan", role: "CSKH", station: null },
@@ -43,6 +60,8 @@ export const mockUsers: MockUser[] = [
   },
 ];
 
+export const mockUsers: MockUser[] = seedUsers();
+
 export const PERMISSIONS: Record<Role, string[]> = {
   ADMIN: ["*"],
   SUPERVISOR: ["packages.read", "clips.export", "approvals.decide", "imports.write", "live.read"],
@@ -73,4 +92,15 @@ export function publicUser(user: MockUser): SessionUser {
 
 export function resetMockDb() {
   mockRefresh.clear();
+  mockUsers.splice(0, mockUsers.length, ...seedUsers());
+  resetMockAudit();
+  resetStationSim();
+  resetMockStations();
+  resetMockPackages();
+  resetMockReports();
+  resetMockApprovals();
+  resetMockExportRules();
+  resetMockImports();
+  resetMockShops();
+  resetMockSettings();
 }

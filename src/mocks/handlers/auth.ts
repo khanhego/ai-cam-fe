@@ -18,7 +18,7 @@ export const authHandlers = [
   http.post(`${API}/auth/login`, async ({ request }) => {
     const body = (await request.json()) as LoginBody;
     const user = mockUsers.find((u) => u.username === body.username?.toLowerCase());
-    if (!user || body.password !== MOCK_PASSWORD) {
+    if (!user || body.password !== (user.password ?? MOCK_PASSWORD)) {
       return apiError(401, "INVALID_CREDENTIALS", "Sai tài khoản hoặc mật khẩu.");
     }
     if (user.disabled) return apiError(403, "ACCOUNT_DISABLED", "Tài khoản đã bị khóa. Liên hệ Admin.");

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { cx } from "./cx";
 import { Icon } from "./ui";
@@ -18,11 +19,14 @@ export function TrackingNumber({
   size = "md",
   copy = true,
   className,
+  to,
 }: {
   value: string;
   size?: keyof typeof SIZE;
   copy?: boolean;
   className?: string;
+  /** Có `to` → mã là link (D3 → D4); nút Copy vẫn tách riêng. */
+  to?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -38,7 +42,13 @@ export function TrackingNumber({
 
   return (
     <span className={cx("inline-flex items-center gap-1", className)}>
-      <span className={cx("font-mono tabular-nums break-all", SIZE[size])}>{value}</span>
+      {to ? (
+        <Link to={to} className={cx("md-link font-mono tabular-nums break-all", SIZE[size])}>
+          {value}
+        </Link>
+      ) : (
+        <span className={cx("font-mono tabular-nums break-all", SIZE[size])}>{value}</span>
+      )}
       {copy && (
         <button
           type="button"

@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:real": "playwright test -c playwright.real.config.ts",
     "tokens": "tsx scripts/gen-m3-tokens.mjs",
     "gen:api": "openapi-typescript ${BE_OPENAPI:-http://localhost:8180/api/v1/openapi.json} -o src/lib/api/schema.d.ts"
   },

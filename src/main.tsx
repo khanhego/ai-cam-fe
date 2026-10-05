@@ -1,16 +1,17 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
+import { AppProviders } from "@/app/AppProviders";
+import { createQueryClient, forbiddenRedirect } from "@/app/queryClient";
 import { routes } from "@/app/routes";
-import { Toaster } from "@/shared/ui";
 
 import "./fonts";
 import "./index.css";
 
-const queryClient = new QueryClient();
+// Mất phiên (refresh thất bại) → `useAuth` xóa user (guard về màn đăng nhập), `AppProviders` xóa cache (02b §8: 401).
 const router = createBrowserRouter(routes);
+const queryClient = createQueryClient({ onForbidden: forbiddenRedirect(router) });
 
 async function enableMocks() {
   // MSW chỉ khi `pnpm dev:mock` (VITE_MOCK=1); import động nên không vào bundle production (DEC-19).
@@ -24,9 +25,8 @@ await enableMocks();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <AppProviders client={queryClient}>
       <RouterProvider router={router} />
-      <Toaster />
-    </QueryClientProvider>
+    </AppProviders>
   </StrictMode>,
 );
