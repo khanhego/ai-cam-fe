@@ -40,6 +40,20 @@ export const NAV: NavItem[] = [
     roles: ["ADMIN"],
     group: "settings",
   },
+  {
+    to: "/admin/settings/shopee",
+    label: "Kết nối Shopee",
+    icon: "storefront",
+    roles: ["ADMIN"],
+    group: "settings",
+  },
+  {
+    to: "/admin/settings/storage",
+    label: "Lưu trữ video",
+    icon: "hard_drive",
+    roles: ["ADMIN"],
+    group: "settings",
+  },
 ];
 
 export const navFor = (role: Role) => NAV.filter((item) => item.roles.includes(role));

@@ -5,6 +5,8 @@ import { clipsHandlers } from "./clips";
 import { importsHandlers } from "./imports";
 import { packagesHandlers } from "./packages";
 import { reportsHandlers } from "./reports";
+import { settingsHandlers } from "./settings";
+import { shopsHandlers } from "./shops";
 import { stationHandlers } from "./station";
 import { stationsHandlers } from "./stations";
 
@@ -18,5 +20,7 @@ export const handlers = [
   ...packagesHandlers,
   ...clipsHandlers,
   ...importsHandlers,
+  ...shopsHandlers,
+  ...settingsHandlers,
   ...wsHandlers,
 ];

@@ -3,6 +3,8 @@ import type { Role, SessionUser } from "@/lib/api/session";
 import { resetMockApprovals } from "./handlers/approvals";
 import { resetMockExportRules } from "./handlers/clips";
 import { resetMockImports } from "./handlers/imports";
+import { resetMockSettings } from "./handlers/settings";
+import { resetMockShops } from "./handlers/shops";
 import { resetMockReports } from "./handlers/reports";
 import { resetMockStations } from "./handlers/stations";
 import { resetMockPackages } from "./packagesDb";
@@ -88,4 +90,6 @@ export function resetMockDb() {
   resetMockApprovals();
   resetMockExportRules();
   resetMockImports();
+  resetMockShops();
+  resetMockSettings();
 }

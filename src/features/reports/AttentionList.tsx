@@ -32,6 +32,8 @@ export function AttentionList({
     if (item.kind === "APPROVAL_PENDING") return [COPY.approve, "/admin/approvals"];
     if (item.kind === "CAMERA_OFFLINE" || item.kind === "CLOCK_DRIFT")
       return [COPY.view, "/admin/settings/stations"];
+    if (item.kind === "SYNC_ERROR") return [COPY.view, "/admin/settings/shopee"];
+    if (item.kind === "DISK_USAGE") return [COPY.view, "/admin/settings/storage"];
     return null;
   };
   return (

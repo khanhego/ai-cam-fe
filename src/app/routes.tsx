@@ -77,6 +77,18 @@ export const routes: RouteObject[] = [
           { path: ":id", Component: lazy(() => import("@/features/admin/StationEditPage")) },
         ],
       },
+      {
+        path: "settings",
+        element: (
+          <RequireRole roles={["ADMIN"]}>
+            <Outlet />
+          </RequireRole>
+        ),
+        children: [
+          { path: "shopee", Component: lazy(() => import("@/features/platforms/ShopeePage")) },
+          { path: "storage", Component: lazy(() => import("@/features/settings/StoragePage")) },
+        ],
+      },
       { path: "forbidden", element: <ForbiddenPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
