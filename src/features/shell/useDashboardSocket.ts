@@ -3,8 +3,8 @@ import { useEffect, useRef } from "react";
 
 import { connectWs, type WsMessage, type WsStatus } from "@/lib/ws";
 
-/** `report.updated` → gọi lại API-32 tối đa 1 lần / 5 giây (02 §6 WS-02). */
-export const REPORT_THROTTLE_MS = 5000;
+/** `report.updated` → gọi lại API-32 tối đa 1 lần / 2 giây (02 §6 WS-02 v0.7, DEC-69: bảo đảm D2 cập nhật ≤ 5 giây — TC-09.03). */
+export const REPORT_THROTTLE_MS = 2000;
 
 /** Throttle có lần chạy cuối: sự kiện dồn trong 5 giây vẫn được phản ánh khi hết 5 giây. */
 function throttled(fn: () => void, ms: number) {
@@ -30,7 +30,7 @@ const invalidate = (qc: QueryClient, ...keys: unknown[][]) =>
 
 /**
  * WS-02 cho dashboard (02b-admin §4, DEC-20): sự kiện chỉ để invalidate query, không giữ state song song.
- * - `report.updated` → D2 (throttle 5 giây).
+ * - `report.updated` → D2 (throttle 2 giây).
  * - `camera.status` → D6 (station) + D2 (chip camera, mục Cần xử lý) + D11 (ô camera nối lại / "Mất tín hiệu").
  * - `approval.created` / `approval.resolved` → D13 + badge + D2 (số yêu cầu đang chờ); `approval.created` còn gọi
  *   `onApprovalCreated` (âm báo D13).

@@ -1,11 +1,11 @@
-/** WS-02 → invalidate query (02b-admin §4, DEC-20). TC-09.03 (phần FE): `report.updated` làm mới D2, throttle 5 giây. */
+/** WS-02 → invalidate query (02b-admin §4, DEC-20). TC-09.03 (phần FE): `report.updated` làm mới D2, throttle 2 giây (DEC-69). */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { useSession } from "@/lib/api/session";
 
-import { useDashboardSocket } from "./useDashboardSocket";
+import { REPORT_THROTTLE_MS, useDashboardSocket } from "./useDashboardSocket";
 
 class FakeSocket {
   static last: FakeSocket;
@@ -54,7 +54,7 @@ test("camera.status → invalidate ['stations'], ['station', id] và D2", () => 
   expect(spy).toHaveBeenCalledWith({ queryKey: ["daily"] });
 });
 
-test("TC-09.03: report.updated → làm mới D2 ngay, dồn sự kiện trong 5 giây thành 1 lần nữa", () => {
+test("TC-09.03: report.updated → làm mới D2 ngay, dồn sự kiện trong 2 giây thành 1 lần nữa (D2 ≤ 5 giây — DEC-69)", () => {
   vi.useFakeTimers();
   const { spy, emit } = setup();
 
@@ -63,7 +63,7 @@ test("TC-09.03: report.updated → làm mới D2 ngay, dồn sự kiện trong 5
   emit("report.updated", { date: "2026-10-04" });
   expect(calledWith(spy, ["daily"])).toBe(1);
 
-  vi.advanceTimersByTime(4999);
+  vi.advanceTimersByTime(REPORT_THROTTLE_MS - 1);
   expect(calledWith(spy, ["daily"])).toBe(1);
   vi.advanceTimersByTime(1);
   expect(calledWith(spy, ["daily"])).toBe(2);
@@ -113,4 +113,8 @@ test("F34b: WS nối lại → làm mới ngay D13 + D2 (không đợi poll 60 g
 
   expect(calledWith(spy, ["approvals"])).toBe(1);
   expect(calledWith(spy, ["daily"])).toBe(1);
+});
+
+test("DEC-69: ngưỡng throttle đủ nhỏ để D2 cập nhật ≤ 5 giây kể cả khi bị dồn", () => {
+  expect(REPORT_THROTTLE_MS).toBeLessThanOrEqual(2000);
 });
