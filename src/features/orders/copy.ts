@@ -1,3 +1,5 @@
+import { fmtDate } from "@/shared/format";
+
 /** Chữ D3, D4, dialog xuất — nguyên văn 01 §10.5 khi có (DEC-17). */
 export const COPY = {
   search: {
@@ -70,6 +72,11 @@ export const COPY = {
     retry: "Thử lại",
     notReady: "Clip đang được cắt, sẵn sàng trong khoảng 1 phút.",
     deleted: "Clip đã bị xóa theo chính sách lưu trữ, không xuất được.",
+    deletedOn: (date: string, days: number | null) =>
+      `Clip đã bị xóa ngày ${fmtDate(date)} theo chính sách lưu trữ${days ? ` ${days} ngày` : ""}, không xuất được.`,
+    clipFailed: "Clip cắt lỗi — Admin/Supervisor có thể cắt lại rồi xuất.",
+    gone: "Bản xuất không còn (quá 24 giờ hoặc do tài khoản khác tạo). Chọn camera rồi bấm Tạo file xuất.",
+    generic: "Có lỗi hệ thống. Thử lại sau ít phút.",
     expires: "Liên kết tải hết hạn lúc",
   },
   hasClip: "Có clip",

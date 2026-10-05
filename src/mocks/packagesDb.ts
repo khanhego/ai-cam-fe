@@ -209,6 +209,8 @@ function buildSession(pkgId: string, idx: number, s: SessionSeed): MockSession {
         duration_s: s.clips === "PENDING" || s.clips === "FAILED" ? null : duration + 10,
         held: Boolean(s.held),
         retention_until: s.held ? null : retention ? iso(retention) : null,
+        deleted_at: s.clips === "DELETED" && retention ? iso(retention) : null,
+        flags: [],
       });
     }
   }
@@ -222,6 +224,8 @@ function buildSession(pkgId: string, idx: number, s: SessionSeed): MockSession {
     ended_at: ended ? iso(ended) : null,
     duration_s: ended ? duration : null,
     flags: s.flags ?? [],
+    cancel_reason: s.status === "CANCELLED" ? "WRONG_SCAN" : null,
+    note: null,
     clips,
   };
 }
@@ -234,31 +238,63 @@ function buildPackage(seed: PackageSeed): MockPackage {
   const created = first ? Date.parse(first.started_at) - 3 * 3600_000 : startOfVnDay(0) + 7 * 3600_000;
   const timeline: MockPackage["timeline"] = [];
   if (seed.platform)
-    timeline.push({ at: iso(created), source: "PLATFORM", to_status: "READY_TO_SHIP", actor: null });
+    timeline.push({
+      at: iso(created),
+      source: "PLATFORM",
+      from_status: null,
+      to_status: "READY_TO_SHIP",
+      actor: null,
+    });
   for (const s of [...sessions].reverse()) {
-    timeline.push({ at: s.started_at, source: "WAREHOUSE", to_status: "PACKING", actor: s.station_name });
+    timeline.push({
+      at: s.started_at,
+      source: "WAREHOUSE",
+      from_status: "NEW",
+      to_status: "PACKING",
+      actor: s.station_name,
+    });
     if (s.ended_at && (s.status === "COMPLETED" || s.status === "SUPERSEDED"))
-      timeline.push({ at: s.ended_at, source: "WAREHOUSE", to_status: "PACKED", actor: s.station_name });
+      timeline.push({
+        at: s.ended_at,
+        source: "WAREHOUSE",
+        from_status: "PACKING",
+        to_status: "PACKED",
+        actor: s.station_name,
+      });
     if (s.ended_at && (s.status === "CANCELLED" || s.status === "ABANDONED"))
-      timeline.push({ at: s.ended_at, source: "WAREHOUSE", to_status: "NEW", actor: s.station_name });
+      timeline.push({
+        at: s.ended_at,
+        source: "WAREHOUSE",
+        from_status: "PACKING",
+        to_status: "NEW",
+        actor: s.station_name,
+      });
   }
   const last = sessions[0]?.ended_at ? Date.parse(sessions[0].ended_at) : created;
   if (["HANDED_OVER", "DELIVERED", "CANCELLED_AFTER_PACK"].includes(seed.status)) {
     timeline.push({
       at: iso(last + 2 * 3600_000),
       source: "PLATFORM",
+      from_status: null,
       to_status: seed.platform ?? "",
       actor: null,
     });
     timeline.push({
       at: iso(last + 2 * 3600_000 + 60_000),
       source: "WAREHOUSE",
+      from_status: "PACKED",
       to_status: seed.status,
       actor: null,
     });
   }
   if (seed.status === "CANCELLED")
-    timeline.push({ at: iso(created + 3600_000), source: "PLATFORM", to_status: "CANCELLED", actor: null });
+    timeline.push({
+      at: iso(created + 3600_000),
+      source: "PLATFORM",
+      from_status: null,
+      to_status: "CANCELLED",
+      actor: null,
+    });
   timeline.sort((a, b) => b.at.localeCompare(a.at));
   const nn = Number(seed.n) % 100000;
   return {
@@ -333,6 +369,8 @@ export function toDetail(p: MockPackage): PackageDetail {
       ended_at: s.ended_at,
       duration_s: s.duration_s,
       flags: s.flags,
+      cancel_reason: s.cancel_reason,
+      note: s.note,
       clips: s.clips.map((c) => ({
         id: c.id,
         camera_role: c.camera_role,
@@ -341,6 +379,8 @@ export function toDetail(p: MockPackage): PackageDetail {
         duration_s: c.duration_s,
         held: c.held,
         retention_until: c.retention_until,
+        deleted_at: c.deleted_at,
+        flags: c.flags,
       })),
     })),
   };

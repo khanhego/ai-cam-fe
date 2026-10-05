@@ -8,6 +8,7 @@ import {
   findSession,
   mockExports,
   mockPackages,
+  RETENTION_CLIP_DAYS,
   type MockClip,
   type MockExport,
 } from "../packagesDb";
@@ -15,10 +16,16 @@ import { DASHBOARD_ROLES, requireRole } from "./session";
 
 const video = (clipId: string) => (clipId.endsWith("-2") ? "/mock/clip-cam2.mp4" : "/mock/clip-cam1.mp4");
 
+/** 409 / 410 kèm `details` đúng 02 v0.3 (DEC-57). */
 function clipStateError(clip: MockClip) {
   if (clip.status === "DELETED")
-    return apiError(410, "CLIP_DELETED", "Clip đã bị xóa theo chính sách lưu trữ.");
-  if (clip.status !== "READY") return apiError(409, "CLIP_NOT_READY", "Clip đang được cắt.");
+    return apiError(410, "CLIP_DELETED", "Clip đã bị xóa theo chính sách lưu trữ.", {
+      deleted_at: clip.deleted_at ?? clip.retention_until,
+      retention_clip_days: RETENTION_CLIP_DAYS,
+    });
+  if (clip.status === "FAILED") return apiError(409, "CLIP_NOT_READY", "Clip cắt lỗi.", { status: "FAILED" });
+  if (clip.status !== "READY")
+    return apiError(409, "CLIP_NOT_READY", "Clip đang được cắt.", { status: "PENDING" });
   return null;
 }
 
@@ -151,8 +158,9 @@ export const clipsHandlers = [
     if (denied) return denied;
     const e = mockExports.get(String(params.id));
     if (!e) return apiError(404, "NOT_FOUND", "Không tìm thấy bản xuất.");
+    // 02 v0.3 (DEC-57): không phải người tạo, không phải ADMIN → 404 (không lộ bản xuất của người khác).
     if (e.created_by !== user.id && user.role !== "ADMIN")
-      return apiError(403, "FORBIDDEN", "Tài khoản không có quyền thực hiện thao tác này.");
+      return apiError(404, "NOT_FOUND", "Không tìm thấy bản xuất.");
     // Mỗi lần poll tiến thêm một bước: QUEUED → RUNNING 40 → RUNNING 80 → READY / FAILED.
     if (e.status === "QUEUED" || e.status === "RUNNING") {
       e.ticks += 1;

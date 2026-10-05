@@ -39,8 +39,16 @@ export type Clip = {
   sha256: string | null;
   duration_s: number | null;
   held: boolean;
+  /** READY không giữ → ngày sẽ xóa; giữ → null; DELETED → ngày đã xóa (02 v0.3 DEC-57). */
   retention_until: string | null;
+  /** Lúc xóa theo lưu trữ (clip DELETED), v0.3. */
+  deleted_at: string | null;
+  /** Cờ của clip (vd. `VIDEO_INCOMPLETE`), v0.3. */
+  flags: string[];
 };
+
+/** Lý do hủy phiên (02 §5 `session.cancel_reason`). */
+export type CancelReason = "OUT_OF_STOCK" | "WRONG_SCAN" | "OTHER" | "SUPERVISOR";
 
 export type PackageSession = {
   id: string;
@@ -50,6 +58,9 @@ export type PackageSession = {
   ended_at: string | null;
   duration_s: number | null;
   flags: SessionFlag[];
+  /** v0.3 (DEC-57): chỉ có khi phiên bị hủy. */
+  cancel_reason: CancelReason | null;
+  note: string | null;
   clips: Clip[];
 };
 
@@ -72,6 +83,8 @@ export type PackageDetail = {
   timeline: {
     at: string;
     source: "PLATFORM" | "WAREHOUSE" | "MANUAL";
+    /** v0.3 (DEC-57). */
+    from_status: string | null;
     to_status: string;
     actor: string | null;
   }[];
