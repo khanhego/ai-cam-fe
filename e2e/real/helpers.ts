@@ -7,7 +7,10 @@ export const PASSWORD = "matkhau123";
 
 /** Migrate lại + seed TST + dọn Redis (ai-cam-be/scripts/qa-reset.sh). */
 export function resetData() {
-  execFileSync(resolve(process.cwd(), "../ai-cam-be/scripts/qa-reset.sh"), { stdio: "ignore" });
+  // --mute-cam2: Cam 2 đọc góc khay trống → BR-06 không chặn ngẫu nhiên theo vòng phát của camera giả (QA G4).
+  execFileSync(resolve(process.cwd(), "../ai-cam-be/scripts/qa-reset.sh"), ["--mute-cam2"], {
+    stdio: "ignore",
+  });
 }
 
 /** Máy quét HID: gõ liền (≤ 5 ms/phím) rồi Enter. */
