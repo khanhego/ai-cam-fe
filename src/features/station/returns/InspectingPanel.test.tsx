@@ -12,6 +12,7 @@ import { stationSim } from "@/mocks/stationSim";
 import { renderApp } from "@/test/render";
 import { hidScan } from "@/test/scan";
 import { server } from "@/test/server";
+import { apiError } from "@/mocks/http";
 
 import { sound } from "../sound";
 import { resetStationStore, useStationStore } from "../stationStore";
@@ -155,13 +156,80 @@ test("Khác bắt buộc ghi chú: chưa có ghi chú → báo tại ô, không 
   server.events.removeAllListeners();
 });
 
+function countScans() {
+  const counter = { scans: 0 };
+  server.events.on("request:start", ({ request }) => {
+    if (request.method === "POST" && request.url.endsWith("/station/scan")) counter.scans += 1;
+  });
+  return counter;
+}
+
+test("G3-F1: Khác chưa ghi chú + quét đóng → không gửi API-11, lỗi tại khối Kết luận + âm lỗi, phiên vẫn mở", async () => {
+  const user = userEvent.setup({ delay: null });
+  await openR2();
+  await user.click(radio("Nguyên vẹn"));
+  expect(await screen.findByText("Đã lưu")).toBeInTheDocument();
+  await user.click(radio("Khác"));
+  const counter = countScans();
+  play.mockClear();
+
+  await hidScan("SPXRTTST000041");
+
+  expect(
+    await screen.findByText("Kết luận chưa lưu được — sửa lỗi rồi quét lại mã để hoàn tất."),
+  ).toBeInTheDocument();
+  expect(counter.scans).toBe(0);
+  expect(play).toHaveBeenLastCalledWith("error");
+  expect(screen.getByText("ĐANG KIỂM HÀNG HOÀN")).toBeInTheDocument();
+  expect(stationSim.session?.inspection?.conclusion).toBe("OK");
+  server.events.removeAllListeners();
+});
+
+test("G3-F1: API-102 trả 422 + quét đóng → không gửi API-11, phiên không đóng bằng kết luận cũ", async () => {
+  const user = userEvent.setup({ delay: null });
+  await openR2();
+  await user.click(radio("Nguyên vẹn"));
+  expect(await screen.findByText("Đã lưu")).toBeInTheDocument();
+  server.use(
+    http.put("/api/v1/station/sessions/:id/inspection", () =>
+      apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", { fields: {} }),
+    ),
+  );
+  await user.click(radio("Hư hỏng"));
+  const counter = countScans();
+
+  await hidScan("SPXRTTST000041");
+
+  expect(
+    await screen.findByText("Kết luận chưa lưu được — sửa lỗi rồi quét lại mã để hoàn tất."),
+  ).toBeInTheDocument();
+  expect(counter.scans).toBe(0);
+  expect(screen.getByText("ĐANG KIỂM HÀNG HOÀN")).toBeInTheDocument();
+  expect(stationSim.session?.inspection?.conclusion).toBe("OK");
+  server.events.removeAllListeners();
+});
+
+test("G3-F1: đổi kết luận rồi quét ngay → chờ lưu xong, đóng với kết luận MỚI", async () => {
+  const user = userEvent.setup({ delay: null });
+  await openR2();
+  await user.click(radio("Nguyên vẹn"));
+  expect(await screen.findByText("Đã lưu")).toBeInTheDocument();
+  await user.click(radio("Hư hỏng"));
+
+  await hidScan("SPXRTTST000041");
+
+  expect(await screen.findByText("SẴN SÀNG NHẬN HÀNG HOÀN")).toBeInTheDocument();
+  expect(stationSim.recent[0]).toMatchObject({ type: "RETURN", conclusion: "DAMAGED" });
+});
+
 test("API-102 lỗi mạng (sau 2 lần thử lại) → Chưa lưu được — thử lại; bấm → lưu được", async () => {
   const user = userEvent.setup({ delay: null });
   await openR2();
   server.use(http.put("/api/v1/station/sessions/:id/inspection", () => HttpResponse.error()));
 
   await user.click(radio("Hư hỏng"));
-  const retry = await screen.findByRole("button", { name: /Chưa lưu được — thử lại/ });
+  // Thử lại sau 500 ms rồi 1500 ms (G3-F17).
+  const retry = await screen.findByRole("button", { name: /Chưa lưu được — thử lại/ }, { timeout: 4000 });
   server.resetHandlers();
   await user.click(retry);
 

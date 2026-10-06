@@ -34,6 +34,26 @@ export function Dialog({
       else el.setAttribute("open", "");
     }
   }, [open]);
+  // Chrome CloseWatcher: Esc lần 2 đóng <dialog> dù `cancel` đã preventDefault → R5 bắt buộc mất (G3-F16, DEC-332).
+  // Dialog không cho đóng: mở lại ngay; cho đóng: báo onClose để state khớp DOM.
+  const dismissibleRef = useRef(dismissible);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    dismissibleRef.current = dismissible;
+    onCloseRef.current = onClose;
+  });
+  useEffect(() => {
+    const el = ref.current;
+    if (!open || !el) return;
+    const onDomClose = () => {
+      if (!dismissibleRef.current) {
+        if (typeof el.showModal === "function") el.showModal();
+        else el.setAttribute("open", "");
+      } else onCloseRef.current();
+    };
+    el.addEventListener("close", onDomClose);
+    return () => el.removeEventListener("close", onDomClose);
+  }, [open]);
   if (!open) return null;
   return (
     <dialog

@@ -76,6 +76,9 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "F2") return;
       e.preventDefault();
+      // Giữ phím (auto-repeat) không chụp hàng loạt; có Dialog mở (hủy phiên, R3, R5, kiện khác, clip…) thì F2 không
+      // chụp sau lưng Dialog (G3-F19, DEC-331).
+      if (e.repeat || document.querySelector("dialog[open]")) return;
       void useStationStore.getState().takeSnapshot();
     };
     window.addEventListener("keydown", onKey);

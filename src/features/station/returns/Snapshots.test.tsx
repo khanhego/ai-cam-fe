@@ -67,6 +67,29 @@ test("F2 khi đang gõ ghi chú vẫn chụp, không gõ ký tự vào ô", asyn
   expect(note).toHaveValue("");
 });
 
+test("G3-F19: giữ F2 (auto-repeat) chỉ chụp 1; F2 khi Dialog Hủy phiên mở không chụp", async () => {
+  const user = userEvent.setup({ delay: null });
+  let posts = 0;
+  server.events.on("request:start", ({ request }) => {
+    if (request.method === "POST" && request.url.includes("/snapshots")) posts += 1;
+  });
+  await openR2();
+
+  f2();
+  fireEvent.keyDown(window, { key: "F2", repeat: true });
+  fireEvent.keyDown(window, { key: "F2", repeat: true });
+  expect(await screen.findByRole("button", { name: "Ảnh 1" })).toBeInTheDocument();
+  expect(posts).toBe(1);
+
+  await user.click(screen.getByRole("button", { name: "Hủy phiên" }));
+  await screen.findByRole("dialog");
+  f2();
+  await new Promise((r) => setTimeout(r, 50));
+  expect(posts).toBe(1);
+  expect(stationSim.session?.snapshots).toHaveLength(1);
+  server.events.removeAllListeners();
+});
+
 test("nút + Chụp ảnh (F2) cũng chụp; F2 ngoài R2 không gọi API-103", async () => {
   const user = userEvent.setup({ delay: null });
   let posts = 0;

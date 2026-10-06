@@ -111,7 +111,7 @@ export function InspectingPanel({
   const conclusionBlock = useRef<HTMLDivElement>(null);
   useDeadlineFlush(session);
 
-  const required = inline?.code === "INSPECTION_REQUIRED";
+  const required = inline?.code === "INSPECTION_REQUIRED" || inline?.code === "INSPECTION_UNSAVED";
   useEffect(() => {
     if (!required) return;
     conclusionBlock.current?.scrollIntoView?.({ block: "nearest" });
@@ -125,7 +125,12 @@ export function InspectingPanel({
   const mode = draft?.linesMode ?? session.inspection?.lines_mode ?? "FULL";
   const conclusion = draft?.conclusion ?? null;
   const errors = draft?.fieldErrors ?? {};
-  const conclusionErr = required ? C.inspectionRequired : errors.conclusion;
+  const conclusionErr =
+    inline?.code === "INSPECTION_REQUIRED"
+      ? C.inspectionRequired
+      : inline?.code === "INSPECTION_UNSAVED"
+        ? (errors.conclusion ?? C.inspectionUnsaved)
+        : errors.conclusion;
 
   return (
     <StationStatePanel

@@ -113,6 +113,38 @@ test("Dialog có nút Đóng bên trái và hành động chính", async () => {
   expect(screen.getByRole("button", { name: "Hủy phiên" })).toBeInTheDocument();
 });
 
+test("G3-F16: Dialog không cho đóng — trình duyệt tự đóng (CloseWatcher, Esc lần 2) → mở lại, không gọi onClose", () => {
+  const onClose = vi.fn();
+  render(
+    <Dialog open title="Tên người kiểm" onClose={onClose} dismissible={false}>
+      Nhập tên.
+    </Dialog>,
+  );
+  const dialog = screen.getByRole("dialog", { name: "Tên người kiểm" }) as HTMLDialogElement;
+  // jsdom không có CloseWatcher: mô phỏng trình duyệt đóng <dialog> bỏ qua cancel.
+  act(() => {
+    dialog.removeAttribute("open");
+    dialog.dispatchEvent(new Event("close"));
+  });
+
+  expect(dialog).toHaveAttribute("open");
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+test("G3-F16: Dialog cho đóng — sự kiện close của trình duyệt → onClose (state khớp DOM)", () => {
+  const onClose = vi.fn();
+  render(
+    <Dialog open title="Hủy phiên" onClose={onClose}>
+      Chọn lý do.
+    </Dialog>,
+  );
+  act(() => {
+    screen.getByRole("dialog", { name: "Hủy phiên" }).dispatchEvent(new Event("close"));
+  });
+
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
 test("Pagination khóa nút ở trang đầu / cuối", () => {
   render(<Pagination page={1} pageSize={20} total={45} onPage={() => {}} />);
 

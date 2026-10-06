@@ -178,4 +178,23 @@ describe("item 02 — chế độ nhận hoàn", () => {
     expect(order).toEqual(["API-11", "API-102", "API-11"]);
     server.events.removeAllListeners();
   });
+
+  test("G3-F17: API-102 lỗi mạng → thử lại sau 500 ms rồi 1500 ms", async () => {
+    await store().scan("SPXRTTST000041");
+    const at: number[] = [];
+    server.use(
+      http.put("/api/v1/station/sessions/:id/inspection", () => {
+        at.push(Date.now());
+        return HttpResponse.error();
+      }),
+    );
+    store().editDraft({ conclusion: "OK" });
+
+    await store().flushDraft();
+
+    expect(at).toHaveLength(3);
+    expect(at[1]! - at[0]!).toBeGreaterThanOrEqual(450);
+    expect(at[2]! - at[1]!).toBeGreaterThanOrEqual(1450);
+    expect(store().draft?.saveStatus).toBe("error");
+  });
 });

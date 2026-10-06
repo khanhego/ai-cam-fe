@@ -42,10 +42,15 @@ export const CODE_DIFFERENT_MS = 5000;
 /** R4 "ĐƠN CÓ NHIỀU KIỆN" hiện 1,5 giây rồi mở R3. */
 export const MULTIPLE_TO_LOOKUP_MS = 1500;
 const RETRIES = 2;
+/** API-102 thử lại sau 500 ms rồi 1500 ms (G3-F17, DEC-329). */
+export const SAVE_BACKOFF_MS = [500, 1500];
 
 /** Cảnh báo hiện tại chỗ trên R2 (không overlay — 02b-station §8). */
 export type InlineAlert =
-  { code: "INSPECTION_REQUIRED" } | { code: "RETURN_CODE_DIFFERENT"; scanned: string };
+  | { code: "INSPECTION_REQUIRED" }
+  /** Kết luận chưa lưu được (lỗi / thiếu ghi chú / quá thời gian chờ) — không gửi quét đóng (G3-F1, DEC-328). */
+  | { code: "INSPECTION_UNSAVED" }
+  | { code: "RETURN_CODE_DIFFERENT"; scanned: string };
 
 const SOUND_BY_OUTCOME: Partial<Record<Outcome, SoundKind>> = {
   SESSION_OPENED: "ok",
@@ -208,9 +213,17 @@ export const useStationStore = create<StationStore>((set, get) => ({
     get().dismissClosedNotice();
     const clientScanId = newScanId();
     try {
-      // R2: kết luận phải lưu xong trước lần quét đóng (DEC-235) — chờ tối đa 3 giây rồi vẫn gửi.
-      if (get().state?.state === "INSPECTING" && (get().draft?.dirty || saving))
-        await Promise.race([get().flushDraft(), sleep(FLUSH_WAIT_MS)]);
+      // R2: kết luận phải lưu xong trước lần quét đóng (DEC-235). Chưa lưu được trong 3 giây (lỗi, thiếu ghi chú,
+      // chậm) → KHÔNG gửi API-11: server sẽ đóng phiên bằng kết luận cũ (G3-F1, DEC-328).
+      if (get().state?.state === "INSPECTING" && get().draft) {
+        if (get().draft?.dirty || saving) await Promise.race([get().flushDraft(), sleep(FLUSH_WAIT_MS)]);
+        if (draftUnsaved()) {
+          clearTimeout(inlineTimer);
+          set({ inline: { code: "INSPECTION_UNSAVED" } });
+          sound.play("error");
+          return;
+        }
+      }
       let attempt = 0;
       for (;;) {
         try {
@@ -440,7 +453,9 @@ export const useStationStore = create<StationStore>((set, get) => ({
     const inline = get().inline;
     set({
       draft: next,
-      ...(next.conclusion && inline?.code === "INSPECTION_REQUIRED" ? { inline: null } : {}),
+      ...((next.conclusion && inline?.code === "INSPECTION_REQUIRED") || inline?.code === "INSPECTION_UNSAVED"
+        ? { inline: null }
+        : {}),
     });
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => void get().flushDraft(), DRAFT_DEBOUNCE_MS);
@@ -541,7 +556,19 @@ function applyResult(result: ScanResult) {
   }
 }
 
-/** Gửi API-102 một bản nháp (tự thử lại 2 lần khi lỗi mạng / 5xx — 02b-station §6). */
+/** Nháp R2 chưa an toàn để quét đóng: còn thay đổi chưa lưu, đang lưu, lưu lỗi, hoặc "Khác" thiếu ghi chú. */
+function draftUnsaved(): boolean {
+  const d = useStationStore.getState().draft;
+  if (!d) return false;
+  return (
+    d.dirty ||
+    saving !== null ||
+    d.saveStatus === "error" ||
+    conclusionError(d.conclusion, d.note, d.lines, d.linesMode) === "NOTE_REQUIRED"
+  );
+}
+
+/** Gửi API-102 một bản nháp (tự thử lại 2 lần khi lỗi mạng / 5xx, chờ 500 ms rồi 1500 ms — 02b-station §6). */
 async function saveDraft(d: InspectionDraft): Promise<void> {
   const { getState: get, setState: set } = useStationStore;
   const patch = (p: Partial<InspectionDraft>) => {
@@ -562,10 +589,14 @@ async function saveDraft(d: InspectionDraft): Promise<void> {
             cur.rev === d.rev
               ? { ...cur, dirty: false, saveStatus: "saved", fieldErrors: {} }
               : { ...cur, saveStatus: "saving" },
+          ...(cur.rev === d.rev && get().inline?.code === "INSPECTION_UNSAVED" ? { inline: null } : {}),
         });
       return;
     } catch (e) {
-      if (retryable(e) && attempt < RETRIES) continue;
+      if (retryable(e) && attempt < RETRIES) {
+        await sleep(SAVE_BACKOFF_MS[attempt] ?? 0);
+        continue;
+      }
       if (isApiError(e) && (e.code === "SESSION_NOT_OPEN" || e.code === "NOT_RETURN_SESSION")) {
         if (e.code === "NOT_RETURN_SESSION") console.warn("API-102 NOT_RETURN_SESSION", d.sessionId);
         set({ draft: null });

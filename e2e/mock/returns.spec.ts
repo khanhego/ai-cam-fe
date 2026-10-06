@@ -24,6 +24,11 @@ async function startReturnShift(page: Page) {
   await expect(r5).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(r5).toBeVisible(); // R5 bắt buộc: Esc không đóng
+  // Chrome CloseWatcher: Esc lần 2 bỏ qua cancel và đóng <dialog> → phải mở lại (G3-F16).
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(r5).toBeVisible();
+  await expect(r5).toHaveJSProperty("open", true);
   await r5.getByLabel("Tên người kiểm").fill("Lan QA");
   await r5.getByRole("button", { name: "Bắt đầu ca" }).click();
   await expect(page.getByRole("heading", { name: "SẴN SÀNG NHẬN HÀNG HOÀN" })).toBeVisible();

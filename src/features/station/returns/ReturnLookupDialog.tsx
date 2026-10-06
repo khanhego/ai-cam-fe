@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { isApiError } from "@/lib/api/errors";
 import { stationApi, type ReturnLookupItem } from "@/lib/api/station";
@@ -8,6 +8,7 @@ import { RETURN_KIND } from "@/shared/returns/inspection";
 import { Alert, Button, Dialog, LinearProgress, StatusChip, TextField } from "@/shared/ui";
 
 import { COPY } from "../copy";
+import { useStationStore } from "../stationStore";
 
 const L = COPY.lookup;
 const MIN_Q = 4;
@@ -81,6 +82,15 @@ function LookupBody({
     meta: { forbidden: "inline" },
   });
 
+  // Station vừa bị đổi khỏi chế độ nhận hoàn (409 WRONG_WORK_MODE) → tải lại state, đóng R3 (G3-F18, DEC-330).
+  const wrongMode = isApiError(result.error) && result.error.code === "WRONG_WORK_MODE";
+  useEffect(() => {
+    if (!wrongMode) return;
+    const store = useStationStore.getState();
+    store.closeLookup();
+    void store.load();
+  }, [wrongMode]);
+
   function submit(e: FormEvent) {
     e.preventDefault();
     const value = text.trim().toUpperCase();
@@ -113,7 +123,7 @@ function LookupBody({
         </Button>
       </div>
       {(result.isFetching || busy) && <LinearProgress label={L.title} />}
-      {result.isError && !validation && <Alert kind="error">{L.error}</Alert>}
+      {result.isError && !validation && !wrongMode && <Alert kind="error">{L.error}</Alert>}
       {result.isSuccess && result.data.items.length === 0 && (
         <div className="flex flex-col items-start gap-3 py-2">
           <p className="text-title-md text-on-surface">{L.empty}</p>

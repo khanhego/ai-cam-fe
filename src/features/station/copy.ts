@@ -167,6 +167,7 @@ export const COPY = {
       snapshotFailed: "Không chụp được ảnh từ Cam 1. Thử lại.",
       hint: "Chọn kết luận rồi QUÉT LẠI MÃ để hoàn tất",
       inspectionRequired: "Chọn kết luận trước khi quét đóng.",
+      inspectionUnsaved: "Kết luận chưa lưu được — sửa lỗi rồi quét lại mã để hoàn tất.",
       codeDifferent: (code: string) =>
         `Mã ${code} không thuộc kiện đang kiểm. Quét lại mã trên kiện này để hoàn tất.`,
       packRef: "Lúc đóng gói",

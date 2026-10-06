@@ -1,5 +1,5 @@
 /** R3 tìm thủ công, R4 cảnh báo hàng hoàn, API-105 với MSW (TC-04.08..04.13, 04.45, 04.46, 04.53). */
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 
@@ -167,6 +167,20 @@ test("API-105 SESSION_ACTIVE → toast Station đang có phiên, đóng R3", asy
 
   expect(await screen.findByText("Station đang có phiên. Đóng phiên trước.")).toBeInTheDocument();
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+test("G3-F18: API-104 409 WRONG_WORK_MODE → tải lại state (API-10), đóng R3", async () => {
+  const user = userEvent.setup({ delay: null });
+  await r1();
+  await user.click(screen.getByRole("button", { name: "Không quét được mã? Tìm thủ công" }));
+  const dialog = await screen.findByRole("dialog");
+  await user.paste("SPXTST0000041");
+  stationSim.workMode = "PACK"; // quản lý vừa đổi chế độ station
+
+  await user.click(within(dialog).getByRole("button", { name: "Tìm" }));
+
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(await screen.findByRole("heading", { name: /^SẴN SÀNG$/ })).toBeInTheDocument();
 });
 
 test("TC-04.53: bàn đóng gói quét kiện hoàn → S4 ĐƠN ĐÃ BÀN GIAO + nhận ở bàn nhận hoàn", async () => {
