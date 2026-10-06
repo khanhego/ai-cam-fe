@@ -38,6 +38,8 @@ export type ReturnListItem = {
   received_at: string | null;
   conclusion: Conclusion | null;
   claims: ClaimBrief[];
+  /** Hồ sơ đã gộp vào hồ sơ khác (API-112) — `{id, code}` hoặc null. */
+  merged_into: { id: string; code: string } | null;
 };
 
 /** Tham số API-110; cũng là search params của D14 (`from`/`to` trên URL map sang `date_from`/`date_to`). */
@@ -69,24 +71,22 @@ export type ReturnSessionBrief = {
 export type ReturnDetail = ReturnListItem & {
   platform_return_sn: string | null;
   platform_status: string | null;
-  needs_parcel: boolean;
+  needs_parcel: boolean | null;
   reason: string | null;
   reason_text: string | null;
   seller_due_at: string | null;
   source: "PLATFORM" | "WAREHOUSE";
   requested_items: {
-    order_item_id: string;
+    order_item_id: string | null;
     product_name: string;
     variation: string | null;
     quantity: number;
   }[];
   sessions: ReturnSessionBrief[];
-  merged_into?: { id: string; code: string } | null;
 };
 
 /** API-112: hồ sơ đích (gộp nếu đơn đã có hồ sơ mở) + hồ sơ khiếu nại bị gộp (02 §6.2, DEC-248, 260). */
 export type LinkOrderResult = ReturnDetail & {
-  merged_into: { id: string; code: string } | null;
   merged_claims: { from: string; into: string }[];
 };
 

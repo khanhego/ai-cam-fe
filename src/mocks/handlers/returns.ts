@@ -35,10 +35,20 @@ const TAB_STATUS: Record<string, MockReturnCase["status"][]> = {
   NO_PARCEL: ["NO_PARCEL"],
 };
 
+/** BE `returns.views._tab_condition`: "Tất cả" gồm cả hồ sơ đã hủy; "Chưa xác định" = loại UNIDENTIFIED chưa hủy. */
 const inTab = (c: MockReturnCase, tab: string) => {
-  if (tab === "ALL") return c.status !== "CANCELLED";
-  if (tab === "UNIDENTIFIED") return c.kind === "UNIDENTIFIED" && c.status !== "CANCELLED" && !c.order;
+  if (tab === "ALL") return true;
+  if (tab === "UNIDENTIFIED") return c.kind === "UNIDENTIFIED" && c.status !== "CANCELLED";
   return (TAB_STATUS[tab] ?? []).includes(c.status);
+};
+
+/** BE: Đang về / Quá hạn → `expected_since` cũ trước (null cuối); tab khác → mới tạo trước. */
+const sortFor = (tab: string) => (a: MockReturnCase, b: MockReturnCase) => {
+  if (tab === "EXPECTED" || tab === "MISSING") {
+    if (!a.expected_since || !b.expected_since) return a.expected_since ? -1 : b.expected_since ? 1 : 0;
+    return a.expected_since.localeCompare(b.expected_since) || a.id.localeCompare(b.id);
+  }
+  return b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
 };
 
 /** Ngày lọc theo `reported_at` (UNANNOUNCED / UNIDENTIFIED: lúc tạo) — 02 §6.2 API-110. */
@@ -55,7 +65,7 @@ function matchQ(c: MockReturnCase, q: string) {
   return codes.some((x) => x?.toUpperCase() === q);
 }
 
-/** API-110..113 theo 02 §6.2 (BE T-104, T-115, T-119 chưa xong). */
+/** API-110..113 — khớp BE thật (`ai-cam-be` `returns/views.py`, `returns/service.py`, openapi M9). */
 export const returnsHandlers = [
   http.get(`${API}/returns`, ({ request }) => {
     const [, denied] = requireRole(request, DASHBOARD_ROLES);
@@ -71,7 +81,7 @@ export const returnsHandlers = [
       fields.tab = "Không hợp lệ";
     if (from && !DATE.test(from)) fields.date_from = "Sai định dạng ngày";
     if (to && !DATE.test(to)) fields.date_to = "Sai định dạng ngày";
-    if (from && to && DATE.test(from) && DATE.test(to) && (from > to || daysBetween(from, to) > 92))
+    if (from && to && DATE.test(from) && DATE.test(to) && (from > to || daysBetween(from, to) + 1 > 92))
       fields.date_to = "Khoảng ngày tối đa 92 ngày";
     if (Object.keys(fields).length)
       return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", { fields });
@@ -83,9 +93,7 @@ export const returnsHandlers = [
         (!from || filterDay(c) >= from) &&
         (!to || filterDay(c) <= to),
     );
-    const all = base
-      .filter((c) => inTab(c, tab))
-      .sort((a, b) => (b.reported_at ?? b.created_at).localeCompare(a.reported_at ?? a.created_at));
+    const all = base.filter((c) => inTab(c, tab)).sort(sortFor(tab));
     const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(params.get("page_size") ?? 20) || 20));
     const count = (t: string) => base.filter((c) => inTab(c, t)).length;

@@ -19,6 +19,8 @@ import type {
   Snapshot,
 } from "@/shared/returns/types";
 
+import { daysBetween, vnDay } from "@/shared/format";
+
 import { mockPackages, startOfVnDay, type MockPackage, type MockSession } from "./packagesDb";
 
 /**
@@ -982,13 +984,16 @@ export function packStatus(p: MockEvidencePack, now = Date.now()) {
 // ───────────────────────── Dạng API (đúng 02 §6.2) ─────────────────────────
 
 const CLAIM_BRIEF = (c: MockClaim) => ({ id: c.id, code: c.code, status: c.status, type: c.type });
+/** API-110 / 111 `claims[]` (BE `ClaimBrief`: id, code, status — không có `type`). */
+const CASE_CLAIM_BRIEF = (c: MockClaim) => ({ id: c.id, code: c.code, status: c.status });
+
+/** BE `returns.views.waiting_days`: số ngày lịch (giờ VN) từ lúc vào "Đang về" tới hôm nay; đã nhận → null. */
+export function waitingDays(rc: Pick<MockReturnCase, "expected_since" | "received_at">, now = Date.now()) {
+  if (!rc.expected_since || rc.received_at) return null;
+  return daysBetween(vnDay(rc.expected_since), vnDay(new Date(now)));
+}
 
 export function toReturnItem(rc: MockReturnCase, now = Date.now()): ReturnListItem {
-  const waiting =
-    (rc.status === "EXPECTED" || rc.status === "MISSING" || rc.status === "PARTIALLY_RECEIVED") &&
-    rc.expected_since
-      ? Math.floor((now - Date.parse(rc.expected_since)) / DAY)
-      : null;
   return {
     id: rc.id,
     code: rc.code,
@@ -1003,10 +1008,11 @@ export function toReturnItem(rc: MockReturnCase, now = Date.now()): ReturnListIt
     reason_label: rc.reason_label,
     reported_at: rc.reported_at,
     expected_since: rc.expected_since,
-    waiting_days: waiting,
+    waiting_days: waitingDays(rc, now),
     received_at: rc.received_at,
     conclusion: rc.conclusion,
-    claims: mockClaims.filter((c) => c.return_case_id === rc.id).map(CLAIM_BRIEF),
+    claims: mockClaims.filter((c) => c.return_case_id === rc.id).map(CASE_CLAIM_BRIEF),
+    merged_into: rc.merged_into,
   };
 }
 
@@ -1035,7 +1041,6 @@ export function toReturnDetail(rc: MockReturnCase): ReturnDetail {
     source: rc.source,
     requested_items: rc.requested_items,
     sessions,
-    merged_into: rc.merged_into,
   };
 }
 
