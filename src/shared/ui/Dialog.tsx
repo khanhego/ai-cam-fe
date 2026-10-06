@@ -10,6 +10,7 @@ export function Dialog({
   children,
   actions,
   wide,
+  dismissible = true,
 }: {
   open: boolean;
   title: string;
@@ -17,6 +18,8 @@ export function Dialog({
   children: ReactNode;
   actions?: ReactNode;
   wide?: boolean;
+  /** false: Esc không đóng và không có nút "Đóng" (R5 bắt buộc — 01 §10.4). */
+  dismissible?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -33,7 +36,10 @@ export function Dialog({
     <dialog
       ref={ref}
       aria-label={title}
-      onCancel={onClose}
+      onCancel={(e) => {
+        e.preventDefault();
+        if (dismissible) onClose();
+      }}
       style={{ ["--md-field-bg" as string]: "var(--md-sys-color-surface-container-high)" }}
       className={`m-auto w-[calc(100%-2rem)] ${wide ? "max-w-2xl" : "max-w-lg"} rounded-xl bg-surface-container-high p-0 text-on-surface shadow-elevation-3 backdrop:bg-scrim/40`}
     >
@@ -41,9 +47,11 @@ export function Dialog({
         <h2 className="mb-4 text-headline-sm text-on-surface">{title}</h2>
         <div className="text-body-md text-on-surface-variant">{children}</div>
         <div className="mt-6 flex flex-wrap justify-end gap-2">
-          <Button variant="text" onClick={onClose}>
-            Đóng
-          </Button>
+          {dismissible && (
+            <Button variant="text" onClick={onClose}>
+              Đóng
+            </Button>
+          )}
           {actions}
         </div>
       </div>

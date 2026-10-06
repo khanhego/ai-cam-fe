@@ -8,6 +8,7 @@ import {
   type Outcome,
   type ScanAlert,
   type StationState,
+  type WorkMode,
 } from "@/lib/api/station";
 import { toast } from "@/shared/ui";
 
@@ -52,6 +53,15 @@ type StationStore = {
   withdrawApproval: () => Promise<void>;
   onServerAlert: (data: { code: string; tracking_number?: string }) => void;
   dismissNotice: () => void;
+  // ---- item 02 ----
+  /** R5 mở theo yêu cầu (nút "Đổi", ALERT `OPERATOR_REQUIRED`); bắt buộc khi chưa có tên thì tính từ state. */
+  operatorOpen: boolean;
+  openOperator: () => void;
+  closeOperator: () => void;
+  /** API-100 (station "Cả hai"). */
+  setWorkMode: (mode: WorkMode) => Promise<void>;
+  /** API-101. Trả chữ lỗi để hiện dưới ô (null = xong). */
+  setOperator: (name: string) => Promise<string | null>;
 };
 
 let alertTimer: ReturnType<typeof setTimeout> | undefined;
@@ -129,6 +139,11 @@ export const useStationStore = create<StationStore>((set, get) => ({
           const kind = SOUND_BY_OUTCOME[result.outcome];
           if (kind) sound.play(kind);
           clearTimeout(alertTimer);
+          // Chưa có người kiểm: mở R5, không overlay (02b-station §8).
+          if (result.alert?.code === "OPERATOR_REQUIRED") {
+            set({ alert: null, operatorOpen: true });
+            break;
+          }
           set({ alert: result.alert });
           if (result.alert) alertTimer = setTimeout(() => set({ alert: null }), ALERT_MS);
           break;
@@ -212,6 +227,41 @@ export const useStationStore = create<StationStore>((set, get) => ({
   dismissNotice() {
     set({ notice: null });
   },
+
+  operatorOpen: false,
+  openOperator() {
+    set({ operatorOpen: true });
+  },
+  closeOperator() {
+    set({ operatorOpen: false });
+  },
+
+  async setWorkMode(mode) {
+    try {
+      get().applyState((await stationApi.setWorkMode(mode)).state);
+      set({ notice: null });
+    } catch (e) {
+      if (isApiError(e) && e.code === "SESSION_ACTIVE") {
+        toast(COPY.workMode.sessionActive);
+        await get().load();
+      } else if (isStale(e)) await get().load();
+      else report(e, set);
+    }
+  },
+
+  async setOperator(name) {
+    try {
+      get().applyState((await stationApi.setOperator(name)).state);
+      set({ operatorOpen: false });
+      return null;
+    } catch (e) {
+      if (isApiError(e) && e.code === "VALIDATION_ERROR") return e.fieldErrors.name ?? e.message;
+      if (isApiError(e) && e.code === "SESSION_ACTIVE") return COPY.operator.sessionActive;
+      if (retryable(e)) return COPY.unexpected;
+      report(e, set);
+      return null;
+    }
+  },
 }));
 
 export function resetStationStore() {
@@ -228,5 +278,6 @@ export function resetStationStore() {
     clockOffsetMs: 0,
     notice: null,
     blocked: null,
+    operatorOpen: false,
   });
 }

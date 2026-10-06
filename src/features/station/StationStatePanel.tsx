@@ -2,11 +2,13 @@ import type { ReactNode } from "react";
 
 import { cx, Icon } from "@/shared/ui";
 
-export type PanelTone = "success" | "primary" | "warning" | "error";
+export type PanelTone = "success" | "primary" | "secondary" | "warning" | "error";
 
 const TONE: Record<PanelTone, string> = {
   success: "bg-success-container text-on-success-container",
   primary: "bg-primary-container text-on-primary-container",
+  /** R2 Đang kiểm hàng hoàn (01 §10.4). */
+  secondary: "bg-secondary-container text-on-secondary-container",
   warning: "bg-warning-container text-on-warning-container",
   error: "bg-error-container text-on-error-container",
 };

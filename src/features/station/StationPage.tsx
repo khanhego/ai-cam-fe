@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { useScanListener } from "@/shared/scan/useScanListener";
 import { Skeleton } from "@/shared/ui";
@@ -10,6 +10,9 @@ import { DisconnectedOverlay } from "./DisconnectedOverlay";
 import { MismatchPanel } from "./MismatchPanel";
 import { PackingPanel } from "./PackingPanel";
 import { ReadyPanel } from "./ReadyPanel";
+import { OperatorDialog } from "./returns/OperatorDialog";
+import { ReturnReadyPanel } from "./returns/ReturnReadyPanel";
+import { canSwitchMode, needsOperator, selectPanel } from "./selectPanel";
 import { StationStatusBar } from "./StationStatusBar";
 import { resetStationStore, useStationStore } from "./stationStore";
 import { StationStatePanel } from "./StationStatePanel";
@@ -20,7 +23,8 @@ export const BLOCKED_RETRY_MS = 30_000;
 
 /**
  * `/station` — một trang, chọn panel theo `state` của server (DEC-18). Quét bằng máy quét HID.
- * Thứ tự ưu tiên: mất kết nối (S6) → cảnh báo vừa quét (S4) → state (S1, S2, S3, S5).
+ * Thứ tự ưu tiên: mất kết nối (S6) → cảnh báo vừa quét (S4 / R4) → `selectPanel(state)` (S1, S2, S3, S5, R1, R2).
+ * R5 (người kiểm) là Dialog trên R1 — bắt buộc khi chế độ nhận hoàn chưa có tên (02b-station §2).
  */
 export default function StationPage({ socketFactory }: { socketFactory?: (url: string) => WebSocket } = {}) {
   const queryClient = useQueryClient();
@@ -42,11 +46,18 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
   useStationSocket(socketFactory);
 
   const completed = s.state?.today_count;
+  const returned = s.state?.today_return_count;
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: ["station", "recent"] });
-  }, [completed, queryClient]);
+  }, [completed, returned, queryClient]);
 
-  useScanListener((code) => void s.scan(code), { enabled: !offline && !s.blocked });
+  // Bàn hoàn có ô nhập (ghi chú, tên người kiểm, tìm thủ công): lần quét HID không lọt vào ô (DEC-237).
+  useScanListener((code) => void s.scan(code), {
+    enabled: !offline && !s.blocked,
+    captureInInputs: s.state?.station.work_mode === "RETURN",
+  });
+  const [, setLookup] = useState<string | null>(null);
+  const operatorRequired = needsOperator(s.state);
 
   const callManager = () => void s.requestApproval(s.state?.state === "MISMATCH" ? "MISMATCH" : "ASSIST");
 
@@ -73,17 +84,57 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
         onRequestRepack={(code) => void s.requestApproval("REPACK", code)}
       />
     );
-  else if (s.state.state === "PACKING") body = <PackingPanel state={s.state} onCallManager={callManager} />;
-  else if (s.state.state === "MISMATCH") body = <MismatchPanel state={s.state} onCallManager={callManager} />;
-  else if (s.state.state === "WAITING_APPROVAL")
-    body = <WaitingApprovalPanel state={s.state} onWithdraw={() => void s.withdrawApproval()} />;
-  else body = <ReadyPanel state={s.state} notice={s.notice} onDismissNotice={s.dismissNotice} />;
+  else {
+    const panel = selectPanel(s.state);
+    const switchable = canSwitchMode(s.state);
+    if (panel === "S2") body = <PackingPanel state={s.state} onCallManager={callManager} />;
+    else if (panel === "S3") body = <MismatchPanel state={s.state} onCallManager={callManager} />;
+    else if (panel === "S5")
+      body = <WaitingApprovalPanel state={s.state} onWithdraw={() => void s.withdrawApproval()} />;
+    else if (panel === "R2")
+      body = (
+        <StationStatePanel tone="secondary" icon="assignment_return" title={COPY.returns.inspecting.title}>
+          <p className="font-mono text-display-sm">{s.state.session?.package.tracking_number}</p>
+        </StationStatePanel>
+      );
+    else if (panel === "R1")
+      body = (
+        <ReturnReadyPanel
+          state={s.state}
+          notice={s.notice}
+          onDismissNotice={s.dismissNotice}
+          onLookup={() => setLookup("")}
+          onSwitchMode={switchable ? () => void s.setWorkMode("PACK") : undefined}
+        />
+      );
+    else
+      body = (
+        <ReadyPanel
+          state={s.state}
+          notice={s.notice}
+          onDismissNotice={s.dismissNotice}
+          onSwitchMode={switchable ? () => void s.setWorkMode("RETURN") : undefined}
+        />
+      );
+  }
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <StationStatusBar state={s.state} online={!offline} />
+      <StationStatusBar state={s.state} online={!offline} onChangeOperator={s.openOperator} />
       {s.busy && <div className="h-1 bg-primary/40" aria-hidden />}
       {body}
+      {s.state && !offline && !s.blocked && (
+        <OperatorDialog
+          open={operatorRequired || (s.operatorOpen && s.state.station.work_mode === "RETURN")}
+          required={operatorRequired}
+          current={s.state.station.operator_name}
+          onSubmit={s.setOperator}
+          onClose={s.closeOperator}
+          onSwitchToPack={
+            operatorRequired && canSwitchMode(s.state) ? () => void s.setWorkMode("PACK") : undefined
+          }
+        />
+      )}
     </div>
   );
 }

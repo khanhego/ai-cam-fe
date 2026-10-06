@@ -471,7 +471,8 @@ export class StationSim {
     const name = typeof raw === "string" ? raw.split(/\s+/).filter(Boolean).join(" ") : "";
     if (name.length < 2 || name.length > 40)
       return err(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
-        fields: { name: name ? "Tên người kiểm 2–40 ký tự." : "Nhập tên người kiểm." },
+        // BE: cùng một chữ cho mọi trường hợp (station_config.py).
+        fields: { name: "Nhập tên người kiểm 2–40 ký tự" },
       });
     if (this.busy()) return err(409, "SESSION_ACTIVE", "Đóng phiên trước khi đổi người kiểm.");
     this.operatorName = name;
