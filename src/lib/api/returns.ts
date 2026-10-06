@@ -1,7 +1,7 @@
 import type {
   ClaimBrief,
   Conclusion,
-  InspectionInput,
+  InspectionCorrectionInput,
   ReturnCaseStatus,
   ReturnKind,
 } from "@/shared/returns/types";
@@ -97,6 +97,6 @@ export const returnsApi = {
   linkOrder: (id: string, packageId: string) =>
     api.post<LinkOrderResult>(`/returns/${id}/link-order`, { package_id: packageId }),
   /** API-113 (≤ 7 ngày): 409 CORRECTION_WINDOW_EXPIRED / NOT_RETURN_SESSION; 422 CONCLUSION_INCONSISTENT. */
-  correctInspection: (sessionId: string, body: InspectionInput & { reason: string }) =>
+  correctInspection: (sessionId: string, body: InspectionCorrectionInput) =>
     api.put<PackageSession>(`/sessions/${sessionId}/inspection`, body),
 };

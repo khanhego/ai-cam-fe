@@ -15,6 +15,13 @@ export const CLIP_COPY = {
   retry: "Thử lại",
 };
 
+/** Chữ dải ảnh (SnapshotStrip). */
+export const STRIP_COPY = {
+  deleted: "Ảnh đã bị xóa",
+  loadFailed: "Không tải được ảnh",
+  retry: "Thử lại",
+};
+
 export type ClipStateError =
   | { kind: "pending" }
   | { kind: "failed" }

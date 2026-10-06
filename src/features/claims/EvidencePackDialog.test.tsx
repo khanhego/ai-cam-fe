@@ -72,6 +72,28 @@ test("TC-08.16 (UI): Gói gồm … → Tạo gói → tiến độ % → sẵn 
   spy.mockRestore();
 });
 
+test("G3-F21: Tải gói — API-137 lỗi → toast, không tải", async () => {
+  await as();
+  const { user, dialog } = await openPack();
+  await user.click(within(dialog).getByRole("button", { name: "Tạo gói" }));
+  advance(5000);
+  expect(await within(dialog).findByText("Gói bằng chứng đã sẵn sàng.")).toBeInTheDocument();
+  server.use(
+    http.get("/api/v1/evidence-packs/:id", () => apiError(500, "INTERNAL", "Lỗi máy chủ. Thử lại sau.")),
+  );
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+  await user.click(within(dialog).getByRole("button", { name: "Tải gói bằng chứng (.zip)" }));
+
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("status").some((el) => el.textContent?.includes("Lỗi máy chủ. Thử lại sau.")),
+    ).toBe(true),
+  );
+  expect(click).not.toHaveBeenCalled();
+  click.mockRestore();
+});
+
 test("Đóng Dialog khi đang tạo → mở lại vẫn theo dõi gói đó (không tạo gói mới)", async () => {
   await as();
   const { user, dialog } = await openPack();

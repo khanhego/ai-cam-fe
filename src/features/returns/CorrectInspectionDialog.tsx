@@ -58,8 +58,10 @@ export function CorrectInspectionDialog({
   const valid = Boolean(conclusion) && !localErrors.conclusion && !localErrors.note && !localErrors.reason;
 
   const save = useMutation({
-    mutationFn: () =>
-      returnsApi.correctInspection(session.id, {
+    mutationFn: () => {
+      // Nút Lưu chỉ bật khi `valid` (có kết luận) — API-113 không nhận kết luận null (C-06).
+      if (!conclusion) throw new Error("conclusion required");
+      return returnsApi.correctInspection(session.id, {
         conclusion,
         note,
         // REFERENCE (02 §6.3 #8): không gửi dòng thay đổi — server chỉ kiểm kết luận.
@@ -73,7 +75,8 @@ export function CorrectInspectionDialog({
               }))
             : [],
         reason: reasonText,
-      }),
+      });
+    },
     onSuccess: () => {
       toast(C.done);
       for (const key of [["package"], ["returns"], ["claims"], ["daily"]])

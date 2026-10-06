@@ -6,6 +6,7 @@ import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
+  Ref,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
@@ -54,6 +55,8 @@ const BUTTON: Record<ButtonVariant, string> = {
 };
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  /** React 19: ref là prop thường, chuyển xuống <button> qua `...rest`. */
+  ref?: Ref<HTMLButtonElement>;
   variant?: ButtonVariant;
   size?: "sm" | "md";
   icon?: string;

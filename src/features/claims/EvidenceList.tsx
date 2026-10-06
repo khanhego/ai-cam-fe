@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 
 import { claimsApi, type ClaimDetail, type ClaimEvidence } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
@@ -112,6 +113,14 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
   const sessions = claim.evidence.filter((e): e is SessionEvidence => e.kind === "SESSION");
   const snapshots = claim.evidence.flatMap((e) => (e.kind === "SNAPSHOT" ? [e.snapshot] : []));
   const [playing, setPlaying] = useState<string | null>(null);
+  // Ảnh URL ký hết hạn → tải lại API-132 một lần (như D4 / station — C-02, DEC-357).
+  const qc = useQueryClient();
+  const reloadedForImage = useRef(false);
+  const onSnapshotExpired = () => {
+    if (reloadedForImage.current) return;
+    reloadedForImage.current = true;
+    void qc.invalidateQueries({ queryKey: ["claim", claim.id] });
+  };
   const [removing, setRemoving] = useState<SessionEvidence | null>(null);
   const [note, setNote] = useState("");
   const [touched, setTouched] = useState(false);
@@ -174,7 +183,13 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
           ))}
         </ul>
       )}
-      {snapshots.length > 0 && <SnapshotStrip label={E.photos(snapshots.length)} snapshots={snapshots} />}
+      {snapshots.length > 0 && (
+        <SnapshotStrip
+          label={E.photos(snapshots.length)}
+          snapshots={snapshots}
+          onExpired={onSnapshotExpired}
+        />
+      )}
       {claim.other_sessions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-body-md text-on-surface">
           <span className="text-on-surface-variant">{E.others}</span>

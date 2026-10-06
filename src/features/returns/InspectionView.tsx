@@ -89,8 +89,9 @@ export function InspectionView({ session, actions }: { session: PackageSession; 
         >
           {corrections.map((c, i) => (
             <li key={i} className="text-body-sm text-on-surface">
-              <span className="tabular-nums">{fmtDateTime(c.at)}</span> · {c.by.display_name} · {C.reason}: “
-              {c.reason}” · {C.before}: {c.before.conclusion ? CONCLUSION_LABEL[c.before.conclusion] : "—"}
+              <span className="tabular-nums">{fmtDateTime(c.at)}</span> · {c.by?.display_name || "—"} ·{" "}
+              {C.reason}: “{c.reason}” · {C.before}:{" "}
+              {c.before.conclusion ? CONCLUSION_LABEL[c.before.conclusion] : "—"}
               {c.before.note ? ` (${c.before.note})` : ""}
             </li>
           ))}

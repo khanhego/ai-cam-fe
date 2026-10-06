@@ -144,6 +144,8 @@ test("TC-02.36: clip đang được giữ (hồ sơ chuyển từ cờ giữ + c
   expect(within(clip).getByText("Thiếu video")).toBeInTheDocument();
   expect(within(clip).getByText("Đang được giữ: hồ sơ khiếu nại KN-000122")).toBeInTheDocument();
   expect(within(clip).getByText("Đang được giữ: Admin giữ clip")).toBeInTheDocument();
+  // G3-F23: nhóm chip có tên đọc được.
+  expect(within(clip).getByRole("group", { name: "Bảo vệ clip" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Giữ clip|Bỏ giữ/ })).not.toBeInTheDocument();
 });
 

@@ -40,7 +40,8 @@ export type InspectionLine = {
 /** Một lần sửa kết luận (API-113, `corrections[]` — 02 §6.3 #4, DEC-261). */
 export type InspectionCorrection = {
   at: string;
-  by: { id: string; display_name: string };
+  /** `id` null khi tài khoản đã bị xóa (02 §6.3 — C-07). */
+  by: { id: string | null; display_name: string };
   reason: string;
   before: { conclusion: Conclusion | null; note: string; lines: InspectionLine[] };
 };
@@ -64,6 +65,11 @@ export type InspectionInput = {
   conclusion: Conclusion | null;
   note: string;
   lines: InspectionLineInput[];
+};
+/** Body API-113 (sửa kết luận): kết luận bắt buộc, không null (02 §6.3 #4 — C-06). */
+export type InspectionCorrectionInput = Omit<InspectionInput, "conclusion"> & {
+  conclusion: Conclusion;
+  reason: string;
 };
 
 export type SnapshotKind = "MANUAL" | "PACK_CLOSE";

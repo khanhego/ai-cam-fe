@@ -26,7 +26,7 @@ export function ProtectedChip({ session }: { session: PackageSession }) {
   const until = protection.until ? ` ${C.until(fmtDate(protection.until))}` : "";
   const d17 = screenReady("D17");
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1" aria-label={C.label}>
+    <div role="group" className="mt-2 flex flex-wrap items-center gap-1" aria-label={C.label}>
       {protection.claims.map((code) => {
         const id = ids.get(code);
         const chip = (

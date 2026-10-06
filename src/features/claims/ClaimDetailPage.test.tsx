@@ -2,7 +2,7 @@
  * D17 — Chi tiết hồ sơ khiếu nại (T-158; 01 §10.5 D17, FR-08.02, 08.03, 08.06; 02b-admin §13 component + integration).
  * TC-08.01 (UI), 08.06 (UI), 08.07 (UI), 08.14 (UI), 08.15 (UI).
  */
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 
@@ -85,6 +85,38 @@ test("TC-08.01 (UI): Nhận phụ trách → Đã gửi (mã sàn bắt buộc) 
   const notes = screen.getByRole("list", { name: "Ghi chú" });
   for (const t of ["Người phụ trách: Lan.", "Mới → Đã gửi.", "Đang chờ → Thắng.", "Thắng → Đóng."])
     expect(within(notes).getByText(t)).toBeInTheDocument();
+  // Luồng dài (5 lần chuyển trạng thái): chạy cả suite song song có thể quá 5 s mặc định (G3-F2).
+}, 15_000);
+
+test("G3-F22: menu Đổi trạng thái — ↓/↑ vòng, Home/End, Esc đóng và trả focus nút", async () => {
+  await as();
+  const user = userEvent.setup({ delay: null });
+  renderApp("/admin/claims/cl-000124");
+  await screen.findByRole("heading", { name: /KN-000124/ });
+  const trigger = screen.getByRole("button", { name: "Đổi trạng thái" });
+
+  await user.click(trigger);
+  const items = screen.getAllByRole("menuitem");
+  expect(trigger).toHaveAttribute("aria-expanded", "true");
+  expect(items[0]).toHaveFocus();
+  await user.keyboard("{ArrowDown}");
+  expect(items[1]).toHaveFocus();
+  await user.keyboard("{ArrowDown}");
+  expect(items[0]).toHaveFocus();
+  await user.keyboard("{ArrowUp}");
+  expect(items[items.length - 1]).toHaveFocus();
+  await user.keyboard("{Home}");
+  expect(items[0]).toHaveFocus();
+  await user.keyboard("{End}");
+  expect(items[items.length - 1]).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+
+  await user.keyboard("{ArrowDown}");
+  expect(screen.getByRole("menu")).toBeInTheDocument();
+  await user.click(document.body);
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 });
 
 test("Đóng sớm (từ Mới) cần lý do 5–500", async () => {
@@ -101,7 +133,7 @@ test("Đóng sớm (từ Mới) cần lý do 5–500", async () => {
   expect(claim("KN-000124").close_reason).toBe("Khách rút yêu cầu");
 });
 
-test("TC-08.07 (UI): VERSION_CONFLICT → toast 'Hồ sơ vừa được Nguyễn B cập nhật. Đã tải lại.', Dialog giữ giá trị, gửi lại được", async () => {
+test("TC-08.07 (UI): VERSION_CONFLICT → toast trung tính 'Hồ sơ vừa được người khác cập nhật. Đã tải lại.', Dialog giữ giá trị, gửi lại được", async () => {
   await as();
   const user = userEvent.setup();
   renderApp("/admin/claims/cl-000124");
@@ -120,12 +152,34 @@ test("TC-08.07 (UI): VERSION_CONFLICT → toast 'Hồ sơ vừa được Nguyễ
     at: new Date().toISOString(),
   });
   await user.click(within(dialog).getByRole("button", { name: "Xác nhận" }));
-  expect(await screen.findByText("Hồ sơ vừa được Nguyễn B cập nhật. Đã tải lại.")).toBeInTheDocument();
+  // Ghi chú cuối của Nguyễn B không chứng minh B là người vừa sửa → không nêu tên (G3-F20).
+  expect(await screen.findByText("Hồ sơ vừa được người khác cập nhật. Đã tải lại.")).toBeInTheDocument();
   expect(within(dialog).getByLabelText("Mã tham chiếu sàn")).toHaveValue("SPE-1");
   expect(screen.queryByText("Hồ sơ vừa được cập nhật.")).not.toBeInTheDocument();
 
   await user.click(within(dialog).getByRole("button", { name: "Xác nhận" }));
   await waitFor(() => expect(current()).toHaveTextContent("Đã gửi"));
+});
+
+test("G3-F20: VERSION_CONFLICT có details.current.updated_by → toast nêu tên người sửa", async () => {
+  await as();
+  const user = userEvent.setup({ delay: null });
+  renderApp("/admin/claims/cl-000124");
+  await screen.findByRole("heading", { name: /KN-000124/ });
+  const detail = await claimsApi.get("cl-000124");
+  server.use(
+    http.patch("/api/v1/claims/:id", () =>
+      apiError(409, "VERSION_CONFLICT", "x", {
+        current: { ...detail, updated_by: { id: "u-sup", display_name: "Trần C" } },
+      }),
+    ),
+  );
+
+  const dialog = await transition(user, "Đã gửi");
+  await user.type(within(dialog).getByLabelText("Mã tham chiếu sàn"), "SPE-1");
+  await user.click(within(dialog).getByRole("button", { name: "Xác nhận" }));
+
+  expect(await screen.findByText("Hồ sơ vừa được Trần C cập nhật. Đã tải lại.")).toBeInTheDocument();
 });
 
 test("INVALID_TRANSITION → Alert message trong Dialog + tải lại", async () => {
@@ -265,4 +319,28 @@ test("lỗi tải → Alert + Thử lại", async () => {
   server.resetHandlers();
   await user.click(screen.getByRole("button", { name: "Thử lại" }));
   expect(await screen.findByRole("heading", { name: /KN-000124/ })).toBeInTheDocument();
+});
+
+test("C-02: ảnh bằng chứng lỗi (URL ký hết hạn) → tải lại API-132 đúng một lần", async () => {
+  await as();
+  let gets = 0;
+  server.events.on("request:start", ({ request }) => {
+    if (request.method === "GET" && new URL(request.url).pathname === "/api/v1/claims/cl-000124") gets += 1;
+  });
+  renderApp("/admin/claims/cl-000124");
+  await screen.findByRole("heading", { name: /KN-000124/ });
+  const imgs = await waitFor(() => {
+    const found = [...document.querySelectorAll<HTMLImageElement>("button[aria-label^='Ảnh'] img")];
+    expect(found.length).toBeGreaterThan(0);
+    return found;
+  });
+  const before = gets;
+
+  fireEvent.error(imgs[0]!);
+  await waitFor(() => expect(gets).toBe(before + 1));
+  const again = document.querySelectorAll<HTMLImageElement>("button[aria-label^='Ảnh'] img");
+  if (again[0]) fireEvent.error(again[0]);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(gets).toBe(before + 1);
+  server.events.removeAllListeners();
 });

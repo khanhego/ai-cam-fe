@@ -1,12 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { claimsApi, type ClaimDetail, type EvidencePack } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
 import { downloadUrl } from "@/shared/download";
 import { fmtDateTime, fmtNumber, fmtShort, shortHash } from "@/shared/format";
 import { CAMERA_ROLE } from "@/shared/labels";
-import { Alert, Button, Dialog, LinearProgress } from "@/shared/ui";
+import { Alert, Button, Dialog, LinearProgress, toast } from "@/shared/ui";
 
 import { COPY } from "./copy";
 import { packPoll } from "./packPoll";
@@ -49,20 +49,18 @@ export function EvidencePackDialog({
   const pack = useQuery({
     queryKey: ["evidence-pack", packId],
     enabled: Boolean(packId),
-    queryFn: async (): Promise<EvidencePack> => {
-      try {
-        return await claimsApi.getPack(packId!);
-      } catch (e) {
-        if (isApiError(e) && e.status === 404) {
-          setGone(true);
-          onPackId(null);
-        }
-        throw e;
-      }
-    },
+    queryFn: (): Promise<EvidencePack> => claimsApi.getPack(packId!),
     refetchInterval: (q) =>
       q.state.status === "error" || !RUNNING.has(q.state.data?.status ?? "QUEUED") ? false : packPoll.ms,
   });
+
+  // API-137 404 (quá 24 giờ / người khác tạo) → "Gói không còn", cho tạo lại. Xử lý ở effect, không trong queryFn
+  // (queryFn thuần — G3-F21, DEC-355).
+  const packGone = isApiError(pack.error) && pack.error.status === 404;
+  if (packGone && !gone) setGone(true); // chỉnh state lúc render (không cascade như setState trong effect)
+  useEffect(() => {
+    if (packGone) onPackId(null);
+  }, [packGone, onPackId]);
 
   const data = packId ? pack.data : undefined;
   const status = data?.status;
@@ -75,6 +73,12 @@ export function EvidencePackDialog({
   const download = async () => {
     // Link ký hết hạn sau 10 phút → lấy lại API-137 ngay trước khi tải (RF-22).
     const fresh = await pack.refetch();
+    if (fresh.error) {
+      // 404 → effect hiện "Gói không còn"; lỗi khác → toast (G3-F21).
+      if (!(isApiError(fresh.error) && fresh.error.status === 404))
+        toast(isApiError(fresh.error) ? fresh.error.message : COPY.generic);
+      return;
+    }
     const url = fresh.data?.files?.zip;
     if (url) downloadUrl(url, `${claim.code}.zip`);
   };

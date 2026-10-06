@@ -85,3 +85,20 @@ test("phiên chưa có kết quả kiểm → không hiện gì; chưa sửa →
   );
   expect(screen.queryByRole("button", { name: /Đã sửa/ })).not.toBeInTheDocument();
 });
+
+test("C-07: người sửa đã bị xóa (by.id null) → vẫn hiện tên, không lỗi", async () => {
+  const user = userEvent.setup();
+  const base = session().inspection!;
+  render(
+    <InspectionView
+      session={session({
+        inspection: {
+          ...base,
+          corrections: [{ ...base.corrections![0]!, by: { id: null, display_name: "Tài khoản đã xóa" } }],
+        },
+      })}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "Đã sửa 1 lần" }));
+  expect(screen.getByRole("list", { name: "Lịch sử sửa kết luận" })).toHaveTextContent("Tài khoản đã xóa");
+});

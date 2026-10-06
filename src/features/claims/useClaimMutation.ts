@@ -12,14 +12,24 @@ import { COPY } from "./copy";
  */
 export const ownClaimVersions = new Map<string, number>();
 
-/** Người sửa gần nhất theo ghi chú (VERSION_CONFLICT chỉ có `details.current` — BE DEC-312 a). */
-export const lastEditor = (claim: ClaimDetail) =>
-  [...claim.notes].reverse().find((n) => n.kind !== "SYSTEM" && n.author)?.author?.display_name ?? null;
+/**
+ * Người sửa gần nhất khi VERSION_CONFLICT: chỉ tin `details.current.updated_by` (BE có thể thêm sau). Ghi chú cuối không
+ * chắc là người vừa sửa (sửa trường không sinh ghi chú) → không đoán; null = chữ trung tính (G3-F20, DEC-354).
+ */
+export const lastEditor = (claim: ClaimDetail): string | null => {
+  const by = (claim as ClaimDetail & { updated_by?: unknown }).updated_by;
+  if (typeof by === "string") return by.trim() || null;
+  if (by && typeof by === "object" && "display_name" in by) {
+    const name = (by as { display_name?: unknown }).display_name;
+    return typeof name === "string" && name.trim() ? name : null;
+  }
+  return null;
+};
 
 /**
  * Mutation sửa hồ sơ (API-133 / 134) chờ server, không optimistic (DEC-241). Thành công → ghi thẳng
  * `['claim', id]` + làm mới D16 / D4 / D2. `VERSION_CONFLICT` → thay dữ liệu bằng `details.current` + toast
- * "Hồ sơ vừa được {người} cập nhật. Đã tải lại."; nơi gọi giữ form mở với giá trị đang nhập. `INVALID_TRANSITION` /
+ * "Hồ sơ vừa được người khác cập nhật. Đã tải lại." (có `updated_by` thì nêu tên); nơi gọi giữ form mở với giá trị đang nhập. `INVALID_TRANSITION` /
  * `CLAIM_CLOSED` → tải lại hồ sơ.
  */
 export function useClaimMutation<V>(

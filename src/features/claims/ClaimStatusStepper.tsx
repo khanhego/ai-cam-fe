@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { claimsApi, type ClaimDetail, type ClaimStatus } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
@@ -163,35 +163,84 @@ function TransitionDialog({
 
 /**
  * Nút "Đổi trạng thái" (menu chỉ các bước hợp lệ — `allowed_transitions`, RF-21) + Dialog theo đích.
- * Hồ sơ đã Đóng (`allowed_transitions` rỗng) → không có nút.
+ * Menu theo mẫu WAI-ARIA menu button (G3-F22, DEC-353): mở → focus mục đầu; ↑/↓ vòng, Home/End; Esc đóng + trả focus
+ * nút; Tab / bấm ra ngoài đóng. Hồ sơ đã Đóng (`allowed_transitions` rỗng) → không có nút.
  */
 export function ClaimStatusMenu({ claim }: { claim: ClaimDetail }) {
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState<ClaimStatus | null>(null);
   const menuRef = useRef<HTMLUListElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (open) menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const outside = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
   }, [open]);
   if (claim.allowed_transitions.length === 0) return null;
+
+  const onMenuKey = (e: KeyboardEvent<HTMLUListElement>) => {
+    const items = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    const focus = (n: number) => items[(n + items.length) % items.length]?.focus();
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        focus(i + 1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        focus(i - 1);
+        break;
+      case "Home":
+        e.preventDefault();
+        focus(0);
+        break;
+      case "End":
+        e.preventDefault();
+        focus(items.length - 1);
+        break;
+      case "Escape":
+        e.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+        break;
+      case "Tab":
+        setOpen(false);
+        break;
+    }
+  };
+
   return (
-    <div className="relative">
+    <div ref={wrapRef} className="relative">
       <Button
+        ref={triggerRef}
         variant="tonal"
         trailingIcon="arrow_drop_down"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={open ? "claim-status-menu" : undefined}
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !open) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
       >
         {D.changeStatus}
       </Button>
       {open && (
         <ul
+          id="claim-status-menu"
           ref={menuRef}
           role="menu"
           aria-label={D.changeStatus}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
-          }}
+          onKeyDown={onMenuKey}
           className="absolute z-10 mt-1 min-w-48 rounded-md bg-surface-container py-1 shadow-elevation-2"
         >
           {claim.allowed_transitions.map((s) => (
@@ -199,6 +248,7 @@ export function ClaimStatusMenu({ claim }: { claim: ClaimDetail }) {
               <button
                 type="button"
                 role="menuitem"
+                tabIndex={-1}
                 className="state-layer w-full px-4 py-2 text-left text-body-md text-on-surface"
                 onClick={() => {
                   setOpen(false);

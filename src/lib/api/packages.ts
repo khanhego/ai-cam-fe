@@ -21,7 +21,8 @@ export type PackageListItem = {
   platform_order_sn: string | null;
   warehouse_status: WarehouseStatus;
   platform_status: string | null;
-  source: "API" | "CSV";
+  /** null với kiện tạm / dữ liệu cũ (C-07). */
+  source: "API" | "CSV" | null;
   last_session: { station_name: string; ended_at: string | null } | null;
   has_clip: boolean;
   /** item 02: hồ sơ hàng hoàn đại diện của kiện (hồ sơ mở trước, rồi mới nhất) — null nếu không có. */

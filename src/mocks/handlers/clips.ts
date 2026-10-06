@@ -195,6 +195,17 @@ export const clipsHandlers = [
       started_at: session.started_at,
       ended_at: session.ended_at,
       layout: e.layout,
+      // Trường Phase 2 như BE `session_info_fields` + `video_gaps` (02 API-45, DEC-261 — C-10).
+      session_type: session.type ?? "PACK",
+      session_status: session.status,
+      flags: session.flags ?? [],
+      operator_name: session.operator_name ?? null,
+      cameras: (["CAM1", "CAM2"] as const).map((camera_role) => ({
+        camera_role,
+        clock_offset_ms: null,
+        clock_checked_at: null,
+      })),
+      video_gaps: [],
       sha256: body.sha256,
       source_clip_sha256: body.source_clip_sha256,
     });

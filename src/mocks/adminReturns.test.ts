@@ -43,6 +43,9 @@ test("API-04: permissions mới theo vai (FR-10.02); CSKH không có recon.resol
   expect(hasPermission(cskh, "claims.manage")).toBe(true);
   expect(hasPermission(cskh, "recon.resolve")).toBe(false);
   expect(hasPermission(cskh, "returns.link")).toBe(false);
+  // C-01: giữ clip chỉ Admin (BE không cấp clips.hold cho SUPERVISOR / CSKH).
+  expect(hasPermission(cskh, "clips.hold")).toBe(false);
+  expect(hasPermission(sup, "clips.hold")).toBe(false);
 });
 
 test("TC-P2.05: D14 API-110 — tab mặc định Đang về, tab_counts; STATION 403", async () => {
