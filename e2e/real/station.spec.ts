@@ -54,8 +54,11 @@ test("TC-03.04: quét đóng sai mã → lệch mã", async ({ page }) => {
 
   await scan(page, "SPXTST0000002");
 
-  await expect(page.getByText("LỆCH MÃ — KHÔNG DÁN PHIẾU NÀY")).toBeVisible();
-  await expect(page.getByText("Gỡ phiếu sai, dán đúng phiếu SPXTST0000001 rồi quét lại mã.")).toBeVisible();
+  // Chữ S3 theo L3 (item 02 T-136): hai tình huống — quên quét đóng kiện trước / dán nhầm phiếu.
+  await expect(page.getByText("LỆCH MÃ — DỪNG LẠI, CHƯA DÁN PHIẾU")).toBeVisible();
+  await expect(
+    page.getByText("→ Gỡ phiếu SPXTST0000002, dán phiếu SPXTST0000001, quét lại mã."),
+  ).toBeVisible();
 });
 
 test("TC-03.08: đơn đã hủy trên sàn → cảnh báo, không mở phiên", async ({ page }) => {

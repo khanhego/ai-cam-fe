@@ -14,9 +14,13 @@ export function resetData() {
 }
 
 /** Máy quét HID: gõ liền (≤ 5 ms/phím) rồi Enter. */
+/**
+ * Máy quét trong E2E: dùng `hidScan` (mốc thời gian cách đều 5 ms như máy quét thật). `keyboard.type` ghi mốc lúc
+ * Playwright giao phím → máy dev thiếu RAM có khoảng > 50 ms giữa hai phím, bộ đệm reset giữa chừng và mã bị cụt
+ * (vd "XTST0000002" — thấy ở E2E M7).
+ */
 export async function scan(page: Page, code: string) {
-  await page.keyboard.type(code, { delay: 5 });
-  await page.keyboard.press("Enter");
+  await hidScan(page, code);
 }
 
 /**
