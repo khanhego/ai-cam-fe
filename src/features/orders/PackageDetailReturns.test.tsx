@@ -29,8 +29,12 @@ test("TC-07.32: khối Hàng hoàn — loại, mã yêu cầu, mã chiều về,
   expect(block).toHaveTextContent(/Kết quả kiểm \d{2}\/\d{2} \d{2}:\d{2} · [^·]+ · Người kiểm Lan/);
   expect(within(block).getAllByText("Hộp rỗng").length).toBeGreaterThan(0);
   expect(within(block).getByRole("table")).toBeInTheDocument();
-  // Hồ sơ khiếu nại tự tạo (BR-08) — D17 chưa có ở T-154 nên chưa có link "Mở".
+  // Hồ sơ khiếu nại tự tạo (BR-08) + link "Mở" sang D17.
   expect(within(block).getByText("KN-000124")).toBeInTheDocument();
+  expect(within(block).getByRole("link", { name: "Mở KN-000124" })).toHaveAttribute(
+    "href",
+    "/admin/claims/cl-000124",
+  );
   expect(within(block).getByText("Mới")).toBeInTheDocument();
 
   // Cảnh báo lệch của kiện (BR-19 tự hết).
@@ -44,7 +48,9 @@ test("TC-07.32: khối Hàng hoàn — loại, mã yêu cầu, mã chiều về,
   expect(sessions[0]).toHaveTextContent("Đã kiểm xong");
   expect(sessions[1]).toHaveTextContent("Đóng gói");
   const clip = screen.getByRole("region", { name: "Clip" });
-  expect(within(clip).getByText("Đang được giữ: hồ sơ khiếu nại KN-000124")).toBeInTheDocument();
+  expect(
+    within(clip).getByRole("link", { name: "Đang được giữ: hồ sơ khiếu nại KN-000124" }),
+  ).toHaveAttribute("href", "/admin/claims/cl-000124");
   expect(within(clip).getByText(/Người kiểm Lan/)).toBeInTheDocument();
 
   // Hồ sơ khiếu nại của kiện.
@@ -96,7 +102,7 @@ test("TC-02.36: kiện không được bảo vệ → không có nút Giữ clip
 test("TC-08.08 (UI): CSKH tạo hồ sơ từ D4 — loại mặc định 'Khách báo thiếu / sai', bên nhận Sàn → toast, chip hồ sơ mới", async () => {
   await as();
   const user = userEvent.setup();
-  renderApp("/admin/packages/pkg-0000010");
+  const router = renderApp("/admin/packages/pkg-0000010");
 
   await user.click(await screen.findByRole("button", { name: "Tạo hồ sơ khiếu nại" }));
   const dialog = screen.getByRole("dialog", { name: "Tạo hồ sơ khiếu nại" });
@@ -111,8 +117,9 @@ test("TC-08.08 (UI): CSKH tạo hồ sơ từ D4 — loại mặc định 'Khác
   expect(created).toMatchObject({ package_id: "pkg-0000010", type: "BUYER_CLAIM", source: "MANUAL" });
   // Bằng chứng tự chọn = phiên đóng gói hiệu lực (FR-08.06).
   expect(created.evidence.length).toBeGreaterThan(0);
-  const claims = await screen.findByRole("region", { name: "Hồ sơ khiếu nại" });
-  expect(await within(claims).findByText(created.code)).toBeInTheDocument();
+  // D17 có (T-158) → mở thẳng hồ sơ vừa tạo.
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/admin/claims/${created.id}`));
+  expect(await screen.findByRole("heading", { name: new RegExp(created.code) })).toBeInTheDocument();
 });
 
 test("D4 có kết luận phiên hoàn → loại mặc định theo kết luận; giao thất bại → bên nhận ĐVVC", async () => {

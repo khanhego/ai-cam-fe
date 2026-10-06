@@ -35,7 +35,7 @@ test("drawer có 'Hồ sơ khiếu nại'; tab Mới mặc định có số, b�
     "Tạo lúc",
     "Nguồn",
   ]);
-  const row = within(table).getByText("KN-000124").closest("tr")!;
+  const row = within(table).getByRole("link", { name: "KN-000124" }).closest("tr")!;
   expect(row).toHaveTextContent("Hộp rỗng");
   expect(row).toHaveTextContent("Tự động");
   expect(row).toHaveTextContent("(chưa có)");
@@ -104,10 +104,10 @@ test("trống → 'Chưa có hồ sơ khiếu nại.' + Tạo hồ sơ; lỗi �
   expect(await screen.findByText("Chưa có hồ sơ khiếu nại.")).toBeInTheDocument();
 });
 
-test("FR-08.01: Tạo hồ sơ từ D16 — nhập mã kiện → chọn kiện → tạo → danh sách có hồ sơ mới", async () => {
+test("FR-08.01: Tạo hồ sơ từ D16 — nhập mã kiện → chọn kiện → tạo → mở D17 hồ sơ mới", async () => {
   await as();
   const user = userEvent.setup();
-  renderApp("/admin/claims");
+  const router = renderApp("/admin/claims");
 
   await user.click(await screen.findByRole("button", { name: "Tạo hồ sơ" }));
   const dialog = screen.getByRole("dialog", { name: "Tạo hồ sơ khiếu nại" });
@@ -117,8 +117,9 @@ test("FR-08.01: Tạo hồ sơ từ D16 — nhập mã kiện → chọn kiện 
   await user.click(within(dialog).getByRole("button", { name: "Tạo hồ sơ" }));
 
   expect(await screen.findByText(/^Đã tạo hồ sơ KN-\d{6}\.$/)).toBeInTheDocument();
-  const code = mockClaims.at(-1)!.code;
-  expect(await within(await screen.findByRole("table")).findByText(code)).toBeInTheDocument();
+  const created = mockClaims.at(-1)!;
+  expect(created.package_id).toBe("pkg-0000010");
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/admin/claims/${created.id}`));
 });
 
 test("dưới md: danh sách card (bảng ẩn bằng CSS)", async () => {
