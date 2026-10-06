@@ -10,7 +10,7 @@ import { DASHBOARD_ROLES, requireRole } from "./session";
 
 const SEVERITY_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
 
-/** API-120, 121, 123 theo 02 §6.2 (BE T-113 chưa xong). API-122 ở `packages.ts`. */
+/** API-120, 121, 123 — khớp BE thật (`reconciliation/router.py`, `service.py`). API-122 ở `packages.ts`. */
 export const reconHandlers = [
   http.get(`${API}/recon-alerts`, ({ request }) => {
     const [, denied] = requireRole(request, DASHBOARD_ROLES);
@@ -55,21 +55,34 @@ export const reconHandlers = [
     const alert = mockReconAlerts.find((a) => a.id === params.id);
     if (!alert) return apiError(404, "NOT_FOUND", "Không tìm thấy cảnh báo.");
     const body = (await request.json()) as { note?: string };
-    const note = body.note?.trim() ?? "";
+    // BE gộp khoảng trắng rồi kiểm 1–500 (`reconciliation/service.resolve`).
+    const note = (body.note ?? "").split(/\s+/).filter(Boolean).join(" ");
     if (note.length < 1 || note.length > 500)
       return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
-        fields: { note: "Ghi chú 1–500 ký tự." },
+        fields: { note: "Nhập ghi chú 1–500 ký tự" },
       });
     if (alert.status !== "OPEN")
-      return apiError(409, "ALREADY_RESOLVED", "Cảnh báo này đã được xử lý.", {
-        status: alert.status,
-        closed_at: alert.closed_at,
-        resolved_by: alert.resolution?.by ?? null,
-      });
+      return apiError(
+        409,
+        "ALREADY_RESOLVED",
+        alert.status === "RESOLVED" ? "Cảnh báo này đã được xử lý." : "Cảnh báo này đã tự hết.",
+        {
+          status: alert.status,
+          closed_at: alert.closed_at,
+          resolved_by: alert.resolution?.by ?? null,
+        },
+      );
     const at = new Date().toISOString();
     alert.status = "RESOLVED";
     alert.closed_at = at;
-    alert.resolution = { action: "RESOLVE", note, by: { id: user.id, display_name: user.display_name }, at };
+    alert.resolution = {
+      action: "RESOLVE",
+      note,
+      by: { id: user.id, display_name: user.display_name },
+      at,
+      to_status: null,
+      claim_id: null,
+    };
     dashboardEvent("recon.updated", { summary: reconSummary() });
     return json(toReconAlert(alert));
   }),

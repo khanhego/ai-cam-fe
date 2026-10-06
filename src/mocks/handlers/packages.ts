@@ -160,17 +160,22 @@ export const packagesHandlers = [
         from: pkg.warehouse_status,
         allowed,
       });
+    const alert = body.recon_alert_id ? mockReconAlerts.find((a) => a.id === body.recon_alert_id) : undefined;
+    if (body.recon_alert_id && alert?.package_id !== pkg.id)
+      return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
+        fields: { recon_alert_id: "Cảnh báo không thuộc kiện này" },
+      });
     const from = pkg.warehouse_status;
     pkg.warehouse_status = body.to_status;
     const at = new Date().toISOString();
-    pkg.timeline.unshift({
+    pkg.timeline.push({
       at,
       source: "MANUAL",
       from_status: from,
       to_status: body.to_status,
       actor: user.display_name,
     });
-    const alert = body.recon_alert_id ? mockReconAlerts.find((a) => a.id === body.recon_alert_id) : undefined;
+    // Cảnh báo đã đóng (tự hết / người khác xử lý) → giữ nguyên, vẫn điều chỉnh kiện (BE DEC-303).
     if (alert && alert.status === "OPEN") {
       alert.status = "RESOLVED";
       alert.closed_at = at;
@@ -180,6 +185,7 @@ export const packagesHandlers = [
         by: { id: user.id, display_name: user.display_name },
         at,
         to_status: body.to_status,
+        claim_id: null,
       };
       dashboardEvent("recon.updated", { summary: reconSummary() });
     }

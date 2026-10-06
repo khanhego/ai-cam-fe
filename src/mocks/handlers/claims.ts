@@ -105,6 +105,14 @@ export const claimsHandlers = [
     if (body.counterparty !== "PLATFORM" && body.counterparty !== "CARRIER") fields.counterparty = "Bắt buộc";
     if ((body.note ?? "").length > 1000) fields.note = "Tối đa 1000 ký tự";
     if (Object.keys(fields).length) return invalid(fields);
+    const rc = body.return_case_id ? findCase(body.return_case_id) : undefined;
+    // DEC-311 e: hồ sơ hàng hoàn phải chứa kiện.
+    if (body.return_case_id && !rc?.package_ids.includes(pkg.id))
+      return invalid({ return_case_id: "Hồ sơ hàng hoàn không chứa kiện này" });
+    // BE `claims.service.create`: cảnh báo phải thuộc kiện (kiểm trước BR-27).
+    const alert = body.recon_alert_id ? mockReconAlerts.find((a) => a.id === body.recon_alert_id) : undefined;
+    if (body.recon_alert_id && alert?.package_id !== pkg.id)
+      return invalid({ recon_alert_id: "Cảnh báo không thuộc kiện này" });
     // BR-27: một hồ sơ chưa Đóng mỗi loại / kiện (trừ LEGACY_HOLD).
     const dup = mockClaims.find(
       (c) => c.package_id === pkg.id && c.type === body.type && claimIsOpen(c) && c.source !== "LEGACY_HOLD",
@@ -114,10 +122,6 @@ export const claimsHandlers = [
         claim_id: dup.id,
         code: dup.code,
       });
-    const rc = body.return_case_id ? findCase(body.return_case_id) : undefined;
-    // DEC-311 e: hồ sơ hàng hoàn phải chứa kiện.
-    if (body.return_case_id && !rc?.package_ids.includes(pkg.id))
-      return invalid({ return_case_id: "Hồ sơ hàng hoàn không chứa kiện này" });
     const now = new Date().toISOString();
     const n = claimNo++;
     const pack = packSessionOf(pkg);
@@ -156,11 +160,17 @@ export const claimsHandlers = [
         : [],
     };
     mockClaims.push(claim);
-    const alert = body.recon_alert_id ? mockReconAlerts.find((a) => a.id === body.recon_alert_id) : undefined;
     if (alert?.status === "OPEN") {
       alert.status = "RESOLVED";
       alert.closed_at = now;
-      alert.resolution = { action: "OPEN_CLAIM", note: null, by: actor, at: now, claim_id: claim.id };
+      alert.resolution = {
+        action: "OPEN_CLAIM",
+        note: null,
+        by: actor,
+        at: now,
+        to_status: null,
+        claim_id: claim.id,
+      };
       dashboardEvent("recon.updated", { summary: reconSummary() });
     }
     updated(claim);

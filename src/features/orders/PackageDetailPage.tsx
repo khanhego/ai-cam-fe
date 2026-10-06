@@ -27,6 +27,7 @@ import { COPY } from "./copy";
 import { ExportDialog } from "./ExportDialog";
 import { exportLayouts } from "./exportLayouts";
 import { SessionPanel } from "./SessionPanel";
+import { timelineText } from "./timeline";
 
 const C = COPY.detail;
 const hasPending = (p: PackageDetail | undefined) =>
@@ -87,14 +88,6 @@ function SessionList({
       })}
     </ul>
   );
-}
-
-function timelineText(t: PackageDetail["timeline"][number]) {
-  const status =
-    t.source === "PLATFORM"
-      ? `${C.platform}: ${platformStatus(t.to_status)}`
-      : `${C.warehouse}: ${WAREHOUSE_STATUS[t.to_status as keyof typeof WAREHOUSE_STATUS]?.[0] ?? "—"}`;
-  return t.actor ? `${status} · ${t.actor}` : status;
 }
 
 /**
@@ -277,14 +270,16 @@ export default function PackageDetailPage() {
 
       {alerts.length > 0 && (
         <section className="card mb-4 p-4" aria-labelledby="d4-recon">
-          <h2 id="d4-recon" className="mb-2 flex items-center gap-2 text-title-md text-on-surface">
-            {C.recon}
+          <div className="mb-2 flex items-center gap-2">
+            <h2 id="d4-recon" className="text-title-md text-on-surface">
+              {C.recon}
+            </h2>
             {screenReady("D15") && (
-              <Link to="/admin/recon" className="text-label-lg text-primary hover:underline">
+              <Link to="/admin/recon?status=ALL" className="text-label-lg text-primary hover:underline">
                 {C.reconLink}
               </Link>
             )}
-          </h2>
+          </div>
           <ul className="flex flex-col gap-1 text-body-md text-on-surface">
             {alerts.map((a) => {
               const [sev, sevTone] = RECON_SEVERITY[a.severity];

@@ -13,10 +13,10 @@ const ALL = new Set<Item02Screen>(["D14", "D15", "D16"]);
 const labels = (role: Parameters<typeof navFor>[0], ready?: ReadonlySet<Item02Screen>) =>
   navFor(role, ready).map((i) => i.label);
 
-test("DEC-342: màn D15 chưa xây → không có mục trong drawer (không route tạm); D14 có từ T-153, D16 từ T-157", () => {
+test("DEC-342: đủ màn D14 (T-153), D15 (T-156), D16 (T-157) → 3 mục trong drawer cho ADMIN / SUPERVISOR / CSKH", () => {
   for (const role of ["ADMIN", "SUPERVISOR", "CSKH"] as const) {
     expect(labels(role)).toContain("Hàng hoàn");
-    expect(labels(role)).not.toContain("Lệch trạng thái");
+    expect(labels(role)).toContain("Lệch trạng thái");
     expect(labels(role)).toContain("Hồ sơ khiếu nại");
   }
   expect(labels("STATION")).toEqual([]);

@@ -907,19 +907,46 @@ function seedRecon(now: number) {
   mockReconAlerts.splice(
     0,
     mockReconAlerts.length,
+    // `context` như BE `reconciliation/rules.py` (warehouse_status, platform_status, since, days / hours, return_case).
     alertSeed("ra-01", "SHIPPED_NOT_PACKED", "0000056", 20, {
+      warehouse_status: "NEW",
       platform_status: "SHIPPED",
       since: iso(now - DAY),
     }),
-    alertSeed("ra-02", "CANCELLED_AFTER_PACK", "0000007", 30, { since: iso(now - 30 * 3600_000) }),
-    alertSeed("ra-03", "RETURN_OVERDUE", "0000049", 24, { since: iso(now - 8 * DAY), days: 8 }),
-    alertSeed("ra-04", "RETURN_UNANNOUNCED", "0000054", 2, { since: iso(now - DAY) }),
+    alertSeed("ra-02", "CANCELLED_AFTER_PACK", "0000007", 30, {
+      warehouse_status: "CANCELLED_AFTER_PACK",
+      platform_status: "CANCELLED",
+      since: iso(now - 30 * 3600_000),
+    }),
+    alertSeed("ra-03", "RETURN_OVERDUE", "0000049", 24, {
+      warehouse_status: "RETURN_MISSING",
+      platform_status: "TO_RETURN",
+      since: iso(now - 8 * DAY),
+      days: 8,
+    }),
+    alertSeed("ra-04", "RETURN_UNANNOUNCED", "0000054", 2, {
+      warehouse_status: "RETURN_RECEIVED_OK",
+      return_case: "HH-000054",
+      since: iso(now - DAY),
+      hours: 24,
+    }),
     alertSeed("ra-05", "PACKED_NOT_HANDED_OVER", "0000052", 1, {
+      warehouse_status: "PACKED",
+      platform_status: "READY_TO_SHIP",
       since: iso(now - 25 * 3600_000),
       hours: 25,
     }),
-    alertSeed("ra-06", "RETURN_DONE_NOT_RECEIVED", "0000051", 6, { platform_status: "REFUND_PAID" }),
-    alertSeed("ra-07", "UNVERIFIED_STALE", "0000015", 3, { since: iso(now - 27 * 3600_000) }),
+    alertSeed("ra-06", "RETURN_DONE_NOT_RECEIVED", "0000051", 6, {
+      warehouse_status: "RETURN_EXPECTED",
+      platform_status: "TO_RETURN",
+      return_case: "HH-000051",
+      since: iso(now - 6 * 3600_000),
+    }),
+    alertSeed("ra-07", "UNVERIFIED_STALE", "0000015", 3, {
+      warehouse_status: "NEW",
+      since: iso(now - 27 * 3600_000),
+      hours: 27,
+    }),
     alertSeed(
       "ra-08",
       "PACKED_NOT_HANDED_OVER",
@@ -934,6 +961,8 @@ function seedRecon(now: number) {
           note: "ĐVVC đã lấy hàng chiều qua",
           by: USERS.sup,
           at: iso(now - 48 * 3600_000),
+          to_status: null,
+          claim_id: null,
         },
       },
     ),
@@ -1055,7 +1084,8 @@ export function toReconAlert(a: MockReconAlert): ReconAlert {
       warehouse_status: pkg?.warehouse_status ?? "NEW",
       platform_status: pkg?.order?.platform_status ?? null,
     },
-    allowed_status_targets: pkg && a.status === "OPEN" ? allowedTargets(pkg) : [],
+    // BE `alert_out`: đích theo trạng thái kho hiện tại (không phụ thuộc trạng thái cảnh báo).
+    allowed_status_targets: pkg ? (MANUAL_TRANSITIONS[pkg.warehouse_status] ?? []) : [],
   };
 }
 

@@ -23,6 +23,7 @@ export function AdjustStatusForm({
   alertId = null,
   onDone,
   extraActions,
+  successMessage,
 }: {
   packageId: string;
   currentStatus: WarehouseStatus;
@@ -31,6 +32,8 @@ export function AdjustStatusForm({
   onDone?: (result: AdjustStatusResult) => void;
   /** Nút phụ đặt cạnh "Xác nhận" (vd. "Đóng" của Dialog). */
   extraActions?: ReactNode;
+  /** Chữ toast khi xong (mặc định "Đã điều chỉnh trạng thái kho."; D15: "Đã xử lý cảnh báo."). */
+  successMessage?: (result: AdjustStatusResult) => string;
 }) {
   const qc = useQueryClient();
   const [targets, setTargets] = useState<WarehouseStatus[]>(allowedTargets);
@@ -48,7 +51,7 @@ export function AdjustStatusForm({
         recon_alert_id: alertId,
       }),
     onSuccess: (result) => {
-      toast(C.done);
+      toast(successMessage?.(result) ?? C.done);
       for (const key of [["package", packageId], ["packages"], ["recon"], ["daily"]])
         void qc.invalidateQueries({ queryKey: key });
       onDone?.(result);

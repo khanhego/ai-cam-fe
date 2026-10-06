@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { claimsApi, type ClaimDetail, type ClaimType, type Counterparty } from "@/lib/api/claims";
@@ -94,20 +94,7 @@ function PackagePicker({ value, onChange }: { value: string | null; onChange: (i
   );
 }
 
-/**
- * Dialog "Tạo hồ sơ khiếu nại" (01 §10.5 D4 / D14 / D15 / D16, FR-08.01, API-131). Loại mặc định theo ngữ cảnh (kết
- * luận phiên hoàn / "Khách báo thiếu / sai"; D15 BR-12 / 19: "Thất lạc" + ĐVVC). Trùng loại đang mở (BR-27,
- * `409 CLAIM_EXISTS`) → Alert + "Mở hồ sơ". Không có `packageId` → ô nhập mã kiện (API-30) rồi chọn kiện.
- */
-export function CreateClaimDialog({
-  packageId,
-  returnCaseId = null,
-  reconAlertId = null,
-  defaultType = "BUYER_CLAIM",
-  defaultCounterparty = "PLATFORM",
-  onClose,
-  onCreated,
-}: {
+type CreateClaimProps = {
   packageId?: string;
   returnCaseId?: string | null;
   reconAlertId?: string | null;
@@ -115,7 +102,25 @@ export function CreateClaimDialog({
   defaultCounterparty?: Counterparty;
   onClose: () => void;
   onCreated?: (claim: ClaimDetail) => void;
-}) {
+};
+
+/**
+ * Form "Tạo hồ sơ khiếu nại" (01 §10.5 D4 / D14 / D15 / D16, FR-08.01, API-131) — dùng trong `CreateClaimDialog` và
+ * Dialog "Xử lý cảnh báo" ở D15 (`reconAlertId`, nút "Xác nhận"). Loại mặc định theo ngữ cảnh (kết luận phiên hoàn /
+ * "Khách báo thiếu / sai"; D15 BR-12 / 19: "Thất lạc" + ĐVVC). Trùng loại đang mở (BR-27, `409 CLAIM_EXISTS`) → Alert
+ * + "Mở hồ sơ". Không có `packageId` → ô nhập mã kiện (API-30) rồi chọn kiện. Tạo xong → mở D17.
+ */
+export function CreateClaimForm({
+  packageId,
+  returnCaseId = null,
+  reconAlertId = null,
+  defaultType = "BUYER_CLAIM",
+  defaultCounterparty = "PLATFORM",
+  onClose,
+  onCreated,
+  submitLabel = C.submit,
+  extraActions,
+}: CreateClaimProps & { submitLabel?: string; extraActions?: ReactNode }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [picked, setPicked] = useState<string | null>(null);
@@ -140,6 +145,7 @@ export function CreateClaimDialog({
       void qc.invalidateQueries({ queryKey: ["package", claim.package.id] });
       void qc.invalidateQueries({ queryKey: ["claims"] });
       void qc.invalidateQueries({ queryKey: ["daily"] });
+      void qc.invalidateQueries({ queryKey: ["returns"] });
       if (reconAlertId) void qc.invalidateQueries({ queryKey: ["recon"] });
       onCreated?.(claim);
       onClose();
@@ -159,16 +165,7 @@ export function CreateClaimDialog({
   };
 
   return (
-    <Dialog
-      open
-      title={C.title}
-      onClose={onClose}
-      actions={
-        <Button onClick={() => submit()} disabled={!pkgId || create.isPending || note.length > NOTE_MAX}>
-          {C.submit}
-        </Button>
-      }
-    >
+    <div>
       {!packageId && <PackagePicker value={picked} onChange={setPicked} />}
       <form onSubmit={submit} noValidate>
         <SelectField
@@ -207,7 +204,9 @@ export function CreateClaimDialog({
           onChange={(e) => setNote(e.target.value)}
         />
       </form>
-      {fields.return_case_id && <Alert kind="error">{fields.return_case_id}</Alert>}
+      {(fields.return_case_id || fields.recon_alert_id) && (
+        <Alert kind="error">{fields.return_case_id ?? fields.recon_alert_id}</Alert>
+      )}
       {exists && (
         <Alert
           kind="warning"
@@ -229,6 +228,21 @@ export function CreateClaimDialog({
         </Alert>
       )}
       {otherError && <Alert kind="error">{isApiError(err) ? err.message : COPY.generic}</Alert>}
+      <div className="mt-2 flex flex-wrap justify-end gap-2">
+        {extraActions}
+        <Button onClick={() => submit()} disabled={!pkgId || create.isPending || note.length > NOTE_MAX}>
+          {submitLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Dialog "Tạo hồ sơ khiếu nại" (D4, D14 Chỉ hoàn tiền, D16) — `CreateClaimForm` trong `Dialog`. */
+export function CreateClaimDialog(props: CreateClaimProps) {
+  return (
+    <Dialog open title={C.title} onClose={props.onClose}>
+      <CreateClaimForm {...props} />
     </Dialog>
   );
 }

@@ -93,7 +93,9 @@ function MobileDrawer({ onClose, children }: { onClose: () => void; children: Re
         className="absolute inset-0 bg-scrim/40"
         onClick={onClose}
       />
-      <aside className="relative h-full w-72 bg-surface-container-low shadow-elevation-3">{children}</aside>
+      <aside className="relative h-full w-72 overflow-y-auto bg-surface-container-low shadow-elevation-3">
+        {children}
+      </aside>
     </div>
   );
 }
@@ -140,7 +142,7 @@ export function AppShell() {
         <IconButton icon="logout" label="Đăng xuất" onClick={onLogout} />
       </header>
       <div className="flex">
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 border-r border-outline-variant lg:block">
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 overflow-y-auto border-r border-outline-variant lg:block">
           <NavList items={items} />
         </aside>
         {drawerOpen && (

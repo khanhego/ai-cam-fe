@@ -406,7 +406,8 @@ function buildPackage(seed: PackageSeed): MockPackage {
       to_status: "CANCELLED",
       actor: null,
     });
-  timeline.sort((a, b) => b.at.localeCompare(a.at));
+  // BE `orders/packages.py`: dòng thời gian theo `at` tăng dần (cũ trước).
+  timeline.sort((a, b) => a.at.localeCompare(b.at));
   const nn = Number(seed.n) % 100000;
   const orderSn = seed.orderSn === undefined ? `2410TST${String(nn).padStart(5, "0")}` : seed.orderSn;
   return {
