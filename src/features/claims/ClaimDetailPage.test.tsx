@@ -343,4 +343,39 @@ test("C-02: ảnh bằng chứng lỗi (URL ký hết hạn) → tải lại API
   await new Promise((r) => setTimeout(r, 50));
   expect(gets).toBe(before + 1);
   server.events.removeAllListeners();
+  vi.restoreAllMocks();
+});
+
+test("V2-3: URL ký mới cũng hết hạn → tải lại thêm lần nữa (không kẹt lỗi mãi khi D17 mở lâu)", async () => {
+  await as();
+  let gets = 0;
+  let round = 0;
+  const original = claimsApi.get.bind(claimsApi);
+  vi.spyOn(claimsApi, "get").mockImplementation(async (id: string) => {
+    const detail = await original(id);
+    round += 1;
+    for (const e of detail.evidence)
+      if (e.kind === "SNAPSHOT" && e.snapshot.url) e.snapshot.url = `${e.snapshot.url}?r=${round}`;
+    return detail;
+  });
+  server.events.on("request:start", ({ request }) => {
+    if (request.method === "GET" && new URL(request.url).pathname === "/api/v1/claims/cl-000124") gets += 1;
+  });
+  renderApp("/admin/claims/cl-000124");
+  await screen.findByRole("heading", { name: /KN-000124/ });
+  const img = () =>
+    waitFor(() => {
+      const found = document.querySelector<HTMLImageElement>("button[aria-label^='Ảnh'] img");
+      expect(found).not.toBeNull();
+      return found!;
+    });
+  const before = gets;
+  fireEvent.error(await img());
+  await waitFor(() => expect(gets).toBe(before + 1));
+  await waitFor(async () => expect((await img()).src).toContain(`r=${round}`));
+  fireEvent.error(await img()); // URL mới cũng hết hạn → ô "Không tải được ảnh" + "Thử lại"
+  fireEvent.click(await screen.findByRole("button", { name: "Thử lại" }));
+  await waitFor(() => expect(gets).toBe(before + 2));
+  server.events.removeAllListeners();
+  vi.restoreAllMocks();
 });

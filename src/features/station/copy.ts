@@ -113,6 +113,8 @@ export const COPY = {
   notLoggedIn: "Station chưa đăng nhập. Đăng nhập rồi quét lại.",
   abandoned: (code: string) => `Phiên ${code} đã tự đóng do quá 30 phút.`,
   cancelledByManager: "Quản lý đã hủy phiên.",
+  autoCloseBlocked:
+    "Phiên hoàn chưa tự hoàn tất được: kết luận chưa đủ (vd. chọn Khác mà thiếu ghi chú). Sửa kết luận rồi quét lại mã để đóng.",
   logout: "Đăng xuất station (giữ 3 giây)",
 
   // ---- item 02 (01 §10.4) ----

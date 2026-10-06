@@ -206,7 +206,7 @@ export type OpenReturnSessionBody =
 export type StationServerAlert =
   | { code: "SESSION_ABANDONED"; session_id?: string; tracking_number?: string }
   /** J-07 tới `warn_at` (BE gửi; FE tự tính cảnh báo theo `warn_at` nên chỉ dùng để flush nháp). */
-  | { code: "SESSION_WARN"; session_id: string; minutes: number }
+  | { code: "SESSION_WARN"; session_id: string; minutes: number; reason?: "INSPECTION_INCOMPLETE" }
   | { code: "SESSION_CANCELLED_BY_SUPERVISOR"; session_id?: string; tracking_number?: string }
   | { code: "ORDER_CANCELLED_DURING_SESSION"; session_id: string; tracking_number: string }
   | {

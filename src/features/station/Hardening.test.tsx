@@ -102,3 +102,20 @@ test("TC-03.75: đơn hủy khi đang đóng → banner đỏ + âm lỗi 1 lầ
   expect(await screen.findByText("SẴN SÀNG")).toBeInTheDocument();
   expect(useStationStore.getState().closedNotice?.package_status).toBe("CANCELLED_AFTER_PACK");
 });
+
+test("G3 V2-4: J-07 không tự hoàn tất vì kết luận chưa đủ → station nói rõ lý do", () => {
+  act(() => {
+    useStationStore.getState().onServerAlert({
+      code: "SESSION_WARN",
+      session_id: "s-1",
+      minutes: 45,
+      reason: "INSPECTION_INCOMPLETE",
+    });
+  });
+  expect(useStationStore.getState().notice).toMatch(/kết luận chưa đủ/);
+  act(() => useStationStore.getState().dismissNotice());
+  act(() => {
+    useStationStore.getState().onServerAlert({ code: "SESSION_WARN", session_id: "s-1", minutes: 45 });
+  });
+  expect(useStationStore.getState().notice).toBeNull();
+});

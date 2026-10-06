@@ -319,7 +319,11 @@ export const useStationStore = create<StationStore>((set, get) => ({
     // Đơn bị hủy khi đang đóng (FR-03.15): âm lỗi 1 lần; banner theo `flags` của `station.state`.
     if (data.code === "ORDER_CANCELLED_DURING_SESSION") sound.play("error");
     // J-07 tới warn_at: gửi nháp ngay (server chỉ tự hoàn tất bằng kết luận đã lưu).
-    if (data.code === "SESSION_WARN") void get().flushDraft();
+    if (data.code === "SESSION_WARN") {
+      void get().flushDraft();
+      // J-07 không tự hoàn tất vì kết luận đã lưu chưa đủ (DEC-340, G3 V2-4) → nói rõ việc cần làm.
+      if ("reason" in data && data.reason === "INSPECTION_INCOMPLETE") set({ notice: COPY.autoCloseBlocked });
+    }
   },
 
   dismissNotice() {

@@ -113,12 +113,14 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
   const sessions = claim.evidence.filter((e): e is SessionEvidence => e.kind === "SESSION");
   const snapshots = claim.evidence.flatMap((e) => (e.kind === "SNAPSHOT" ? [e.snapshot] : []));
   const [playing, setPlaying] = useState<string | null>(null);
-  // Ảnh URL ký hết hạn → tải lại API-132 một lần (như D4 / station — C-02, DEC-357).
+  // Ảnh URL ký hết hạn → tải lại API-132 một lần cho mỗi bộ URL (như D4 / station — C-02, DEC-357). Ghi nhớ theo
+  // URL đang dùng: dữ liệu mới (URL ký mới) thì được tải lại tiếp khi hết hạn lần sau (G3 V2-3).
   const qc = useQueryClient();
-  const reloadedForImage = useRef(false);
+  const urlsKey = snapshots.map((s) => s.url ?? "").join("|");
+  const reloadedFor = useRef<string | null>(null);
   const onSnapshotExpired = () => {
-    if (reloadedForImage.current) return;
-    reloadedForImage.current = true;
+    if (reloadedFor.current === urlsKey) return;
+    reloadedFor.current = urlsKey;
     void qc.invalidateQueries({ queryKey: ["claim", claim.id] });
   };
   const [removing, setRemoving] = useState<SessionEvidence | null>(null);
