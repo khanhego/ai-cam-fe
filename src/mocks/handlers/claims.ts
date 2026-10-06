@@ -20,6 +20,7 @@ import {
   mockReconAlerts,
   packSessionOf,
   packStatus,
+  removalKeepUntil,
   toClaimDetail,
   toClaimItem,
   type MockClaim,
@@ -308,24 +309,41 @@ export const claimsHandlers = [
     if (snapshotIds.some((id) => !sessions.some((s) => s.snapshots?.some((x) => x.id === id))))
       fields.snapshot_ids = "Ảnh không thuộc kiện.";
     const keep = new Set([...sessionIds, ...snapshotIds]);
-    const removedAuto = c.evidence.filter((e) => e.auto && !keep.has(e.ref_id));
+    // item 03 (BR-38, 02 §6.2 API-134): bỏ **mọi** bằng chứng cần `note` 5–500; bỏ mềm vào `removed_evidence`.
+    const removedRefs = c.evidence.filter((e) => !keep.has(e.ref_id));
     const note = body.note?.trim() ?? "";
-    if (removedAuto.length && (note.length < 5 || note.length > 500))
+    if (removedRefs.length && (note.length < 5 || note.length > 500))
       fields.note = "Nhập lý do bỏ bằng chứng (5–500 ký tự).";
     if (Object.keys(fields).length) return invalid(fields);
     const at = new Date().toISOString();
     const kept = c.evidence.filter((e) => keep.has(e.ref_id));
+    const restoring = (c.removed ?? []).filter((r) => keep.has(r.ref_id));
     const added = [...keep]
       .filter((id) => !kept.some((e) => e.ref_id === id))
-      .map((id, i) => ({
-        id: `ev-${c.id}-${Date.now()}-${i}`,
-        kind: sessionIds.includes(id) ? ("SESSION" as const) : ("SNAPSHOT" as const),
-        ref_id: id,
-        auto: false,
-        added_at: at,
-      }));
+      .map((id, i) => {
+        // Thêm lại bằng chứng đã bỏ = khôi phục (giữ `auto` cũ).
+        const back = restoring.find((r) => r.ref_id === id);
+        return {
+          id: back?.id ?? `ev-${c.id}-${Date.now()}-${i}`,
+          kind: sessionIds.includes(id) ? ("SESSION" as const) : ("SNAPSHOT" as const),
+          ref_id: id,
+          auto: back?.auto ?? false,
+          added_at: back?.added_at ?? at,
+        };
+      });
     const removed = c.evidence.length - kept.length;
     if (!removed && !added.length) return json(claimOut(c, user));
+    const by = { id: user.id, display_name: user.display_name };
+    c.removed = [
+      ...(c.removed ?? []).filter((r) => !keep.has(r.ref_id)),
+      ...removedRefs.map((e) => ({
+        ...e,
+        removed_at: at,
+        removed_by: by,
+        reason: note,
+        keep_until: removalKeepUntil(e),
+      })),
+    ];
     c.evidence = [...kept, ...added];
     // Như BE `service.set_evidence` (DEC-312 b).
     const parts = [added.length ? `thêm ${added.length}` : "", removed ? `bỏ ${removed}` : ""].filter(

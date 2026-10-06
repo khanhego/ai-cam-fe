@@ -9,7 +9,7 @@ import type { PackageDetail, Protection } from "@/lib/api/packages";
 import type { ReconAlert, ReconRule, ReconSeverity } from "@/lib/api/recon";
 import type { ReturnDetail, ReturnListItem } from "@/lib/api/returns";
 import type { StationItem } from "@/lib/api/station";
-import type { ReturnStatusGroup, WarehouseStatus } from "@/shared/labels";
+import type { ReturnStatusGroup, SessionStatus, WarehouseStatus } from "@/shared/labels";
 import type {
   Conclusion,
   Inspection,
@@ -19,7 +19,7 @@ import type {
   Snapshot,
 } from "@/shared/returns/types";
 
-import { daysBetween, vnDay } from "@/shared/format";
+import { daysBetween, fmtShort, vnDay } from "@/shared/format";
 
 import {
   mockPackages,
@@ -102,7 +102,7 @@ export type MockClaim = {
   return_case_id: string | null;
   owner: { id: string; display_name: string } | null;
   deadline_at: string | null;
-  deadline_source: "PLATFORM" | "DEFAULT" | "MANUAL";
+  deadline_source: "PLATFORM" | "DEFAULT" | "MANUAL" | "DEFAULT_PLATFORM_PASSED";
   platform_claim_ref: string | null;
   recovered_amount: number | null;
   close_reason: string | null;
@@ -112,8 +112,22 @@ export type MockClaim = {
   submitted_at?: string | null;
   result_at?: string | null;
   /** Bằng chứng: phiên / ảnh (auto = tự chọn). */
-  evidence: { id: string; kind: "SESSION" | "SNAPSHOT"; ref_id: string; auto: boolean; added_at: string }[];
+  evidence: MockEvidenceRef[];
   notes: MockClaimNote[];
+  /** item 03 (BR-38): bằng chứng đã bỏ mềm (API-132 `removed_evidence`); thêm lại = khôi phục. */
+  removed?: (MockEvidenceRef & {
+    removed_at: string;
+    removed_by: { id: string; display_name: string } | null;
+    reason: string;
+    keep_until: string;
+  })[];
+};
+export type MockEvidenceRef = {
+  id: string;
+  kind: "SESSION" | "SNAPSHOT";
+  ref_id: string;
+  auto: boolean;
+  added_at: string;
 };
 
 /** item 03: cài đặt mock dùng khi tính `response_due_at` (API-80 `refund_only_default_hours` — handler settings ghi). */
@@ -459,6 +473,7 @@ export function resetMockReturns() {
     if (rc.conclusion !== "OK") createAutoClaim(rc, pkg, session, rc.conclusion!, 124 - mockClaims.length);
   }
   seedClaims(now);
+  seedPhase3Claim();
   seedRecon(now);
   mockEvidencePacks.clear();
   reconState.running = false;
@@ -817,6 +832,148 @@ function manualClaim(
     notes: [],
     ...patch,
   };
+}
+
+/**
+ * item 03 (T-260 / T-264, 04 TC-08.40 / 08.42 / 08.52 / 08.66): kiện `SPXTST0000060`, hôm qua — A bỏ dở 08:51 (phiên mở
+ * hoàn trước, phiên chính), C hủy "Quét nhầm" 09:00 (bị loại), R quản lý hủy trước Phase 3 09:05 ("Cần soát"), M bỏ dở
+ * 09:10 đã đánh dấu quét nhầm, B "Hộp rỗng" 10:15 → hồ sơ KN-000141 (hạn sàn đã qua lúc tạo — BR-42).
+ */
+export const P3_CLAIM_ID = "cl-000141";
+function seedPhase3Claim() {
+  const pkg = findPackage("pkg-0000060");
+  if (!pkg) return;
+  const day = startOfVnDay(1);
+  const rc = caseSeed(60, [pkg.id], {
+    kind: "BUYER_RETURN",
+    status: "RECEIVED_ISSUE",
+    platform_return_sn: "2410RTTST060",
+    platform_status: "ACCEPTED",
+    return_tracking_number: "SPXRTTST000060",
+    reason: "EMPTY_BOX",
+    reason_label: "Hộp rỗng",
+    conclusion: "EMPTY_BOX",
+    received_at: iso(day + (10 * 60 + 18) * 60_000),
+    seller_due_at: iso(day + (9 * 60 + 30) * 60_000),
+  });
+  mockReturnCases.push(rc);
+  const mk = (
+    key: string,
+    minute: number,
+    status: SessionStatus,
+    extra: Partial<MockSession> = {},
+  ): MockSession => {
+    const start = day + minute * 60_000;
+    const id = `ses-p3-${key}`;
+    return {
+      id,
+      package_id: pkg.id,
+      station_id: "st-1",
+      station_name: "TST Station 01",
+      status,
+      started_at: iso(start),
+      ended_at: iso(start + 95_000),
+      duration_s: 95,
+      flags: [],
+      cancel_reason: null,
+      note: null,
+      type: "RETURN",
+      operator_name: "Lan",
+      return_case_id: rc.id,
+      inspection: null,
+      snapshots: [],
+      clips: (["CAM1", "CAM2"] as const).map((role, i) => ({
+        id: `clip-p3-${key}-${i + 1}`,
+        session_id: id,
+        camera_role: role,
+        status: "READY" as const,
+        sha256: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+        duration_s: 95,
+        held: false,
+        retention_until: null,
+        deleted_at: null,
+        flags: [],
+      })),
+      ...extra,
+    };
+  };
+  const a = mk("a", 8 * 60 + 51, "ABANDONED");
+  const c = mk("c", 9 * 60, "CANCELLED", { cancel_reason: "WRONG_SCAN", duration_s: 25 });
+  const r = mk("r", 9 * 60 + 5, "CANCELLED", {
+    cancel_reason: "SUPERVISOR",
+    review: { review_needed: true },
+  });
+  const m = mk("m", 9 * 60 + 10, "ABANDONED", {
+    review: {
+      wrong_scan: {
+        at: iso(day + 11 * 3600_000),
+        by: USERS.sup,
+        code: "WRONG_SCAN",
+        note: "Video là kiện bên cạnh",
+      },
+    },
+  });
+  const b = mk("b", 10 * 60 + 15, "COMPLETED", {
+    inspection: {
+      conclusion: "EMPTY_BOX",
+      note: "Hộp còn nguyên băng keo, bên trong trống",
+      saved_at: iso(day + (10 * 60 + 17) * 60_000),
+      lines_mode: "FULL",
+      lines: [],
+      corrections: [],
+    },
+    snapshots: [
+      mockSnapshot("snap-p3-b-1", "MANUAL", iso(day + (10 * 60 + 16) * 60_000)),
+      mockSnapshot("snap-p3-b-2", "MANUAL", iso(day + (10 * 60 + 17) * 60_000)),
+    ],
+  });
+  for (const x of [a, c, r, m, b]) recordReturnSession(pkg, x);
+  const at = b.ended_at!;
+  const ref = (kind: "SESSION" | "SNAPSHOT", id: string): MockEvidenceRef => ({
+    id: `ev-p3-${id}`,
+    kind,
+    ref_id: id,
+    auto: true,
+    added_at: at,
+  });
+  const pack = packSessionOf(pkg);
+  mockClaims.push({
+    id: P3_CLAIM_ID,
+    code: claimCode(141),
+    type: "EMPTY_BOX",
+    counterparty: "PLATFORM",
+    status: "NEW",
+    source: "AUTO_RETURN",
+    version: 1,
+    package_id: pkg.id,
+    return_case_id: rc.id,
+    owner: null,
+    deadline_at: iso(Date.parse(at) + 7 * DAY),
+    deadline_source: "DEFAULT_PLATFORM_PASSED",
+    platform_claim_ref: null,
+    recovered_amount: null,
+    close_reason: null,
+    created_at: at,
+    closed_at: null,
+    evidence: [
+      ...(pack ? [ref("SESSION", pack.id)] : []),
+      ref("SESSION", a.id),
+      ref("SESSION", r.id),
+      ref("SESSION", b.id),
+      ...(b.snapshots ?? []).map((x) => ref("SNAPSHOT", x.id)),
+    ],
+    notes: [
+      { id: "n-141-0", kind: "SYSTEM", text: "Tạo tự động từ phiên mở hoàn (Hộp rỗng)", author: null, at },
+      {
+        id: "n-141-1",
+        kind: "SYSTEM",
+        text: `Hạn sàn (${fmtShort(rc.seller_due_at)}) đã qua khi tạo hồ sơ — dùng hạn mặc định. Kiểm hạn thật trên sàn.`,
+        author: null,
+        at,
+      },
+    ],
+    removed: [],
+  });
 }
 
 /** 02b-admin §12: đủ trạng thái, 1 `LEGACY_HOLD`, 1 sắp hết hạn (KN-000124 từ phiên hoàn), 1 quá hạn. */
@@ -1206,6 +1363,13 @@ export function findSnapshotAnywhere(id: string) {
 
 /** `removal_keep_until` (02 §6.2 API-132): max(cuối clip / ảnh, bây giờ) + thời gian giữ clip. */
 const keepUntil = (endMs: number) => iso(Math.max(endMs, Date.now()) + RETENTION_CLIP_DAYS * DAY);
+/** Ngày giữ của một bằng chứng khi bị bỏ (BR-38 — như `removal_keep_until` của API-132). */
+export function removalKeepUntil(e: MockEvidenceRef): string {
+  if (e.kind === "SNAPSHOT")
+    return keepUntil(Date.parse(findSnapshotAnywhere(e.ref_id)?.taken_at ?? "") || 0);
+  const s = findSessionAnywhere(e.ref_id)?.session;
+  return keepUntil(Date.parse(s?.ended_at ?? s?.started_at ?? "") || 0);
+}
 
 const EXCLUDING = ["WRONG_SCAN", "NOT_A_RETURN"];
 
@@ -1246,9 +1410,15 @@ function primarySessionId(sessions: MockSession[]): string | null {
 }
 
 let primaryCache: string | null = null;
+/** Phiên mở hoàn trước (BR-39): RETURN hủy / bỏ dở, không bị loại, không "Cần soát". */
+const isPriorReturn = (s: MockSession) =>
+  s.type === "RETURN" &&
+  (s.status === "CANCELLED" || s.status === "ABANDONED") &&
+  !sessionReview(s).evidence_exclusion &&
+  !sessionReview(s).review_needed;
 function evidenceExtras(s: MockSession) {
   return {
-    prior_return: false,
+    prior_return: isPriorReturn(s),
     primary: s.id === primaryCache,
     removal_keep_until: keepUntil(Date.parse(s.ended_at ?? s.started_at) || Date.now()),
   };
@@ -1263,7 +1433,7 @@ export function toClaimDetail(c: MockClaim): ClaimDetail {
       .map((e) => findSessionAnywhere(e.ref_id)?.session)
       .filter((x): x is MockSession => Boolean(x)),
   );
-  const evidence: ClaimEvidence[] = c.evidence.flatMap((e): ClaimEvidence[] => {
+  const toEvidence = (e: MockEvidenceRef): ClaimEvidence[] => {
     if (e.kind === "SNAPSHOT") {
       const shot = findSnapshotAnywhere(e.ref_id);
       if (!shot) return [];
@@ -1313,7 +1483,14 @@ export function toClaimDetail(c: MockClaim): ClaimDetail {
         },
       },
     ];
-  });
+  };
+  const evidence = c.evidence.flatMap(toEvidence);
+  const removedEvidence: ClaimDetail["removed_evidence"] = (c.removed ?? []).flatMap((r) =>
+    toEvidence(r).map((ev) => ({
+      ...ev,
+      removed: { at: r.removed_at, by: r.removed_by, reason: r.reason, keep_until: r.keep_until },
+    })),
+  );
   const used = new Set(c.evidence.map((e) => e.ref_id));
   const caseSessions = rc
     ? rc.package_ids.flatMap((id) => findPackage(id)?.sessions ?? [])
@@ -1356,10 +1533,21 @@ export function toClaimDetail(c: MockClaim): ClaimDetail {
     missing,
     notes: [...c.notes].sort((a, b) => a.at.localeCompare(b.at)),
     allowed_transitions: CLAIM_TRANSITIONS[c.status],
-    // item 03 (02 §6.2 API-132) — phần BR-38 / BR-39 đầy đủ ở T-260 / T-264 (mock API-134 / 189).
+    // item 03 (02 §6.2 API-132) — BR-38 / BR-39 (T-260: phiên trước, bỏ mềm; T-264: API-189).
     submitted_at: c.submitted_at ?? null,
     result_at: c.result_at ?? null,
-    prior_return_sessions: [],
+    prior_return_sessions: c.evidence.flatMap((e) => {
+      const found = e.kind === "SESSION" ? findSessionAnywhere(e.ref_id) : undefined;
+      return found && isPriorReturn(found.session)
+        ? [
+            {
+              session_id: found.session.id,
+              status: found.session.status,
+              started_at: found.session.started_at,
+            },
+          ]
+        : [];
+    }),
     excluded_return_sessions: caseSessions
       .filter((s) => s.type === "RETURN" && s.clips.some((cl) => cl.status !== "DELETED"))
       .flatMap((s) => {
@@ -1387,7 +1575,7 @@ export function toClaimDetail(c: MockClaim): ClaimDetail {
         started_at: s.started_at,
         in_evidence: used.has(s.id),
       })),
-    removed_evidence: [],
+    removed_evidence: removedEvidence,
     // `shares[]` theo người xem — handler claims ghép (`sharesOfClaim`).
     shares: [],
     shares_active_count: 0,

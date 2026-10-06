@@ -370,6 +370,8 @@ function phase3Seeds(): PackageSeed[] {
       // FR-03.16: phiên PACK có người đóng gói (D4 "Người đóng gói: Minh").
       sessions: [{ ...packed(1, 300), operator: "Minh" }],
     },
+    // item 03 T-260 / T-264 (04 TC-08.40..08.52): kiện có phiên mở hoàn trước / quét nhầm / Cần soát (returnsDb).
+    { n: "0000060", status: "RETURN_RECEIVED_ISSUE", platform: "TO_RETURN", sessions: [packed(3, 40)] },
     // TC-05.93 (EX-P14, BR-32): mã có ở 2 shop → kiện chưa xác minh, cờ AMBIGUOUS_SHOP, dòng thời gian liệt kê shop.
     {
       n: "",

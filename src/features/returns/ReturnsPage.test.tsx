@@ -75,7 +75,7 @@ test("tab đổi URL; Quá hạn có số ngày chờ + chip cảnh báo; Đã n
     ).toContain("Kết luận"),
   );
   expect(within(table).queryByText("Chờ")).not.toBeInTheDocument();
-  const empty = within(table).getByText("Hộp rỗng").closest("tr")!;
+  const empty = within(table).getAllByText("Hộp rỗng")[0]!.closest("tr")!;
   expect(within(empty).getByRole("link", { name: /^KN-\d{6}$/ })).toHaveAttribute(
     "href",
     expect.stringMatching(/^\/admin\/claims\//),

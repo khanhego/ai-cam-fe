@@ -12,7 +12,7 @@ import {
 } from "@/lib/api/approvals";
 import { isApiError } from "@/lib/api/errors";
 import { APPROVAL_TYPE } from "@/shared/labels";
-import { SESSION_TYPE } from "@/shared/returns/labels";
+import { CONCLUSION_LABEL, SESSION_TYPE } from "@/shared/returns/labels";
 import {
   Alert,
   Button,
@@ -137,6 +137,18 @@ export function ApprovalCard({
           <>
             <dt className="text-on-surface-variant">{COPY.operatorLabel}</dt>
             <dd className="text-on-surface">{item.operator_name}</dd>
+          </>
+        )}
+        {item.return_summary && (
+          <>
+            <dt className="text-on-surface-variant">{COPY.summaryLabel}</dt>
+            <dd className="text-on-surface tabular-nums">
+              {COPY.summary(
+                item.return_summary.conclusion ? CONCLUSION_LABEL[item.return_summary.conclusion] : null,
+                item.return_summary.snapshot_count,
+                Math.max(0, Math.floor((now - Date.parse(item.return_summary.opened_at)) / 60_000)),
+              )}
+            </dd>
           </>
         )}
         {other && (

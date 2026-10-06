@@ -28,6 +28,10 @@ export const COPY = {
   cancelReturnBody: (code: string) => `Phiên mở hoàn ${code} sẽ bị hủy.`,
   cancelConfirm: "Hủy phiên",
   badge: (n: number) => `${n} yêu cầu đang chờ`,
+  // item 03 (01 §10.5 D13, FR-04.14): tóm tắt phiên hoàn trên thẻ "Gọi quản lý".
+  summaryLabel: "Phiên hoàn",
+  summary: (conclusion: string | null, photos: number, minutes: number) =>
+    `${conclusion ? `Đã có kết luận: ${conclusion}` : "Chưa có kết luận"} · ${photos} ảnh · mở ${minutes} phút`,
 };
 
 export const ACTION_LABEL: Record<ApprovalAction, string> = {

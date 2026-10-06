@@ -124,7 +124,12 @@ function DeadlineField({ claim, editable }: { claim: ClaimDetail; editable: bool
   const alert = claimErrorText(save.error);
   return (
     <Row label={D.deadline}>
-      <Deadline at={claim.deadline_at} active={ACTIVE.has(claim.status)} full />
+      <Deadline
+        at={claim.deadline_at}
+        active={ACTIVE.has(claim.status)}
+        full
+        source={claim.deadline_source}
+      />
       {editable && !editing && (
         <Button
           variant="text"

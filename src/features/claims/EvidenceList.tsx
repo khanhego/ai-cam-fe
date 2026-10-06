@@ -8,13 +8,17 @@ import { SESSION_FLAG, SESSION_STATUS, type SessionStatus } from "@/shared/label
 import { ClipPlayer } from "@/shared/media/ClipPlayer";
 import { SnapshotStrip } from "@/shared/media/SnapshotStrip";
 import { SESSION_TYPE } from "@/shared/returns/labels";
-import { Alert, Button, Dialog, EmptyState, Icon, IconButton, StatusChip, TextAreaField } from "@/shared/ui";
+import { Alert, Button, EmptyState, Icon, IconButton, StatusChip } from "@/shared/ui";
 
 import { COPY } from "./copy";
+import { evidenceLabel, hasStatusChip, sessionChips, type SessionEvidence } from "./evidenceChips";
+import { PriorReturnAlert } from "./PriorReturnAlert";
+import { RemoveEvidenceDialog } from "./RemoveEvidenceDialog";
+import { RemovedEvidenceList } from "./RemovedEvidenceList";
 import { claimErrorText, useClaimMutation } from "./useClaimMutation";
 
 const E = COPY.evidence;
-type SessionEvidence = Extract<ClaimEvidence, { kind: "SESSION" }>;
+type SnapshotEvidence = Extract<ClaimEvidence, { kind: "SNAPSHOT" }>;
 const WARN_FLAGS = new Set([
   "VIDEO_INCOMPLETE",
   "CAM2_UNVERIFIED",
@@ -63,7 +67,14 @@ function SessionRow({
         {s.operator_name ? ` · ${s.operator_name}` : ""} ·{" "}
         <span className="tabular-nums">{fmtDuration(duration)}</span>
       </span>
-      {statusLabel && s.status !== "COMPLETED" && <StatusChip>{statusLabel}</StatusChip>}
+      {sessionChips(ev).map((c) => (
+        <StatusChip key={c.label} tone={c.tone}>
+          {c.label}
+        </StatusChip>
+      ))}
+      {statusLabel && s.status !== "COMPLETED" && !hasStatusChip(ev) && (
+        <StatusChip>{statusLabel}</StatusChip>
+      )}
       {cam2Ok && (
         <StatusChip tone="success" icon="verified">
           Cam 2 khớp mã
@@ -123,9 +134,8 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
     reloadedFor.current = urlsKey;
     void qc.invalidateQueries({ queryKey: ["claim", claim.id] });
   };
-  const [removing, setRemoving] = useState<SessionEvidence | null>(null);
-  const [note, setNote] = useState("");
-  const [touched, setTouched] = useState(false);
+  const [removing, setRemoving] = useState<ClaimEvidence | null>(null);
+  const snapshotEvidence = claim.evidence.filter((e): e is SnapshotEvidence => e.kind === "SNAPSHOT");
   const current =
     sessions.find((e) => e.session.id === playing) ?? sessions.find((e) => e.session.clips.length > 0);
 
@@ -138,25 +148,32 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
         snapshot_ids: v.snapshotIds,
         note: v.note ?? null,
       }),
-    () => {
-      setRemoving(null);
-      setNote("");
-      setTouched(false);
-    },
+    () => setRemoving(null),
   );
   const ids = sessions.map((e) => e.session.id);
   const snapIds = snapshots.map((s) => s.id);
-  const remove = (ev: SessionEvidence, reason?: string) =>
-    save.mutate({ sessionIds: ids.filter((id) => id !== ev.session.id), snapshotIds: snapIds, note: reason });
+  // Item 03 (BR-38): bỏ **mọi** bằng chứng cần lý do 5–500 → luôn qua `RemoveEvidenceDialog`.
+  const remove = (ev: ClaimEvidence, reason: string) =>
+    save.mutate(
+      ev.kind === "SESSION"
+        ? { sessionIds: ids.filter((id) => id !== ev.session.id), snapshotIds: snapIds, note: reason }
+        : { sessionIds: ids, snapshotIds: snapIds.filter((id) => id !== ev.snapshot.id), note: reason },
+    );
   const add = (id: string) => save.mutate({ sessionIds: [...ids, id], snapshotIds: snapIds });
-  const noteText = note.trim();
-  const noteError = noteText.length < 5 || noteText.length > 500 ? E.removeRule : undefined;
+  /** "Thêm lại" bằng chứng đã bỏ = gửi lại id (API-134 khôi phục). */
+  const restore = (ev: ClaimEvidence) =>
+    save.mutate(
+      ev.kind === "SESSION"
+        ? { sessionIds: [...ids, ev.session.id], snapshotIds: snapIds }
+        : { sessionIds: ids, snapshotIds: [...snapIds, ev.snapshot.id] },
+    );
   const fields =
     isApiError(save.error) && save.error.code === "VALIDATION_ERROR" ? save.error.fieldErrors : {};
   const alert = claimErrorText(save.error);
 
   return (
     <div className="flex flex-col gap-3">
+      <PriorReturnAlert claim={claim} editable={editable} busy={save.isPending} onAdd={add} />
       {claim.missing.length > 0 && (
         <ul className="flex flex-wrap gap-2">
           {claim.missing.map((m) => (
@@ -180,7 +197,7 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
               editable={editable}
               busy={save.isPending}
               onPlay={() => setPlaying(ev.session.id)}
-              onRemove={() => (ev.auto ? setRemoving(ev) : remove(ev))}
+              onRemove={() => setRemoving(ev)}
             />
           ))}
         </ul>
@@ -191,6 +208,27 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
           snapshots={snapshots}
           onExpired={onSnapshotExpired}
         />
+      )}
+      {editable && snapshotEvidence.length > 0 && (
+        <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label={E.photos(snapshotEvidence.length)}>
+          {snapshotEvidence.map((ev) => {
+            const label = evidenceLabel(ev);
+            return (
+              <li key={ev.id} className="inline-flex items-center gap-1 text-body-sm text-on-surface-variant">
+                {label}
+                <Button
+                  variant="text-danger"
+                  size="sm"
+                  disabled={save.isPending}
+                  aria-label={`${E.remove} ${label}`}
+                  onClick={() => setRemoving(ev)}
+                >
+                  {E.remove}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
       )}
       {claim.other_sessions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-body-md text-on-surface">
@@ -223,37 +261,23 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
           <ClipPlayer key={current.session.id} clips={current.session.clips} sideBySide />
         </section>
       )}
+      <RemovedEvidenceList
+        items={claim.removed_evidence}
+        editable={editable}
+        busy={save.isPending}
+        onRestore={restore}
+      />
       {removing && (
-        <Dialog
-          open
-          title={E.removeTitle}
+        <RemoveEvidenceDialog
+          label={evidenceLabel(removing)}
+          kind={removing.kind}
+          keepUntil={removing.removal_keep_until}
+          busy={save.isPending}
+          serverError={alert}
+          fieldError={fields.note}
+          onConfirm={(reason) => remove(removing, reason)}
           onClose={() => setRemoving(null)}
-          actions={
-            <Button
-              variant="danger"
-              disabled={save.isPending}
-              onClick={() => {
-                setTouched(true);
-                if (!noteError) remove(removing, noteText);
-              }}
-            >
-              {E.removeConfirm}
-            </Button>
-          }
-        >
-          <p className="mb-3">
-            {sessionLabel(removing.session)} — {E.removeHint}
-          </p>
-          <TextAreaField
-            name="evidence-note"
-            label={E.removeTitle}
-            rows={2}
-            value={note}
-            error={(touched ? noteError : undefined) ?? fields.note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-          {alert && <Alert kind="error">{alert}</Alert>}
-        </Dialog>
+        />
       )}
     </div>
   );

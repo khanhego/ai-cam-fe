@@ -248,8 +248,13 @@ test("TC-P2.07 / TC-P2.08: D15 API-120 sắp xếp mức + summary; API-121 xử
 test("TC-P2.09 / D16: API-130 lọc + status_counts; STATION 403", async () => {
   await as("tst_cskh");
   const all = await claimsApi.list({});
-  expect(all.status_counts).toMatchObject({ NEW: 3, SUBMITTED: 1, WAITING: 1, WON: 1, LOST: 1, CLOSED: 1 });
-  expect((await claimsApi.list({ status: "NEW" })).items.map((c) => c.status)).toEqual(["NEW", "NEW", "NEW"]);
+  expect(all.status_counts).toMatchObject({ NEW: 4, SUBMITTED: 1, WAITING: 1, WON: 1, LOST: 1, CLOSED: 1 });
+  expect((await claimsApi.list({ status: "NEW" })).items.map((c) => c.status)).toEqual([
+    "NEW",
+    "NEW",
+    "NEW",
+    "NEW",
+  ]);
   expect((await claimsApi.list({ due: "soon" })).items.map((c) => c.code)).toContain("KN-000124");
   expect((await claimsApi.list({ due: "overdue" })).items.map((c) => c.code)).toEqual(["KN-000121"]);
   expect((await claimsApi.list({ owner: "me" })).items.every((c) => c.owner?.display_name === "Lan")).toBe(
@@ -477,7 +482,7 @@ test("FR-09.01: API-32 counts + attention mới (D2 hiển thị từ T-160)", a
   expect(d.counts).toMatchObject({
     returns_missing: 1,
     recon_open: { HIGH: 3, MEDIUM: 2, LOW: 2 },
-    claims_open: 7,
+    claims_open: 8,
   });
   expect(d.counts.claims_due_soon).toBeGreaterThanOrEqual(1);
   expect(d.attention.map((a) => a.kind)).toEqual(

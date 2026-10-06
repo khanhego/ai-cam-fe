@@ -127,6 +127,32 @@ export const COPY = {
     removeConfirm: "Bỏ bằng chứng",
     saved: "Đã cập nhật bằng chứng.",
     player: "Clip bằng chứng",
+    // ---- item 03 (01 §10.5 D17 — BR-38, BR-39) ----
+    primary: "Phiên chính",
+    prior: (status: string) => `Phiên mở hoàn trước · ${status === "ABANDONED" ? "Bỏ dở" : "Đã hủy"}`,
+    priorAlert: (n: number, list: string, primary: boolean) =>
+      `Kiện có ${n} phiên mở hoàn trước (${list}) — đã đưa vào bằng chứng${primary ? ", là phiên chính" : ""}.`,
+    priorItem: (status: string, at: string) => `${status === "ABANDONED" ? "bỏ dở" : "đã hủy"} ${at}`,
+    excludedAlert: (n: number, times: string) =>
+      `Kiện có ${n} phiên mở hoàn bị loại vì quét nhầm (${times}) — không đưa vào bằng chứng. Video vẫn được giữ; thêm tay nếu cần.`,
+    addToEvidence: "Thêm vào bằng chứng",
+    addToEvidenceAt: (at: string) => `Thêm vào bằng chứng phiên ${at}`,
+    snapshot: (at: string) => `Ảnh ${at}`,
+    removeDialogTitle: "Bỏ bằng chứng?",
+    removeReason: "Lý do",
+    removeReasonHint: "Bắt buộc, 5–500 ký tự",
+    removeReasonRule: "Nhập lý do bỏ bằng chứng (5–500 ký tự).",
+    keepSession: (date: string) =>
+      `Clip và ảnh của phiên này được giữ tới ${date} rồi tự xóa (trừ khi thuộc hồ sơ khác).`,
+    keepSnapshot: (date: string) => `Ảnh này được giữ tới ${date} rồi tự xóa (trừ khi thuộc hồ sơ khác).`,
+    cancel: "Hủy",
+    removedTitle: (n: number) => `Bằng chứng đã bỏ (${n})`,
+    removedBy: (by: string, at: string) => `Bỏ bởi ${by} lúc ${at}`,
+    removedReason: (reason: string) => `Lý do: ${reason}`,
+    removedKeep: (date: string) => `Giữ tới ${date}`,
+    restore: "Thêm lại",
+    restoreFor: (label: string) => `Thêm lại ${label}`,
+    systemUser: "Hệ thống",
   },
   pack: {
     open: "Xuất gói bằng chứng",
