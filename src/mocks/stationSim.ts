@@ -793,22 +793,27 @@ export class StationSim {
     return { snapshot: body };
   }
 
-  /** API-104: khớp chính xác hoặc tiền tố ≥ 6 ký tự; tối đa 10, mới nhất trước. */
+  /**
+   * API-104 như BE (`sessions/return_lookup.py`): kiểm `q` (422) trước chế độ (409); mã kiện / mã đơn / mã chiều về
+   * khớp chính xác hoặc tiền tố ≥ 6 ký tự, mã yêu cầu sàn chỉ khớp chính xác (không tìm theo mã hồ sơ `HH-`); bỏ kiện
+   * tạm; `return_case` = hồ sơ mở, không có → hồ sơ gần nhất (kể cả đã nhận / hủy); tối đa 10, mới nhất trước;
+   * `platform_checked` khi không có kết quả và `q` ≥ 8 ký tự.
+   */
   returnLookup(raw: string): ReturnLookup | SimError {
-    if (this.workMode !== "RETURN") return err(409, "WRONG_WORK_MODE", "Station không ở chế độ nhận hoàn.");
     const q = raw.trim().toUpperCase();
     if (q.length < 4 || q.length > 40)
       return err(422, "VALIDATION_ERROR", "Nhập ít nhất 4 ký tự.", {
         fields: { q: "Nhập ít nhất 4 ký tự." },
       });
+    if (this.workMode !== "RETURN")
+      return err(409, "WRONG_WORK_MODE", "Station không ở chế độ nhận hàng hoàn.");
     const hit = (v: string | null | undefined) => {
       const x = v?.toUpperCase();
       return Boolean(x && (x === q || (q.length >= 6 && x.startsWith(q))));
     };
     const pkgs = new Map<string, MockPackage>();
     for (const rc of mockReturnCases) {
-      if (rc.status === "CANCELLED") continue;
-      if (hit(rc.return_tracking_number) || hit(rc.code) || hit(rc.platform_return_sn))
+      if (hit(rc.return_tracking_number) || rc.platform_return_sn?.toUpperCase() === q)
         rc.package_ids.forEach((id) => {
           const p = findPackage(id);
           if (p) pkgs.set(p.id, p);
@@ -817,10 +822,12 @@ export class StationSim {
     for (const p of packagesOfAll())
       if (hit(p.tracking_number) || hit(p.order?.platform_order_sn)) pkgs.set(p.id, p);
     const items = [...pkgs.values()]
+      .filter((p) => !p.is_placeholder)
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(0, 10)
       .map((p) => {
-        const rc = mockReturnCases.find((c) => c.package_ids.includes(p.id) && c.status !== "CANCELLED");
+        const cases = mockReturnCases.filter((c) => c.package_ids.includes(p.id));
+        const rc = cases.find(isCaseOpen) ?? cases.at(-1);
         const blocked = blockedReason(p) as ScanAlert["code"] | null;
         return {
           package_id: p.id,
@@ -840,7 +847,7 @@ export class StationSim {
           blocked_reason: blocked,
         };
       });
-    return { items, platform_checked: items.length === 0 };
+    return { items, platform_checked: items.length === 0 && q.length >= 8 };
   }
 
   /**

@@ -6,7 +6,13 @@ import { server } from "@/test/server";
 import { useToastStore } from "@/shared/ui";
 
 import { sound } from "./sound";
-import { ALERT_MS, resetStationStore, useStationStore } from "./stationStore";
+import {
+  ALERT_MS,
+  MULTIPLE_TO_LOOKUP_MS,
+  RETURN_ALERT_MS,
+  resetStationStore,
+  useStationStore,
+} from "./stationStore";
 
 const play = vi.spyOn(sound, "play").mockImplementation(() => {});
 const stop = vi.spyOn(sound, "stop").mockImplementation(() => {});
@@ -109,4 +115,67 @@ test("IGNORED khi chờ duyệt → toast", async () => {
 
   expect(useToastStore.getState().items.at(-1)?.message).toBe("Đang chờ duyệt.");
   useToastStore.setState({ items: [] });
+});
+
+describe("item 02 — chế độ nhận hoàn", () => {
+  beforeEach(() => {
+    stationSim.workMode = "RETURN";
+    stationSim.operatorName = "Lan QA";
+  });
+
+  test("R4 tự đóng sau 8 giây (DEC-238), không phải 5 giây", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await store().scan("SPXTST0000010");
+      expect(store().alert?.code).toBe("NOT_SHIPPED");
+      vi.advanceTimersByTime(ALERT_MS);
+      expect(store().alert).not.toBeNull();
+      vi.advanceTimersByTime(RETURN_ALERT_MS - ALERT_MS);
+      expect(store().alert).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("RETURN_NOT_FOUND không tự đóng (có nút); RETURN_MULTIPLE_PACKAGES 1,5 giây → mở R3 với mã đơn", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await store().scan("SPXVN0000000000");
+      vi.advanceTimersByTime(RETURN_ALERT_MS * 2);
+      expect(store().alert?.code).toBe("RETURN_NOT_FOUND");
+
+      await store().scan("2410TST00043");
+      expect(store().alert?.code).toBe("RETURN_MULTIPLE_PACKAGES");
+      vi.advanceTimersByTime(MULTIPLE_TO_LOOKUP_MS);
+      expect(store().alert).toBeNull();
+      expect(store().lookup).toEqual({ query: "2410TST00043" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("OPERATOR_REQUIRED mở R5, không overlay", async () => {
+    stationSim.operatorName = null;
+    await store().scan("SPXRTTST000041");
+    expect(store().alert).toBeNull();
+    expect(store().operatorOpen).toBe(true);
+  });
+
+  test("quét đóng khi nháp chưa lưu: chờ API-102 xong rồi mới API-11 (DEC-235)", async () => {
+    const order: string[] = [];
+    server.events.on("request:end", ({ request }) => {
+      if (request.url.includes("/inspection")) order.push("API-102");
+      if (request.url.endsWith("/station/scan")) order.push("API-11");
+    });
+    await store().scan("SPXRTTST000041");
+    store().editDraft({ conclusion: "OK" });
+    expect(store().draft?.dirty).toBe(true);
+
+    await store().scan("SPXRTTST000041");
+
+    expect(store().state?.state).toBe("READY");
+    expect(store().closedNotice).toMatchObject({ type: "RETURN", conclusion: "OK" });
+    expect(order).toEqual(["API-11", "API-102", "API-11"]);
+    server.events.removeAllListeners();
+  });
 });

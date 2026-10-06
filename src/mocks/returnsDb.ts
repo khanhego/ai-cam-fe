@@ -514,6 +514,9 @@ export function blockedReason(pkg: MockPackage): string | null {
   if (s === "RETURN_INSPECTING") return "RETURN_IN_PROGRESS_ELSEWHERE";
   if (["RETURN_EXPECTED", "RETURN_MISSING", "HANDED_OVER", "DELIVERED"].includes(s)) return null;
   if (s === "NEW" && SHIPPED_PLATFORM.includes(pkg.order?.platform_status ?? "")) return null;
+  // BE (return_scan.py): kiện NEW có hồ sơ hàng hoàn đang mở cũng mở được.
+  if (s === "NEW" && mockReturnCases.some((c) => c.package_ids.includes(pkg.id) && isCaseOpen(c)))
+    return null;
   return "NOT_SHIPPED";
 }
 

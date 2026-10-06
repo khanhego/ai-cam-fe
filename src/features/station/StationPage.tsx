@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { SnapshotStrip } from "@/shared/media/SnapshotStrip";
 import { useScanListener } from "@/shared/scan/useScanListener";
@@ -12,9 +12,11 @@ import { DisconnectedOverlay } from "./DisconnectedOverlay";
 import { MismatchPanel } from "./MismatchPanel";
 import { PackingPanel } from "./PackingPanel";
 import { ReadyPanel } from "./ReadyPanel";
+import { ForceNewDialog } from "./returns/ForceNewDialog";
 import { InspectingPanel } from "./returns/InspectingPanel";
 import { OperatorDialog } from "./returns/OperatorDialog";
 import { PackReferenceCard } from "./returns/PackReferenceCard";
+import { ReturnLookupDialog } from "./returns/ReturnLookupDialog";
 import { ReturnReadyPanel } from "./returns/ReturnReadyPanel";
 import { canSwitchMode, needsOperator, selectPanel } from "./selectPanel";
 import { StationStatusBar } from "./StationStatusBar";
@@ -62,7 +64,11 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
     enabled: !offline && !s.blocked,
     captureInInputs: s.state?.station.work_mode === "RETURN",
   });
-  const [, setLookup] = useState<string | null>(null);
+  // R3 chỉ trên R1: state rời READY (quét mở phiên, phiên khác) → đóng (DEC-325).
+  const ready = s.state?.state === "READY";
+  useEffect(() => {
+    if (!ready) useStationStore.getState().closeLookup();
+  }, [ready]);
   // F2 chụp ảnh chỉ ở R2 (DEC-237): phím chức năng, máy quét HID không gửi — nghe riêng, kể cả khi đang gõ ghi chú.
   const inspecting = !offline && !s.alert && s.state?.state === "INSPECTING";
   useEffect(() => {
@@ -100,6 +106,10 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
         alert={s.alert}
         code={s.lastCode}
         onRequestRepack={(code) => void s.requestApproval("REPACK", code)}
+        onLookup={(code) => s.openLookup(code)}
+        onOpenUnidentified={(code) => void s.openReturnSession({ unidentified_code: code })}
+        onRecordOther={(code) => s.openForceNew(code)}
+        onDismiss={s.dismissAlert}
       />
     );
   else {
@@ -143,7 +153,7 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
           notice={s.notice}
           onDismissNotice={s.dismissNotice}
           closedNotice={closedNotice}
-          onLookup={() => setLookup("")}
+          onLookup={() => s.openLookup("")}
           onSwitchMode={switchable ? () => void s.setWorkMode("PACK") : undefined}
         />
       );
@@ -175,6 +185,24 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
             operatorRequired && canSwitchMode(s.state) ? () => void s.setWorkMode("PACK") : undefined
           }
         />
+      )}
+      {s.state?.station.work_mode === "RETURN" && !offline && !s.blocked && !operatorRequired && (
+        <>
+          <ReturnLookupDialog
+            open={s.lookup !== null && s.state.state === "READY"}
+            initialQuery={s.lookup?.query ?? ""}
+            busy={s.busy}
+            onOpen={(body) => void s.openReturnSession(body)}
+            onClose={s.closeLookup}
+          />
+          <ForceNewDialog
+            code={s.forceNew?.code ?? null}
+            onSubmit={(note) =>
+              s.openReturnSession({ unidentified_code: s.forceNew!.code, force_new: true, note })
+            }
+            onClose={s.closeForceNew}
+          />
+        </>
       )}
     </div>
   );

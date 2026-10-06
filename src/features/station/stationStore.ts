@@ -7,7 +7,9 @@ import {
   type CancelReason,
   type ClosedSession,
   type Outcome,
+  type OpenReturnSessionBody,
   type ScanAlert,
+  type ScanResult,
   type StationServerAlert,
   type StationState,
   type WorkMode,
@@ -37,6 +39,8 @@ export const FLUSH_WAIT_MS = 3000;
 export const CLOSED_NOTICE_MS = 10_000;
 /** Alert vàng "mã không thuộc kiện đang kiểm" 5 giây. */
 export const CODE_DIFFERENT_MS = 5000;
+/** R4 "ĐƠN CÓ NHIỀU KIỆN" hiện 1,5 giây rồi mở R3. */
+export const MULTIPLE_TO_LOOKUP_MS = 1500;
 const RETRIES = 2;
 
 /** Cảnh báo hiện tại chỗ trên R2 (không overlay — 02b-station §8). */
@@ -103,6 +107,21 @@ type StationStore = {
   takeSnapshot: () => Promise<void>;
   /** Ảnh URL ký hết hạn → gọi lại API-10 một lần mỗi phiên (02b-station §4). */
   refreshMedia: () => void;
+  /** R3 đang mở (mã điền sẵn). */
+  lookup: { query: string } | null;
+  openLookup: (query?: string) => void;
+  closeLookup: () => void;
+  /** R4 "Đây là kiện khác — vẫn ghi hình" → Dialog ghi chú (mã đã quét). */
+  forceNew: { code: string } | null;
+  openForceNew: (code: string) => void;
+  closeForceNew: () => void;
+  /**
+   * API-105: mở phiên từ R3 / phiên chưa xác định / kiện khác. Trả lỗi theo field (ghi chú) để Dialog hiện; null = đã
+   * xử lý (mở phiên, cảnh báo, hoặc toast).
+   */
+  openReturnSession: (
+    body: { package_id: string } | { unidentified_code: string; force_new?: boolean; note?: string },
+  ) => Promise<string | null>;
 };
 
 let alertTimer: ReturnType<typeof setTimeout> | undefined;
@@ -194,39 +213,8 @@ export const useStationStore = create<StationStore>((set, get) => ({
       for (;;) {
         try {
           const result = await stationApi.scan(code, clientScanId);
-          get().applyState(result.state);
+          applyResult(result);
           set({ disconnected: false });
-          if (result.outcome === "IGNORED") toast("Đang chờ duyệt.");
-          const alertCode = result.alert?.code;
-          const kind = alertCode === "INSPECTION_REQUIRED" ? "error" : SOUND_BY_OUTCOME[result.outcome];
-          if (kind) sound.play(kind);
-          clearTimeout(alertTimer);
-          if (result.closed_session) {
-            clearTimeout(closedTimer);
-            set({ closedNotice: result.closed_session });
-            closedTimer = setTimeout(() => set({ closedNotice: null }), CLOSED_NOTICE_MS);
-          }
-          // Chưa có người kiểm: mở R5, không overlay (02b-station §8).
-          if (alertCode === "OPERATOR_REQUIRED") {
-            set({ alert: null, operatorOpen: true });
-            break;
-          }
-          // Hai mã hiện tại chỗ R2 (không overlay).
-          if (alertCode === "INSPECTION_REQUIRED") {
-            clearTimeout(inlineTimer);
-            set({ alert: null, inline: { code: "INSPECTION_REQUIRED" } });
-            break;
-          }
-          if (alertCode === "RETURN_CODE_DIFFERENT") {
-            clearTimeout(inlineTimer);
-            const scanned = String(result.alert?.data.code ?? get().lastCode ?? "");
-            set({ alert: null, inline: { code: "RETURN_CODE_DIFFERENT", scanned } });
-            inlineTimer = setTimeout(() => set({ inline: null }), CODE_DIFFERENT_MS);
-            break;
-          }
-          set({ alert: result.alert });
-          const ms = result.state.station.work_mode === "RETURN" ? RETURN_ALERT_MS : ALERT_MS;
-          if (result.alert) alertTimer = setTimeout(() => set({ alert: null }), ms);
           break;
         } catch (e) {
           // Retry với CÙNG client_scan_id: BE trả lại kết quả cũ nếu đã xử lý (DEC-29).
@@ -371,6 +359,55 @@ export const useStationStore = create<StationStore>((set, get) => ({
     }
   },
 
+  lookup: null,
+  openLookup(query = "") {
+    clearTimeout(alertTimer);
+    set({ lookup: { query }, alert: null });
+  },
+  closeLookup() {
+    set({ lookup: null });
+  },
+  forceNew: null,
+  openForceNew(code) {
+    clearTimeout(alertTimer);
+    set({ forceNew: { code }, alert: null });
+  },
+  closeForceNew() {
+    set({ forceNew: null });
+  },
+
+  async openReturnSession(input) {
+    const body = { ...input, client_scan_id: newScanId() } as OpenReturnSessionBody;
+    get().dismissClosedNotice();
+    set({ busy: true });
+    try {
+      const result = await stationApi.openReturnSession(body);
+      set({ lookup: null, forceNew: null });
+      applyResult(result);
+      return null;
+    } catch (e) {
+      const L = COPY.lookup;
+      if (isApiError(e) && e.code === "VALIDATION_ERROR")
+        return e.fieldErrors.note ?? e.fieldErrors.unidentified_code ?? e.message;
+      if (isApiError(e) && e.code === "NOT_FOUND") toast(L.notFound);
+      else if (isApiError(e) && e.code === "FORCE_NEW_NOT_ALLOWED") {
+        toast(COPY.returnAlert.forceNewNotAllowed);
+        set({ forceNew: null });
+      } else if (isApiError(e) && e.code === "SESSION_ACTIVE") {
+        toast(L.sessionActive);
+        set({ lookup: null, forceNew: null });
+        await get().load();
+      } else if (isStale(e)) {
+        set({ lookup: null, forceNew: null });
+        await get().load();
+      } else if (retryable(e)) toast(L.error);
+      else report(e, set);
+      return null;
+    } finally {
+      set({ busy: false });
+    }
+  },
+
   refreshMedia() {
     const id = get().state?.session?.id ?? null;
     if (!id || mediaRefreshedFor === id) return;
@@ -435,6 +472,61 @@ export const useStationStore = create<StationStore>((set, get) => ({
     }
   },
 }));
+
+/**
+ * Áp kết quả API-11 / API-105 (cùng dạng): state, âm, thông báo sau đóng, định tuyến cảnh báo — R5 (OPERATOR_REQUIRED),
+ * tại chỗ R2 (INSPECTION_REQUIRED, RETURN_CODE_DIFFERENT), còn lại overlay S4 / R4 (02b-station §8).
+ */
+function applyResult(result: ScanResult) {
+  const { getState: get, setState: set } = useStationStore;
+  get().applyState(result.state);
+  if (result.outcome === "IGNORED") toast("Đang chờ duyệt.");
+  const alert = result.alert;
+  const kind = alert?.code === "INSPECTION_REQUIRED" ? "error" : SOUND_BY_OUTCOME[result.outcome];
+  if (kind) sound.play(kind);
+  clearTimeout(alertTimer);
+  if (result.closed_session) {
+    clearTimeout(closedTimer);
+    set({ closedNotice: result.closed_session });
+    closedTimer = setTimeout(() => set({ closedNotice: null }), CLOSED_NOTICE_MS);
+  }
+  if (!alert) {
+    set({ alert: null });
+    return;
+  }
+  switch (alert.code) {
+    case "OPERATOR_REQUIRED":
+      set({ alert: null, operatorOpen: true });
+      return;
+    case "INSPECTION_REQUIRED":
+      clearTimeout(inlineTimer);
+      set({ alert: null, inline: { code: "INSPECTION_REQUIRED" } });
+      return;
+    case "RETURN_CODE_DIFFERENT": {
+      clearTimeout(inlineTimer);
+      const scanned = String(alert.data.code ?? get().lastCode ?? "");
+      set({ alert: null, inline: { code: "RETURN_CODE_DIFFERENT", scanned } });
+      inlineTimer = setTimeout(() => set({ inline: null }), CODE_DIFFERENT_MS);
+      return;
+    }
+    case "RETURN_MULTIPLE_PACKAGES": {
+      // R4 1,5 giây rồi tự mở R3 với mã đơn (02b-station §8).
+      set({ alert, lookup: null });
+      const query = String(alert.data.platform_order_sn ?? get().lastCode ?? "");
+      alertTimer = setTimeout(() => set({ alert: null, lookup: { query } }), MULTIPLE_TO_LOOKUP_MS);
+      return;
+    }
+    case "RETURN_NOT_FOUND":
+      // Có 2 nút hành động → không tự đóng (01 §10.4 R4).
+      set({ alert, lookup: null });
+      return;
+    default: {
+      set({ alert, lookup: null });
+      const ms = result.state.station.work_mode === "RETURN" ? RETURN_ALERT_MS : ALERT_MS;
+      alertTimer = setTimeout(() => set({ alert: null }), ms);
+    }
+  }
+}
 
 /** Gửi API-102 một bản nháp (tự thử lại 2 lần khi lỗi mạng / 5xx — 02b-station §6). */
 async function saveDraft(d: InspectionDraft): Promise<void> {
@@ -506,5 +598,7 @@ export function resetStationStore() {
     closedNotice: null,
     capturing: false,
     snapshotLimit: false,
+    lookup: null,
+    forceNew: null,
   });
 }
