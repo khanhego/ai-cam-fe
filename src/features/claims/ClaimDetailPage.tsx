@@ -23,6 +23,7 @@ import { ClaimStatusMenu, ClaimSteps } from "./ClaimStatusStepper";
 import { COPY } from "./copy";
 import { Deadline } from "./Deadline";
 import { EvidenceList } from "./EvidenceList";
+import { EvidencePackDialog } from "./EvidencePackDialog";
 import { claimErrorText, ownClaimVersions, useClaimMutation } from "./useClaimMutation";
 
 const D = COPY.detail;
@@ -220,6 +221,9 @@ export default function ClaimDetailPage() {
   const navigate = useNavigate();
   const query = useQuery({ queryKey: ["claim", id], queryFn: () => claimsApi.get(id) });
   const claim = query.data;
+  const [packOpen, setPackOpen] = useState(false);
+  // Gói đang tạo của hồ sơ này — giữ khi đóng / mở lại Dialog (theo dõi tiến độ tiếp).
+  const [pack, setPack] = useState<{ claimId: string; packId: string } | null>(null);
 
   // Bản mới do người khác (WS `claim.updated` → invalidate) → báo một lần.
   const seen = useRef<{ id: string; version: number } | null>(null);
@@ -296,6 +300,10 @@ export default function ClaimDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <ClaimStatusMenu claim={c} />
+          {/* Hồ sơ đã Đóng vẫn xuất được (01 §10.5 D17). */}
+          <Button icon="folder_zip" onClick={() => setPackOpen(true)}>
+            {COPY.pack.open}
+          </Button>
         </div>
       </div>
 
@@ -344,6 +352,14 @@ export default function ClaimDetailPage() {
           <ClaimNotes claim={c} />
         </section>
       </div>
+      {packOpen && (
+        <EvidencePackDialog
+          claim={c}
+          packId={pack?.claimId === c.id ? pack.packId : null}
+          onPackId={(packId) => setPack(packId ? { claimId: c.id, packId } : null)}
+          onClose={() => setPackOpen(false)}
+        />
+      )}
       <p className="mt-4">
         <Link to="/admin/claims" className="text-label-lg text-primary hover:underline">
           {D.back}

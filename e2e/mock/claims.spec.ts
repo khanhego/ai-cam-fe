@@ -1,4 +1,4 @@
-/** UC-04 trên MSW (02b-admin §13 E2E mock `claims.spec.ts`): D16 → D17 → nhận phụ trách → đổi trạng thái; D4 → tạo hồ sơ → D17. */
+/** UC-04 / UC-12 trên MSW (02b-admin §13 E2E mock `claims.spec.ts`): D16 → D17 → nhận phụ trách → đổi trạng thái → gói zip; D4 → tạo hồ sơ → D17. */
 import { expect, test, type Page } from "@playwright/test";
 
 async function loginDashboard(page: Page, username = "tst_cskh") {
@@ -29,6 +29,18 @@ test("UC-04: drawer → D16 tab Mới → KN-000124 → D17 → Nhận phụ tr�
   await dialog.getByRole("button", { name: "Xác nhận" }).click();
   await expect(steps.locator('[aria-current="step"]')).toContainText("Đã gửi");
   await expect(page.getByRole("list", { name: "Ghi chú" }).getByText("Mới → Đã gửi.")).toBeVisible();
+
+  // UC-12 / TC-08.16 (UI): gói bằng chứng — tiến độ → tải zip.
+  await page.getByRole("button", { name: "Xuất gói bằng chứng" }).click();
+  const pack = page.getByRole("dialog", { name: "Xuất gói bằng chứng" });
+  await expect(pack.getByText(/^Gói gồm: clip gốc, video ghép có chữ cho 2 phiên chính/)).toBeVisible();
+  await pack.getByRole("button", { name: "Tạo gói" }).click();
+  await expect(pack.getByRole("progressbar")).toBeVisible();
+  const zip = pack.getByRole("button", { name: "Tải gói bằng chứng (.zip)" });
+  await expect(zip).toBeVisible({ timeout: 15_000 });
+  const download = page.waitForEvent("download");
+  await zip.click();
+  expect((await download).suggestedFilename()).toBe("KN-000124.zip");
 });
 
 test("FR-08.01: D4 → Tạo hồ sơ khiếu nại → D17 hồ sơ mới có bằng chứng tự chọn", async ({ page }) => {
