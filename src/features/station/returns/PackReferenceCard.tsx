@@ -28,7 +28,8 @@ export function PackReferenceCard({
     >
       <h2 className="text-title-lg">
         {C.packRef}
-        {reference?.ended_at && <span className="ml-2 tabular-nums">{fmtShort(reference.ended_at)}</span>}
+        {reference?.ended_at && " "}
+        {reference?.ended_at && <span className="ml-1 tabular-nums">{fmtShort(reference.ended_at)}</span>}
       </h2>
       {reference ? (
         <>

@@ -45,6 +45,17 @@ test("TC-04.40: F2 3 lần → 3 ảnh trong dải; bấm ảnh → Dialog ảnh
   expect(await screen.findByRole("dialog", { name: /^Ảnh 2 · / })).toBeInTheDocument();
 });
 
+test("F2 bấm liền 3 lần khi ảnh trước chưa xong → xếp hàng, đủ 3 ảnh", async () => {
+  await openR2();
+
+  f2();
+  f2();
+  f2();
+
+  expect(await screen.findByRole("button", { name: "Ảnh 3" })).toBeInTheDocument();
+  expect(stationSim.session?.snapshots).toHaveLength(3);
+});
+
 test("F2 khi đang gõ ghi chú vẫn chụp, không gõ ký tự vào ô", async () => {
   await openR2();
   const note = screen.getByLabelText("Ghi chú");

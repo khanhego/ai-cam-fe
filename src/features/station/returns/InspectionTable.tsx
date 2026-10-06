@@ -77,7 +77,7 @@ export function InspectionTable({
   return (
     <div className="flex min-h-0 flex-col gap-3">
       {readOnly && <p className="text-title-lg">{C.referenceOnly(packageCount)}</p>}
-      <div className="max-h-[28rem] overflow-y-auto rounded-md bg-surface-container-lowest text-on-surface">
+      <div className="rounded-md bg-surface-container-lowest text-on-surface">
         <table className="w-full text-title-lg">
           <thead className="sticky top-0 bg-surface-container-lowest text-left text-title-md text-on-surface-variant">
             <tr>

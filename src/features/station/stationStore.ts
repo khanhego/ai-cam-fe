@@ -131,6 +131,8 @@ let closedTimer: ReturnType<typeof setTimeout> | undefined;
 let saving: Promise<void> | null = null;
 /** Phiên đã gọi lại API-10 vì ảnh hết hạn. */
 let mediaRefreshedFor: string | null = null;
+/** F2 bấm khi API-103 đang chạy: xếp hàng, chụp lần lượt (không mất lần bấm — TC-04.40). */
+let pendingShots = 0;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -341,7 +343,11 @@ export const useStationStore = create<StationStore>((set, get) => ({
 
   async takeSnapshot() {
     const session = get().state?.session;
-    if (!session || session.type !== "RETURN" || get().capturing || get().snapshotLimit) return;
+    if (!session || session.type !== "RETURN" || get().snapshotLimit) return;
+    if (get().capturing) {
+      pendingShots += 1;
+      return;
+    }
     set({ capturing: true });
     try {
       const { snapshot } = await stationApi.takeSnapshot(session.id);
@@ -358,6 +364,11 @@ export const useStationStore = create<StationStore>((set, get) => ({
       else report(e, set);
     } finally {
       set({ capturing: false });
+      if (pendingShots > 0) {
+        pendingShots -= 1;
+        if (get().snapshotLimit || get().state?.session?.id !== session.id) pendingShots = 0;
+        else void get().takeSnapshot();
+      }
     }
   },
 
@@ -582,6 +593,7 @@ export function resetStationStore() {
   clearTimeout(closedTimer);
   saving = null;
   mediaRefreshedFor = null;
+  pendingShots = 0;
   sound.stop();
   useStationStore.setState({
     state: null,

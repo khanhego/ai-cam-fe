@@ -145,7 +145,8 @@ export function InspectingPanel({
         </Alert>
       )}
       <ReturnHeader session={session} />
-      <div className="grid min-h-0 gap-6 lg:grid-cols-[1fr_minmax(0,22rem)]">
+      {/* Bảng dòng + cột "Lúc đóng gói" cuộn trong khung; khối Kết luận bên dưới luôn hiện (DEC-239, RF-12). */}
+      <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto lg:grid-cols-[1fr_minmax(0,22rem)]">
         <InspectionTable
           lines={lines}
           mode={mode}
@@ -157,7 +158,7 @@ export function InspectingPanel({
       </div>
       <div
         ref={conclusionBlock}
-        className="sticky bottom-0 -mx-8 -mb-8 mt-auto flex flex-col gap-4 border-t border-outline-variant bg-secondary-container px-8 pt-4 pb-8"
+        className="flex shrink-0 flex-col gap-3 border-t border-outline-variant pt-4"
       >
         <ConclusionPicker
           ref={firstConclusion}
