@@ -2,31 +2,65 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
 import { isApiError } from "@/lib/api/errors";
-import { settingsApi, type SystemSettings } from "@/lib/api/settings";
+import {
+  settingsApi,
+  THRESHOLD_KEYS,
+  type RetentionImpact,
+  type SettingsPutBody,
+  type SystemSettings,
+} from "@/lib/api/settings";
 import { Alert, Button, PageHeader, Skeleton, TextField, toast } from "@/shared/ui";
 
 import { COPY } from "./copy";
 import { HealthPanel } from "./HealthPanel";
-import { SETTINGS_KEYS, validateSettings, type SettingsForm } from "./rules";
+import { RetentionConfirmDialog } from "./RetentionConfirmDialog";
+import {
+  isReduction,
+  PHASE1_KEYS,
+  SETTINGS_KEYS,
+  validateSettings,
+  type SettingsForm,
+  type SettingsKey,
+} from "./rules";
 
 const toForm = (s: SystemSettings): SettingsForm =>
   Object.fromEntries(SETTINGS_KEYS.map((k) => [k, String(s[k])])) as SettingsForm;
 
+type Body = Omit<SettingsPutBody, "confirm_reduction">;
+
+/**
+ * Form D8 (01 §10.5 D8, FR-02.10): retention + chữ sàn tối thiểu, ngưỡng phiên, 6 ngưỡng item 02. Giảm số ngày giữ →
+ * `RetentionConfirmDialog` trước khi gửi (API-82); server vẫn trả `409 RETENTION_REDUCTION_UNCONFIRMED` (giá trị trên
+ * máy chủ đã đổi) → mở Dialog với `details.impact`; "Giảm và lưu" gửi lại `confirm_reduction: true`.
+ * `RETENTION_BELOW_MINIMUM` → lỗi dưới ô clip theo `details.min`.
+ */
 function SettingsEditor({ initial }: { initial: SystemSettings }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<SettingsForm>(() => toForm(initial));
-  const [errors, setErrors] = useState<Partial<Record<keyof SettingsForm, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<SettingsKey, string>>>({});
   const [alert, setAlert] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ body: Body; impact: RetentionImpact | null } | null>(null);
   const dirty = SETTINGS_KEYS.some((k) => form[k] !== String(initial[k]));
+  const min = initial.retention_clip_min_days;
 
   const save = useMutation({
-    mutationFn: settingsApi.put,
+    mutationFn: (body: SettingsPutBody) => settingsApi.put(body),
     onSuccess: (data) => {
       qc.setQueryData(["settings"], data);
       setForm(toForm(data));
+      setConfirm(null);
       toast(COPY.saved);
     },
-    onError: (e) => {
+    onError: (e, body) => {
+      if (isApiError(e) && e.code === "RETENTION_REDUCTION_UNCONFIRMED") {
+        const impact = (e.details.impact as RetentionImpact | undefined) ?? null;
+        return setConfirm({ body, impact });
+      }
+      setConfirm(null);
+      if (isApiError(e) && e.code === "RETENTION_BELOW_MINIMUM")
+        return setErrors({
+          retention_clip_days: COPY.belowMin(typeof e.details.min === "number" ? e.details.min : min),
+        });
       if (isApiError(e) && Object.keys(e.fieldErrors).length > 0) setErrors(e.fieldErrors);
       else setAlert(isApiError(e) ? e.message : COPY.generic);
     },
@@ -35,16 +69,19 @@ function SettingsEditor({ initial }: { initial: SystemSettings }) {
   function submit(ev: FormEvent) {
     ev.preventDefault();
     setAlert(null);
-    const { errors: errs, value } = validateSettings(form);
+    const { errors: errs, value } = validateSettings(form, min);
     setErrors(errs);
-    if (value) save.mutate(value);
+    if (!value) return;
+    if (isReduction(value, initial)) setConfirm({ body: value, impact: null });
+    else save.mutate(value);
   }
 
-  const field = (k: keyof SettingsForm) => (
+  const field = (k: SettingsKey) => (
     <TextField
+      key={k}
       name={k}
       label={COPY.field[k]}
-      hint={COPY.hint[k]}
+      hint={k === "retention_clip_days" ? `${COPY.hint[k]} ${COPY.minClip(min)}` : COPY.hint[k]}
       error={errors[k]}
       inputMode="numeric"
       value={form[k]}
@@ -64,10 +101,9 @@ function SettingsEditor({ initial }: { initial: SystemSettings }) {
         {field("retention_clip_days")}
       </div>
       <h2 className="mb-4 text-title-md text-on-surface">{COPY.sessionTitle}</h2>
-      <div className="grid gap-x-4 sm:grid-cols-2">
-        {field("session_warn_minutes")}
-        {field("session_abandon_minutes")}
-      </div>
+      <div className="grid gap-x-4 sm:grid-cols-2">{PHASE1_KEYS.slice(2).map(field)}</div>
+      <h2 className="mb-4 text-title-md text-on-surface">{COPY.thresholdTitle}</h2>
+      <div className="grid gap-x-4 sm:grid-cols-2">{THRESHOLD_KEYS.map(field)}</div>
       <div className="flex justify-end gap-2">
         <Button
           variant="text"
@@ -83,11 +119,20 @@ function SettingsEditor({ initial }: { initial: SystemSettings }) {
           {COPY.save}
         </Button>
       </div>
+      {confirm && (
+        <RetentionConfirmDialog
+          retention={confirm.body}
+          impact={confirm.impact}
+          saving={save.isPending}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => save.mutate({ ...confirm.body, confirm_reduction: true })}
+        />
+      )}
     </form>
   );
 }
 
-/** D8 — Lưu trữ video + sức khỏe hệ thống (01 §10.5, FR-02.06; API-80, API-81). */
+/** D8 — Lưu trữ và ngưỡng + sức khỏe hệ thống (01 §10.5, FR-02.06, 02.10; API-80, API-81, API-82). */
 export default function StoragePage() {
   const settings = useQuery({ queryKey: ["settings"], queryFn: settingsApi.get });
   return (

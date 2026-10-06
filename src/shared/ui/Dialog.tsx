@@ -11,6 +11,7 @@ export function Dialog({
   actions,
   wide,
   dismissible = true,
+  closeLabel = "Đóng",
 }: {
   open: boolean;
   title: string;
@@ -20,6 +21,8 @@ export function Dialog({
   wide?: boolean;
   /** false: Esc không đóng và không có nút "Đóng" (R5 bắt buộc — 01 §10.4). */
   dismissible?: boolean;
+  /** Chữ nút đóng (vd. "Hủy" ở Dialog xác nhận D8). */
+  closeLabel?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -49,7 +52,7 @@ export function Dialog({
         <div className="mt-6 flex flex-wrap justify-end gap-2">
           {dismissible && (
             <Button variant="text" onClick={onClose}>
-              Đóng
+              {closeLabel}
             </Button>
           )}
           {actions}

@@ -1,15 +1,18 @@
 import { api } from "./client";
 
-/** API-80 (GET: ADMIN, SUPERVISOR · PUT: ADMIN — gửi đủ 4 trường), API-81 (02 §6.2, v0.3 DEC-57). */
+/**
+ * API-80 (GET: ADMIN, SUPERVISOR · PUT: ADMIN — 4 trường Phase 1 bắt buộc, 6 ngưỡng tùy chọn), API-81 (02 §6.2, v0.3
+ * DEC-57); khớp BE M9 `SettingsOut`.
+ */
 export type SystemSettings = {
   retention_raw_days: number;
   retention_clip_days: number;
   session_warn_minutes: number;
   session_abandon_minutes: number;
-  updated_at?: string;
-} & Partial<ThresholdSettings> & {
-    /** Sàn retention clip (chỉ đọc, từ biến môi trường — item 02). */
-    retention_clip_min_days?: number;
+  updated_at: string;
+} & ThresholdSettings & {
+    /** Sàn retention clip (chỉ đọc, `RETENTION_CLIP_MIN_DAYS` của máy chủ — item 02). */
+    retention_clip_min_days: number;
   };
 export type SettingsInput = Omit<
   SystemSettings,
