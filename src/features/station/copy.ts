@@ -198,6 +198,10 @@ export const COPY = {
       saving: "Đang lưu…",
       saveFailed: "Chưa lưu được — thử lại",
       lineQuantity: (name: string) => `Số nhận ${name}`,
+      // item 03 (FR-04.14, BR-37 — 02b-station §9)
+      cancelViaSupervisor: "Muốn hủy phiên? Bấm Gọi quản lý.",
+      cancelLocked: "Đã quá 60 giây — hủy phiên cần quản lý",
+      cancelTooLate: "Phiên đã quá 60 giây. Bấm Gọi quản lý để hủy.",
     },
   },
   lookup: {

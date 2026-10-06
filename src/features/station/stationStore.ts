@@ -271,8 +271,13 @@ export const useStationStore = create<StationStore>((set, get) => ({
     try {
       get().applyState((await stationApi.cancel(session.id, reason, note)).state);
     } catch (e) {
+      // Item 03 (BR-37): phiên hoàn quá 60 giây / đã có kết luận, ảnh → server từ chối; Toast + tải lại (nút ẩn theo state).
+      if (isApiError(e) && e.code === "CANCEL_REQUIRES_SUPERVISOR") {
+        toast(e.message || COPY.returns.inspecting.cancelTooLate);
+        await get().load();
+      }
       // 409 SESSION_NOT_OPEN: state đã khác (02b-station §8) → tải lại.
-      if (isStale(e)) await get().load();
+      else if (isStale(e)) await get().load();
       else report(e, set);
     }
   },

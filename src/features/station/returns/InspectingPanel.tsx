@@ -10,6 +10,7 @@ import { StationStatePanel } from "../StationStatePanel";
 import { useStationStore, type InlineAlert } from "../stationStore";
 import { mmss, useServerNow } from "../useServerClock";
 import { ConclusionPicker } from "./ConclusionPicker";
+import { useSelfCancel } from "./cancelRule";
 import { InspectionTable } from "./InspectionTable";
 import type { SaveStatus } from "./inspectionDraft";
 
@@ -110,6 +111,7 @@ export function InspectingPanel({
   const firstConclusion = useRef<HTMLButtonElement>(null);
   const conclusionBlock = useRef<HTMLDivElement>(null);
   useDeadlineFlush(session);
+  const selfCancel = useSelfCancel(session, now);
 
   const required = inline?.code === "INSPECTION_REQUIRED" || inline?.code === "INSPECTION_UNSAVED";
   useEffect(() => {
@@ -191,14 +193,23 @@ export function InspectingPanel({
           <p className="text-headline-sm">{C.hint}</p>
           {draft && <SaveIndicator status={draft.saveStatus} onRetry={() => void flushDraft()} />}
         </div>
-        <div className="flex justify-between gap-6">
-          <Button variant="elevated" className="h-14 px-8" onClick={() => setCancelOpen(true)}>
-            {COPY.packing.cancel}
-          </Button>
+        {/* Khu nút cuối (01 §10.4 R2 item 03, BR-37): ≤ 60 giây, chưa kết luận / ảnh → [Hủy phiên] [Gọi quản lý];
+            còn lại chỉ [Gọi quản lý] + dòng hướng dẫn. Vùng `aria-live` đọc khi đổi (02b-station §9). */}
+        <div className="flex items-center justify-between gap-6">
+          {selfCancel ? (
+            <Button variant="elevated" className="h-14 px-8" onClick={() => setCancelOpen(true)}>
+              {COPY.packing.cancel}
+            </Button>
+          ) : (
+            <p className="text-title-lg text-on-surface-variant">{C.cancelViaSupervisor}</p>
+          )}
           <Button variant="tonal" icon="support_agent" className="h-14 px-8" onClick={onCallManager}>
             {COPY.packing.callManager}
           </Button>
         </div>
+        <p className="sr-only" aria-live="polite" data-testid="cancel-rule-live">
+          {selfCancel ? "" : C.cancelLocked}
+        </p>
       </div>
       <CancelSessionDialog open={cancelOpen} onClose={() => setCancelOpen(false)} sessionType="RETURN" />
     </StationStatePanel>
