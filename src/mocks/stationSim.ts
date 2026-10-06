@@ -773,16 +773,24 @@ export class StationSim {
 
   /** API-103: ảnh Cam 1; tối đa 20; Cam 1 offline → CAMERA_UNREACHABLE. */
   takeSnapshot(sessionId: string): { snapshot: Snapshot } | SimError {
+    // BE (media/snapshots.py): phiên PACK cũng là 409 SESSION_NOT_OPEN (không NOT_RETURN_SESSION).
+    if (this.session?.id === sessionId && this.session.type !== "RETURN")
+      return err(409, "SESSION_NOT_OPEN", "Phiên không còn mở.");
     const s = this.openReturnSession(sessionId);
     if ("code" in s) return s;
     const shots = s.snapshots ?? [];
     if (shots.length >= SNAPSHOT_MAX)
       return err(409, "SNAPSHOT_LIMIT", "Đã đủ 20 ảnh.", { max: SNAPSHOT_MAX });
     if (this.cameras.find((c) => c.role === "CAM1")?.status !== "ONLINE")
-      return err(422, "CAMERA_UNREACHABLE", "Không chụp được ảnh từ Cam 1. Thử lại.");
+      return err(422, "CAMERA_UNREACHABLE", "Không chụp được ảnh từ Cam 1. Thử lại.", {
+        reason: "CAMERA_OFFLINE",
+      });
     const shot = mockSnapshot(`snap-${s.id}-${shots.length + 1}`, "MANUAL", new Date().toISOString());
     s.snapshots = [...shots, shot];
-    return { snapshot: shot };
+    // API-103 trả `{id, kind, camera_role, taken_at, sha256, url}`; `snapshots[]` ở API-10 chỉ `{id, kind, taken_at, url}`.
+    const { status: _status, ...body } = shot;
+    void _status;
+    return { snapshot: body };
   }
 
   /** API-104: khớp chính xác hoặc tiền tố ≥ 6 ký tự; tối đa 10, mới nhất trước. */
@@ -948,7 +956,14 @@ export class StationSim {
   canViewPackClip(clipId: string): boolean {
     const s = this.session;
     if (!s || s.type !== "RETURN" || (s.status !== "OPEN" && s.status !== "WAITING_APPROVAL")) return false;
-    return Boolean(s.pack_reference?.clips.some((c) => c.id === clipId));
+    // BE (media/service.py): mọi clip PACK của kiện đang kiểm hoặc kiện cùng hồ sơ hàng hoàn.
+    const rc = s.caseId ? findCase(s.caseId) : undefined;
+    const ids = new Set([s.pkgId, ...(rc?.package_ids ?? [])]);
+    return [...ids].some((id) =>
+      (id ? findPackage(id)?.sessions : [])?.some(
+        (x) => x.type !== "RETURN" && x.clips.some((c) => c.id === clipId),
+      ),
+    );
   }
 }
 

@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
+import { SnapshotStrip } from "@/shared/media/SnapshotStrip";
 import { useScanListener } from "@/shared/scan/useScanListener";
 import { Skeleton } from "@/shared/ui";
 
@@ -13,6 +14,7 @@ import { PackingPanel } from "./PackingPanel";
 import { ReadyPanel } from "./ReadyPanel";
 import { InspectingPanel } from "./returns/InspectingPanel";
 import { OperatorDialog } from "./returns/OperatorDialog";
+import { PackReferenceCard } from "./returns/PackReferenceCard";
 import { ReturnReadyPanel } from "./returns/ReturnReadyPanel";
 import { canSwitchMode, needsOperator, selectPanel } from "./selectPanel";
 import { StationStatusBar } from "./StationStatusBar";
@@ -22,6 +24,8 @@ import { useStationSocket } from "./useStationSocket";
 import { WaitingApprovalPanel } from "./WaitingApprovalPanel";
 
 export const BLOCKED_RETRY_MS = 30_000;
+/** API-103 tối đa 20 ảnh mỗi phiên (FR-04.04). */
+const SNAPSHOT_MAX = 20;
 
 /**
  * `/station` — một trang, chọn panel theo `state` của server (DEC-18). Quét bằng máy quét HID.
@@ -59,6 +63,18 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
     captureInInputs: s.state?.station.work_mode === "RETURN",
   });
   const [, setLookup] = useState<string | null>(null);
+  // F2 chụp ảnh chỉ ở R2 (DEC-237): phím chức năng, máy quét HID không gửi — nghe riêng, kể cả khi đang gõ ghi chú.
+  const inspecting = !offline && !s.alert && s.state?.state === "INSPECTING";
+  useEffect(() => {
+    if (!inspecting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "F2") return;
+      e.preventDefault();
+      void useStationStore.getState().takeSnapshot();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inspecting]);
   const operatorRequired = needsOperator(s.state);
 
   const callManager = () => void s.requestApproval(s.state?.state === "MISMATCH" ? "MISMATCH" : "ASSIST");
@@ -95,7 +111,31 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
     else if (panel === "S5")
       body = <WaitingApprovalPanel state={s.state} onWithdraw={() => void s.withdrawApproval()} />;
     else if (panel === "R2")
-      body = <InspectingPanel state={s.state} inline={s.inline} onCallManager={callManager} />;
+      body = (
+        <InspectingPanel
+          state={s.state}
+          inline={s.inline}
+          onCallManager={callManager}
+          aside={
+            <PackReferenceCard
+              reference={s.state.session?.pack_reference ?? null}
+              onImageExpired={s.refreshMedia}
+            />
+          }
+          snapshots={
+            <SnapshotStrip
+              snapshots={s.state.session?.snapshots ?? []}
+              max={s.snapshotLimit ? 0 : SNAPSHOT_MAX}
+              label={COPY.returns.inspecting.snapshots.replace(":", "")}
+              captureLabel={COPY.returns.inspecting.capture}
+              limitLabel={COPY.returns.inspecting.snapshotLimit}
+              capturing={s.capturing}
+              onCapture={() => void s.takeSnapshot()}
+              onExpired={s.refreshMedia}
+            />
+          }
+        />
+      );
     else if (panel === "R1")
       body = (
         <ReturnReadyPanel

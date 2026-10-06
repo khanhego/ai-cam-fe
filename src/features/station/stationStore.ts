@@ -95,6 +95,14 @@ type StationStore = {
   /** Phiên vừa đóng (API-11 `closed_session`, WS `SESSION_AUTO_CLOSED`) — `ClosedNotice` ở S1 / R1. */
   closedNotice: ClosedSession | null;
   dismissClosedNotice: () => void;
+  /** API-103 đang chạy. */
+  capturing: boolean;
+  /** API-103 `SNAPSHOT_LIMIT` (hoặc đã đủ 20 ảnh). */
+  snapshotLimit: boolean;
+  /** F2 / nút "Chụp ảnh" ở R2 (FR-04.04). */
+  takeSnapshot: () => Promise<void>;
+  /** Ảnh URL ký hết hạn → gọi lại API-10 một lần mỗi phiên (02b-station §4). */
+  refreshMedia: () => void;
 };
 
 let alertTimer: ReturnType<typeof setTimeout> | undefined;
@@ -102,6 +110,8 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let inlineTimer: ReturnType<typeof setTimeout> | undefined;
 let closedTimer: ReturnType<typeof setTimeout> | undefined;
 let saving: Promise<void> | null = null;
+/** Phiên đã gọi lại API-10 vì ảnh hết hạn. */
+let mediaRefreshedFor: string | null = null;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -157,7 +167,7 @@ export const useStationStore = create<StationStore>((set, get) => ({
       state,
       draft,
       clockOffsetMs: Date.parse(state.server_time) - Date.now(),
-      ...(sameSession ? {} : { inline: null }),
+      ...(sameSession ? {} : { inline: null, snapshotLimit: false }),
     });
     // Camera vừa mất tín hiệu: 2 bíp một lần (FR-01.03, review #22).
     const wasOnline = (role: string) => prev?.cameras.find((c) => c.role === role)?.status === "ONLINE";
@@ -336,6 +346,38 @@ export const useStationStore = create<StationStore>((set, get) => ({
   inline: null,
   closedNotice: null,
 
+  capturing: false,
+  snapshotLimit: false,
+
+  async takeSnapshot() {
+    const session = get().state?.session;
+    if (!session || session.type !== "RETURN" || get().capturing || get().snapshotLimit) return;
+    set({ capturing: true });
+    try {
+      const { snapshot } = await stationApi.takeSnapshot(session.id);
+      const state = get().state;
+      const cur = state?.session;
+      if (state && cur?.id === session.id && !cur.snapshots?.some((x) => x.id === snapshot.id))
+        set({ state: { ...state, session: { ...cur, snapshots: [...(cur.snapshots ?? []), snapshot] } } });
+    } catch (e) {
+      if (isApiError(e) && e.code === "SNAPSHOT_LIMIT") set({ snapshotLimit: true });
+      else if (isApiError(e) && e.code === "CAMERA_UNREACHABLE")
+        toast(COPY.returns.inspecting.snapshotFailed);
+      else if (isStale(e)) await get().load();
+      else if (retryable(e)) toast(COPY.returns.inspecting.snapshotFailed);
+      else report(e, set);
+    } finally {
+      set({ capturing: false });
+    }
+  },
+
+  refreshMedia() {
+    const id = get().state?.session?.id ?? null;
+    if (!id || mediaRefreshedFor === id) return;
+    mediaRefreshedFor = id;
+    void get().load();
+  },
+
   dismissClosedNotice() {
     clearTimeout(closedTimer);
     if (get().closedNotice) set({ closedNotice: null });
@@ -445,6 +487,7 @@ export function resetStationStore() {
   clearTimeout(inlineTimer);
   clearTimeout(closedTimer);
   saving = null;
+  mediaRefreshedFor = null;
   sound.stop();
   useStationStore.setState({
     state: null,
@@ -461,5 +504,7 @@ export function resetStationStore() {
     draft: null,
     inline: null,
     closedNotice: null,
+    capturing: false,
+    snapshotLimit: false,
   });
 }
