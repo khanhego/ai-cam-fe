@@ -36,6 +36,11 @@ test.describe("D7 Shopee (cần BE T-16/T-22)", () => {
   test.skip(!process.env.E2E_M4_BE, "Chờ BE T-16/T-22 (API-70..73) — chạy với E2E_M4_BE=1");
 
   test("TC-05.03: SHOPEE_ENABLED=false → Kết nối Shopee báo chưa cấu hình", async ({ page }) => {
+    // Stack chạy SHOPEE_ENABLED=true (adapter mock) cho M9 thì case này không áp dụng: đặt E2E_SHOPEE_ENABLED=1.
+    test.skip(
+      !!process.env.E2E_SHOPEE_ENABLED,
+      "Stack đang SHOPEE_ENABLED=true — TC-05.03 chạy ở lượt cờ tắt",
+    );
     await loginAdmin(page);
     await page.goto("/admin/settings/shopee");
     await page

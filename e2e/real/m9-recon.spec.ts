@@ -52,13 +52,19 @@ async function connectMockShop(request: APIRequestContext, admin: Record<string,
   expect(res.status(), "cần stack dev SHOPEE_ENABLED=true (adapter mock)").toBe(200);
   const state = /aicam_shopee_state=([^;]+)/.exec(res.headers()["set-cookie"] ?? "")?.[1];
   expect(state).toBeTruthy();
-  const url = new URL(((await res.json()) as { url: string }).url);
+  // Adapter mock trả URL tương đối (callback nội bộ); adapter thật trả URL Shopee tuyệt đối.
+  const url = new URL(((await res.json()) as { url: string }).url, "http://localhost");
   const cb = await request.get(`${url.pathname}${url.search}`, {
     headers: { Cookie: `aicam_shopee_state=${state}` },
     maxRedirects: 0,
   });
   expect(cb.headers().location).toBe("/admin/settings/shopee?result=connected");
 }
+
+test.skip(
+  !process.env.E2E_SHOPEE_ENABLED,
+  "Cần stack SHOPEE_ENABLED=true (adapter mock) — đặt E2E_SHOPEE_ENABLED=1",
+);
 
 test.beforeEach(() => resetData());
 
