@@ -53,6 +53,9 @@ export const COPY = {
     RETURN_IN_PROGRESS_ELSEWHERE: "ĐANG KIỂM Ở STATION KHÁC",
     INSPECTION_REQUIRED: "CHƯA CHỌN KẾT LUẬN",
     RETURN_CODE_DIFFERENT: "MÃ KHÔNG THUỘC KIỆN ĐANG KIỂM",
+    // item 03 (02b-station §9) — hành vi đầy đủ ở T-233 / T-236.
+    ORDER_CANCEL_REQUESTED: "ĐƠN ĐANG YÊU CẦU HỦY",
+    RETURN_MULTIPLE_ORDERS: "MÃ CÓ Ở NHIỀU ĐƠN",
   } satisfies Record<AlertCode, string>,
   /** Dòng phụ R4 khi server không gửi `message` đủ ý (01 §10.4 R4). */
   returnAlert: {

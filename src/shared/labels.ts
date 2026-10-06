@@ -4,6 +4,11 @@ import type { ChipTone } from "@/shared/ui";
  * Nhãn tiếng Việt cho enum API (02 §5 "Enum dùng chung", DEC-17) và tone chip theo design system
  * ("Trạng thái kiện" — README §Mẫu màn hình dashboard). Không hiện mã kỹ thuật lên giao diện.
  */
+/** Sàn (02 §5.2 `platform`, item 03). */
+export type Platform = "SHOPEE" | "TIKTOK";
+
+export const PLATFORM_LABEL: Record<Platform, string> = { SHOPEE: "Shopee", TIKTOK: "TikTok Shop" };
+
 export type WarehouseStatus =
   | "NEW"
   | "PACKING"

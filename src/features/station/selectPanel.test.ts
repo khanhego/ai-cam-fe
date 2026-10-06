@@ -8,7 +8,15 @@ const st = (
   extra: Partial<StationState["station"]> = {},
 ): Pick<StationState, "state" | "station" | "approval_request"> => ({
   state,
-  station: { id: "st-1", name: "S", kind: "BOTH", work_mode, operator_name: "Lan", ...extra },
+  station: {
+    id: "st-1",
+    name: "S",
+    kind: "BOTH",
+    work_mode,
+    operator_name: "Lan",
+    operator_required: false,
+    ...extra,
+  },
   approval_request: null,
 });
 
