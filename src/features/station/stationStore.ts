@@ -301,6 +301,8 @@ export const useStationStore = create<StationStore>((set, get) => ({
       closedTimer = setTimeout(() => set({ closedNotice: null }), CLOSED_NOTICE_MS);
       sound.play("ok");
     }
+    // Đơn bị hủy khi đang đóng (FR-03.15): âm lỗi 1 lần; banner theo `flags` của `station.state`.
+    if (data.code === "ORDER_CANCELLED_DURING_SESSION") sound.play("error");
     // J-07 tới warn_at: gửi nháp ngay (server chỉ tự hoàn tất bằng kết luận đã lưu).
     if (data.code === "SESSION_WARN") void get().flushDraft();
   },

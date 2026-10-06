@@ -335,7 +335,13 @@ export class StationSim {
     const code = s.package.tracking_number;
     this.pkg(code).status = "PACKED";
     const done = new Date().toISOString();
-    const flags = [...s.flags, ...extraFlags];
+    // BR-18 như BE `complete_session`: Cam 2 chưa từng khớp / không đọc được → CAM2_UNVERIFIED; khay còn phiếu của
+    // chính kiện lúc đóng → LABEL_ON_TRAY (FR-03.14).
+    const m = this.match();
+    const cam2: SessionFlag[] = [];
+    if (!s.cam2Seen || m === "UNAVAILABLE") cam2.push("CAM2_UNVERIFIED");
+    if (m === "MATCH") cam2.push("LABEL_ON_TRAY");
+    const flags = [...new Set([...s.flags, ...extraFlags, ...cam2])];
     this.recent.unshift({
       id: s.id,
       type: "PACK",
