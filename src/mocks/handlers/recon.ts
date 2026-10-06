@@ -3,7 +3,8 @@ import { http } from "msw";
 import { vnDay } from "@/shared/format";
 
 import { API, apiError, json } from "../http";
-import { mockReconAlerts, reconState, toReconAlert } from "../returnsDb";
+import { matchesShop } from "../packagesDb";
+import { findPackage, mockReconAlerts, reconState, toReconAlert } from "../returnsDb";
 import { dashboardEvent } from "../ws";
 import { reconSummary } from "./packages";
 import { DASHBOARD_ROLES, requireRole } from "./session";
@@ -22,6 +23,8 @@ export const reconHandlers = [
     const pkgId = p.get("package_id");
     const from = p.get("date_from");
     const to = p.get("date_to");
+    const platform = p.get("platform");
+    const shopId = p.get("shop_id");
     const all = mockReconAlerts
       .filter(
         (a) =>
@@ -30,7 +33,8 @@ export const reconHandlers = [
           (!rule || a.rule === rule) &&
           (!pkgId || a.package_id === pkgId) &&
           (!from || vnDay(a.detected_at) >= from) &&
-          (!to || vnDay(a.detected_at) <= to),
+          (!to || vnDay(a.detected_at) <= to) &&
+          matchesShop(findPackage(a.package_id), platform, shopId),
       )
       // Mức (HIGH trước) rồi detected_at cũ trước (02 §6.2 API-120).
       .sort(

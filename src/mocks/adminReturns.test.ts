@@ -54,7 +54,8 @@ test("TC-P2.05: D14 API-110 — tab mặc định Đang về, tab_counts; STATIO
   expect(r.items.every((i) => ["EXPECTED", "INSPECTING", "PARTIALLY_RECEIVED"].includes(i.status))).toBe(
     true,
   );
-  expect(r.tab_counts).toMatchObject({ MISSING: 1, NO_PARCEL: 1, UNIDENTIFIED: 1 });
+  // NO_PARCEL: HH-000044 + HH-000061 (TikTok Chỉ hoàn tiền — item 03).
+  expect(r.tab_counts).toMatchObject({ MISSING: 1, NO_PARCEL: 2, UNIDENTIFIED: 1 });
   expect(r.total).toBe(r.tab_counts.EXPECTED);
   const hh41 = r.items.find((i) => i.code === "HH-000041")!;
   expect(hh41).toMatchObject({
@@ -65,6 +66,7 @@ test("TC-P2.05: D14 API-110 — tab mặc định Đang về, tab_counts; STATIO
   expect((await returnsApi.list({ tab: "RECEIVED" })).items.map((i) => i.code)).toContain("HH-000053");
   expect((await returnsApi.list({ tab: "ALL", q: "spxrttst000041" })).items).toHaveLength(1);
   expect((await returnsApi.list({ tab: "ALL", kind: "REFUND_ONLY" })).items.map((i) => i.code)).toEqual([
+    "HH-000061",
     "HH-000044",
   ]);
   const detail = await returnsApi.get(hh41.id);

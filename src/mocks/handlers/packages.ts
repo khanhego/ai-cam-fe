@@ -6,7 +6,14 @@ import type { AdjustStatusResult, Clip, PackageDetail, PackageSession } from "@/
 import type { WarehouseStatus } from "@/shared/labels";
 
 import { API, apiError, json } from "../http";
-import { mockPackages, toDetail, toListItem, type MockPackage, type MockSession } from "../packagesDb";
+import {
+  mockPackages,
+  shopOfPackage,
+  toDetail,
+  toListItem,
+  type MockPackage,
+  type MockSession,
+} from "../packagesDb";
 import {
   allowedTargets,
   caseOfPackage,
@@ -16,8 +23,10 @@ import {
   packageReturnExtras,
   protectionOf,
   sessionExtras,
+  sessionReview,
   toReconAlert,
 } from "../returnsDb";
+import { sharesOfPackage } from "../sharesDb";
 import { dashboardEvent } from "../ws";
 import { DASHBOARD_ROLES, requireRole } from "./session";
 
@@ -41,7 +50,12 @@ function search(params: URLSearchParams) {
   const to = params.get("date_to");
   const stationId = params.get("station_id");
   const warehouse = params.get("warehouse_status");
-  const sessionStatus = params.get("session_status");
+  // item 03: nhiều giá trị cách dấu phẩy (D2 → D3 phiên hủy / bỏ dở).
+  const sessionStatuses = params.get("session_status")?.split(",").filter(Boolean) ?? [];
+  const sessionStatus = sessionStatuses.length ? sessionStatuses.join(",") : null;
+  const platform = params.get("platform");
+  const shopId = params.get("shop_id");
+  const returnDropped = params.get("return_dropped") === "true";
   const sessionFlag = params.get("session_flag");
   const sessionType = params.get("session_type");
   const source = params.get("source");
@@ -65,13 +79,28 @@ function search(params: URLSearchParams) {
       return false;
     if (warehouse && p.warehouse_status !== warehouse) return false;
     if (source && p.order?.source !== source) return false;
+    // item 03: `shop_id` không thuộc `platform` → rỗng (02 §6 quy ước lọc sàn / shop).
+    const shop = shopOfPackage(p);
+    if (platform && shop?.platform !== platform) return false;
+    if (shopId && shop?.id !== shopId) return false;
+    if (
+      returnDropped &&
+      !p.sessions.some(
+        (s) =>
+          s.type === "RETURN" &&
+          (s.status === "CANCELLED" || s.status === "ABANDONED") &&
+          !sessionReview(s).evidence_exclusion &&
+          (!dated || inRange(s, from, to, "end")),
+      )
+    )
+      return false;
     const needSession = dated || stationId || sessionStatus || sessionFlag || sessionType;
     if (!needSession) return true;
     return p.sessions.some(
       (s) =>
         (!dated || inRange(s, from, to, sessionStatus ? "end" : sessionFlag ? "start" : "any")) &&
         (!stationId || s.station_id === stationId) &&
-        (!sessionStatus || s.status === sessionStatus) &&
+        (!sessionStatuses.length || sessionStatuses.includes(s.status)) &&
         (!sessionType || (s.type ?? "PACK") === sessionType) &&
         (!sessionFlag || s.flags.includes(sessionFlag as MockSession["flags"][number])),
     );
@@ -123,6 +152,7 @@ export const packagesHandlers = [
     const body: PackageDetail = {
       ...detail,
       ...packageReturnExtras(pkg),
+      ...sharesOfPackage(pkg, user),
       sessions: detail.sessions.map((s, i): PackageSession => {
         const ms = pkg.sessions[i]!;
         const protection = protectionOf(ms);

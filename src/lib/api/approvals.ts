@@ -1,3 +1,5 @@
+import type { Conclusion } from "@/shared/returns/types";
+
 import { api } from "./client";
 import type { TrayMatch } from "./station";
 import type { Page } from "./stations";
@@ -30,7 +32,12 @@ export type ApprovalItem = {
   decided_by: { id: string; display_name: string } | null;
   decided_at: string | null;
   note: string | null;
+  /** item 03 (02 §6.2 API-20 mở rộng): chỉ phiên RETURN — "Đã có kết luận: Hộp rỗng · 3 ảnh · mở 4 phút". */
+  return_summary?: { conclusion: Conclusion | null; snapshot_count: number; opened_at: string } | null;
 };
+
+/** item 03 (v0.3, API-21): lý do bắt buộc khi Supervisor hủy phiên RETURN (cùng `note` 5–500). */
+export type CancelReturnReason = "WRONG_SCAN" | "NOT_A_RETURN" | "OTHER";
 
 export type ApprovalDecision = {
   approval_request: {
@@ -67,6 +74,16 @@ export const PENDING_APPROVALS_KEY = ["approvals", "PENDING"] as const;
 export const approvalsApi = {
   pending: () =>
     api.get<Page<ApprovalItem>>("/approval-requests", { query: { status: "PENDING", page_size: 100 } }),
-  decide: (id: string, action: ApprovalAction, note: string | null = null) =>
-    api.post<ApprovalDecision>(`/approval-requests/${id}/decision`, { action, note }),
+  /** item 03: `CANCEL_SESSION` phiên RETURN cần `reason_code` + `note` 5–500 (422 `fields.reason_code` / `fields.note`). */
+  decide: (
+    id: string,
+    action: ApprovalAction,
+    note: string | null = null,
+    reasonCode: CancelReturnReason | null = null,
+  ) =>
+    api.post<ApprovalDecision>(`/approval-requests/${id}/decision`, {
+      action,
+      note,
+      ...(reasonCode ? { reason_code: reasonCode } : {}),
+    }),
 };

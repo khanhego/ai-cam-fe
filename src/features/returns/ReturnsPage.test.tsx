@@ -20,7 +20,8 @@ test("TC-07.37: drawer 'Hàng hoàn'; tab Đang về mặc định có số, g�
   const tab = await screen.findByRole("tab", { name: /^Đang về \d+$/ });
   expect(tab).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("tab", { name: "Quá hạn 1" })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Chỉ hoàn tiền 1" })).toBeInTheDocument();
+  // HH-000044 + HH-000061 (TikTok — dữ liệu item 03).
+  expect(screen.getByRole("tab", { name: "Chỉ hoàn tiền 2" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Chưa xác định 1" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Tất cả" })).toBeInTheDocument();
 
@@ -94,7 +95,8 @@ test("FR-05.12: tab Chỉ hoàn tiền → 'Tạo hồ sơ khiếu nại' mỗi 
   const user = userEvent.setup();
   const router = renderApp("/admin/returns?tab=NO_PARCEL");
   const table = await screen.findByRole("table");
-  const row = (await within(table).findByText("Chỉ hoàn tiền")).closest("tr")!;
+  const row = (await within(table).findByRole("link", { name: /SPXTST0000044/ })).closest("tr")!;
+  expect(row).toHaveTextContent("Chỉ hoàn tiền");
   expect(row).toHaveTextContent("Thiếu hàng");
   await user.click(within(row).getByRole("button", { name: "Tạo hồ sơ khiếu nại" }));
   const dialog = await screen.findByRole("dialog", { name: "Tạo hồ sơ khiếu nại" });

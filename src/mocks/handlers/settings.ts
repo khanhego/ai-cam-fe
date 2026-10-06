@@ -3,6 +3,10 @@ import { http, HttpResponse } from "msw";
 import { THRESHOLD_KEYS, type Health, type RetentionImpact, type SystemSettings } from "@/lib/api/settings";
 
 import { API, apiError } from "../http";
+import { phase3Config } from "../returnsDb";
+import { stationSim } from "../stationSim";
+import { stationWs } from "../ws";
+import { healthBackup } from "./backup";
 import { requireRole } from "./session";
 import { mockShops } from "./shops";
 import { mockStations } from "./stations";
@@ -17,6 +21,11 @@ function THRESHOLDS() {
     claim_deadline_days: 7,
     claim_due_soon_hours: 48,
   };
+}
+
+/** item 03 (02 §6.2 API-80): người đóng gói bắt buộc + hạn mặc định Chỉ hoàn tiền. */
+function PHASE3() {
+  return { packer_name_required: false, refund_only_default_hours: 48 };
 }
 
 /** API-82 mock: số liệu theo mức giảm (02 §6.2). */
@@ -42,6 +51,7 @@ export const mockSettings: SystemSettings = {
   session_warn_minutes: 15,
   session_abandon_minutes: 30,
   ...THRESHOLDS(),
+  ...PHASE3(),
   retention_clip_min_days: 60,
   updated_at: "2026-10-01T00:00:00Z",
 };
@@ -60,10 +70,12 @@ export function resetMockSettings() {
     session_warn_minutes: 15,
     session_abandon_minutes: 30,
     ...THRESHOLDS(),
+    ...PHASE3(),
     retention_clip_min_days: 60,
     updated_at: "2026-10-01T00:00:00Z",
   });
   Object.assign(mockHealth, { db: "OK", redis: "OK", mediamtx: "OK", diskPercent: 83 });
+  phase3Config.refundOnlyDefaultHours = 48;
 }
 
 const TOTAL = 8_000_000_000_000;
@@ -123,6 +135,19 @@ export const settingsHandlers = [
         fields[key] = `Giá trị phải từ 1 đến ${LIMITS[key]}.`;
       else next[key] = v;
     }
+    // item 03: tùy chọn (thiếu = giữ).
+    const refundHours = body.refund_only_default_hours;
+    if (
+      refundHours !== undefined &&
+      (typeof refundHours !== "number" ||
+        !Number.isInteger(refundHours) ||
+        refundHours < 1 ||
+        refundHours > 168)
+    )
+      fields.refund_only_default_hours = "Giá trị phải từ 1 đến 168.";
+    const packerRequired = body.packer_name_required;
+    if (packerRequired !== undefined && typeof packerRequired !== "boolean")
+      fields.packer_name_required = "Không hợp lệ";
     if (
       !fields.return_abandon_minutes &&
       !fields.return_warn_minutes &&
@@ -146,6 +171,18 @@ export const settingsHandlers = [
       });
     for (const [key] of KEYS) mockSettings[key] = n[key];
     Object.assign(mockSettings, next);
+    if (typeof refundHours === "number") {
+      mockSettings.refund_only_default_hours = refundHours;
+      phase3Config.refundOnlyDefaultHours = refundHours;
+    }
+    if (typeof packerRequired === "boolean" && packerRequired !== mockSettings.packer_name_required) {
+      mockSettings.packer_name_required = packerRequired;
+      // 02 §6.2 API-80: đổi → WS `station.state` cho mọi station.
+      stationSim.operatorRequired = packerRequired;
+      stationWs.broadcast(
+        JSON.stringify({ type: "station.state", data: stationSim.state(), at: new Date().toISOString() }),
+      );
+    }
     mockSettings.updated_at = new Date().toISOString();
     return HttpResponse.json(mockSettings);
   }),
@@ -181,11 +218,16 @@ export const settingsHandlers = [
           last_seen_at: c.status === "ONLINE" ? new Date().toISOString() : null,
         })),
       ),
-      sync: mockShops.map((s) => ({
-        shop_id: s.id,
-        last_success_at: s.last_synced_at,
-        last_error: s.last_error,
-      })),
+      sync: mockShops
+        .filter((s) => s.auth_status !== "DISCONNECTED")
+        .map((s) => ({
+          shop_id: s.id,
+          last_success_at: s.last_synced_at,
+          last_error: s.last_error,
+          platform: s.platform,
+          shop_name: s.name,
+        })),
+      backup: healthBackup(),
     };
     return HttpResponse.json(health);
   }),

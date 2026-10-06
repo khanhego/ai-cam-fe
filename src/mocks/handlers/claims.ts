@@ -1,12 +1,14 @@
 import { http, HttpResponse } from "msw";
 
 import type { ClaimPatch, ClaimStatus, ClaimType, CreateClaimBody } from "@/lib/api/claims";
+import type { Role } from "@/lib/api/session";
 
 import { fmtShort } from "@/shared/format";
 import { CLAIM_STATUS, fmtVnd } from "@/shared/returns/labels";
 
 import { mockUsers } from "../db";
 import { API, apiError, json } from "../http";
+import { matchesShop } from "../packagesDb";
 import {
   CLAIM_TRANSITIONS,
   claimDue,
@@ -24,7 +26,14 @@ import {
 } from "../returnsDb";
 import { dashboardEvent } from "../ws";
 import { reconSummary } from "./packages";
+import { sharesOfClaim } from "../sharesDb";
 import { DASHBOARD_ROLES, requireRole } from "./session";
+
+/** API-132 + `shares[]` theo người xem (item 03 — `can_revoke` phụ thuộc vai). */
+const claimOut = (c: MockClaim, user: { id: string; role: Role }) => ({
+  ...toClaimDetail(c),
+  ...sharesOfClaim(c.id, user),
+});
 
 const TYPES: ClaimType[] = [
   "DAMAGED",
@@ -69,6 +78,7 @@ export const claimsHandlers = [
         (!p.get("counterparty") || c.counterparty === p.get("counterparty")) &&
         (!owner || c.owner?.id === (owner === "me" ? user.id : owner)) &&
         (!due || (due === "soon" ? d.due_soon : d.overdue)) &&
+        matchesShop(pkg, p.get("platform"), p.get("shop_id")) &&
         (!q ||
           [c.code, pkg?.tracking_number, pkg?.order?.platform_order_sn].some((x) => x?.toUpperCase() === q))
       );
@@ -174,14 +184,14 @@ export const claimsHandlers = [
       dashboardEvent("recon.updated", { summary: reconSummary() });
     }
     updated(claim);
-    return json(toClaimDetail(claim), { status: 201 });
+    return json(claimOut(claim, user), { status: 201 });
   }),
 
   http.get(`${API}/claims/:id`, ({ request, params }) => {
-    const [, denied] = requireRole(request, DASHBOARD_ROLES);
+    const [user, denied] = requireRole(request, DASHBOARD_ROLES);
     if (denied) return denied;
     const c = mockClaims.find((x) => x.id === params.id);
-    return c ? json(toClaimDetail(c)) : apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ.");
+    return c ? json(claimOut(c, user)) : apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ.");
   }),
 
   http.patch(`${API}/claims/:id`, async ({ request, params }) => {
@@ -197,7 +207,7 @@ export const claimsHandlers = [
         "VERSION_CONFLICT",
         "Hồ sơ vừa được người khác cập nhật. Tải lại để xem bản mới.",
         {
-          current: toClaimDetail(c),
+          current: claimOut(c, user),
         },
       );
     if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng, chỉ thêm được ghi chú.");
@@ -256,14 +266,14 @@ export const claimsHandlers = [
       }
     }
     // Không có thay đổi → 200, không tăng `version` (DEC-312 a).
-    if (!notes.length) return json(toClaimDetail(c));
+    if (!notes.length) return json(claimOut(c, user));
     const at = new Date().toISOString();
     const actor = { id: user.id, display_name: user.display_name };
     for (const text of notes)
       c.notes.push({ id: `n-${c.id}-${c.notes.length}`, kind: "STATUS_CHANGE", text, author: actor, at });
     c.version += 1;
     updated(c);
-    return json(toClaimDetail(c));
+    return json(claimOut(c, user));
   }),
 
   http.put(`${API}/claims/:id/evidence`, async ({ request, params }) => {
@@ -283,7 +293,7 @@ export const claimsHandlers = [
         "VERSION_CONFLICT",
         "Hồ sơ vừa được người khác cập nhật. Tải lại để xem bản mới.",
         {
-          current: toClaimDetail(c),
+          current: claimOut(c, user),
         },
       );
     if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng, chỉ thêm được ghi chú.");
@@ -315,7 +325,7 @@ export const claimsHandlers = [
         added_at: at,
       }));
     const removed = c.evidence.length - kept.length;
-    if (!removed && !added.length) return json(toClaimDetail(c));
+    if (!removed && !added.length) return json(claimOut(c, user));
     c.evidence = [...kept, ...added];
     // Như BE `service.set_evidence` (DEC-312 b).
     const parts = [added.length ? `thêm ${added.length}` : "", removed ? `bỏ ${removed}` : ""].filter(
@@ -330,7 +340,7 @@ export const claimsHandlers = [
     });
     c.version += 1;
     updated(c);
-    return json(toClaimDetail(c));
+    return json(claimOut(c, user));
   }),
 
   http.post(`${API}/claims/:id/notes`, async ({ request, params }) => {

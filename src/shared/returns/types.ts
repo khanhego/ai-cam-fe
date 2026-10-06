@@ -82,7 +82,8 @@ export type Snapshot = {
   url: string;
   camera_role?: "CAM1";
   sha256?: string;
-  status?: "READY" | "DELETED";
+  /** item 03: `MISSING` = thiếu tệp trên máy chủ (`url = null` ở API-31 / 132). */
+  status?: "READY" | "DELETED" | "MISSING";
 };
 
 /** Brief `claims[]` / `claim_code` dùng ở nhiều nơi. */

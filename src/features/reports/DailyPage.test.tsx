@@ -39,8 +39,8 @@ test("TC-09.01: 6 thẻ số theo API-32, station và mục Cần xử lý (CSKH
   expect(await card(/^Từng lệch mã: 1\./)).toBeInTheDocument();
   expect(await card(/^Bỏ dở: 1\./)).toBeInTheDocument();
   expect(await card(/^Hủy phiên: 1\./)).toBeInTheDocument();
-  // 8 kiện Phase 1 + SPXTST0000052 (dữ liệu hàng hoàn item 02 — 04 §1: PACKED 25 giờ, BR-14).
-  expect(await card(/^Chưa bàn giao: 9\./)).toBeInTheDocument();
+  // 8 kiện Phase 1 + SPXTST0000052 (dữ liệu hàng hoàn item 02 — 04 §1: PACKED 25 giờ, BR-14) + 3 kiện Phase 3.
+  expect(await card(/^Chưa bàn giao: 12\./)).toBeInTheDocument();
   expect(await card(/^Hủy sau khi đóng: 1\./)).toBeInTheDocument();
   expect(screen.getByText(/^Hôm nay \d{2}\/\d{2}\/\d{4}$/)).toBeInTheDocument();
 

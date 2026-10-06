@@ -1,6 +1,7 @@
-import type { WarehouseStatus } from "@/shared/labels";
+import type { Platform, WarehouseStatus } from "@/shared/labels";
 
 import { api } from "./client";
+import type { ShopRef } from "./packages";
 import type { Page } from "./stations";
 
 /** API-120, 121, 123 (02 §6.2) — đối soát (D15), khớp BE thật (`reconciliation/schemas.py`). API-122 ở `packages.ts`. */
@@ -60,6 +61,9 @@ export type ReconAlert = {
   resolution: ReconResolution | null;
   /** Đích hợp lệ cho "Điều chỉnh trạng thái kho" (API-122). */
   allowed_status_targets: WarehouseStatus[];
+  /** item 03 (02 §6.2 API-120 mở rộng). */
+  platform: Platform | null;
+  shop: ShopRef | null;
 };
 
 export type ReconFilters = {
@@ -69,6 +73,9 @@ export type ReconFilters = {
   package_id?: string;
   date_from?: string;
   date_to?: string;
+  /** item 03. */
+  platform?: string;
+  shop_id?: string;
   page?: number;
   page_size?: number;
 };

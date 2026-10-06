@@ -19,7 +19,7 @@ import { CONCLUSION_LABEL, canBeOk, INSPECTION_LIMITS } from "@/shared/returns/i
 import type { Conclusion, InspectionInput, Snapshot } from "@/shared/returns/types";
 import { WAREHOUSE_STATUS, type WarehouseStatus } from "@/shared/labels";
 
-import { mockPackages, type MockPackage } from "./packagesDb";
+import { mockPackages, shopOfPackage, type MockPackage } from "./packagesDb";
 import { mockFlag, SHOP, type MockShopRef } from "./shopsDb";
 import {
   blockedReason,
@@ -994,9 +994,9 @@ export class StationSim {
             : null,
           can_open: blocked === null,
           blocked_reason: blocked,
-          // item 03 (API-104): dữ liệu Phase 1 / 2 thuộc "TST Shop A"; kiện không có đơn → null.
-          platform: p.order ? SHOP.A.platform : null,
-          shop_name: p.order ? SHOP.A.name : null,
+          // item 03 (API-104): shop của đơn (dữ liệu Phase 1 / 2 thuộc "TST Shop A"); kiện không có đơn → null.
+          platform: shopOfPackage(p)?.platform ?? null,
+          shop_name: shopOfPackage(p)?.name ?? null,
         };
       });
     return { items, platform_checked: items.length === 0 && q.length >= 8 };

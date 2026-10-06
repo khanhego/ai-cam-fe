@@ -2,11 +2,13 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { login } from "@/lib/api/auth";
-import { mockShopee, mockShops } from "@/mocks/handlers/shops";
+import { mockShopee, mockShops, seedLegacySingleShop } from "@/mocks/handlers/shops";
 import { renderApp } from "@/test/render";
 
 beforeEach(async () => {
   await login("tst_admin", "matkhau123", "DASHBOARD");
+  // Dữ liệu một shop Shopee của Phase 1–2: D7 cũ tới khi T-253 thay bằng `PlatformsPage`.
+  seedLegacySingleShop();
 });
 
 const card = () => screen.findByRole("region", { name: "Shop TST" });
@@ -21,7 +23,7 @@ test("D7: shop đã kết nối — trạng thái, hạn ủy quyền, lần đ�
   expect(within(shop).getByRole("button", { name: "Đồng bộ ngay" })).toBeInTheDocument();
 });
 
-test("TC-05.01 (UI): chưa kết nối → Kết nối Shopee → về ?result=connected, Alert thành công, Đã kết nối", async () => {
+test("TC-05.01 (UI): chưa kết nối → Kết nối Shopee → về D7 mới ?platform=shopee&result=connected&count=1", async () => {
   const user = userEvent.setup();
   mockShops.splice(0);
   const router = renderApp("/admin/settings/shopee");
@@ -29,11 +31,9 @@ test("TC-05.01 (UI): chưa kết nối → Kết nối Shopee → về ?result=c
   expect(await screen.findByText("Chưa kết nối shop Shopee nào.")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Kết nối Shopee" }));
 
-  await waitFor(() => expect(router.state.location.search).toBe("?result=connected"));
-  expect(
-    await screen.findByText("Đã kết nối Shopee. Lần đồng bộ đầu tiên chạy trong vài phút."),
-  ).toBeInTheDocument();
-  expect(within(await card()).getByText("Đã kết nối")).toBeInTheDocument();
+  // item 03 (API-72): callback về `/admin/settings/platforms` — route + Alert kiểm ở T-252 / T-253.
+  await waitFor(() => expect(router.state.location.pathname).toBe("/admin/settings/platforms"));
+  expect(router.state.location.search).toBe("?platform=shopee&result=connected&count=1");
 });
 
 test("TC-05.02 (UI): ?result=denied / error → Alert lỗi đúng chữ", async () => {
@@ -101,6 +101,10 @@ test("P2-17: shop cũ DISCONNECTED (đã thay) không thành thẻ 'Chưa kết 
     last_synced_at: "2026-09-01T03:00:00Z",
     today_synced_orders: 0,
     last_error: null,
+    region: null,
+    sync_warnings: [],
+    disconnected_at: "2026-09-01T03:00:00Z",
+    sync_in_progress: false,
   });
   mockShops.reverse(); // shop cũ đứng trước trong danh sách API
   renderApp("/admin/settings/shopee");

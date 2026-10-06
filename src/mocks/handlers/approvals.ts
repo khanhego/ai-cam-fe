@@ -61,6 +61,15 @@ function simApproval(): ApprovalItem | null {
     // item 02 — như BE `approvals/views.py`: loại / người kiểm của phiên; không phiên → REPACK = PACK, khác null.
     session_type: st.session?.type ?? (a.type === "REPACK" ? "PACK" : null),
     operator_name: st.session?.operator_name ?? null,
+    // item 03 (02 §6.2 API-20 mở rộng): chỉ phiên RETURN.
+    return_summary:
+      st.session?.type === "RETURN"
+        ? {
+            conclusion: st.session.inspection?.conclusion ?? null,
+            snapshot_count: (st.session.snapshots ?? []).length,
+            opened_at: st.session.started_at,
+          }
+        : null,
     ...UNDECIDED,
   };
 }
@@ -111,7 +120,11 @@ export const approvalsHandlers = [
     const [user, denied] = requireRole(request, [...APPROVER_ROLES]);
     if (denied) return denied;
     const id = String(params.id);
-    const body = (await request.json()) as { action: ApprovalAction; note?: string | null };
+    const body = (await request.json()) as {
+      action: ApprovalAction;
+      note?: string | null;
+      reason_code?: string | null;
+    };
     const closed = closedApprovals.get(id);
     if (closed) return apiError(409, "ALREADY_RESOLVED", "Yêu cầu đã được xử lý.", closed);
     const item = pendingApprovals().find((a) => a.id === id);
@@ -123,6 +136,16 @@ export const approvalsHandlers = [
       return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
         fields: { note: "Nhập ghi chú (1–500 ký tự)" },
       });
+
+    // item 03 (v0.3, 02 §6.2 API-21): hủy phiên RETURN bắt `reason_code` + `note` 5–500 (thay đổi có chủ đích).
+    if (body.action === "CANCEL_SESSION" && item.session_type === "RETURN") {
+      const fields: Record<string, string> = {};
+      if (!["WRONG_SCAN", "NOT_A_RETURN", "OTHER"].includes(body.reason_code ?? ""))
+        fields.reason_code = "Chọn lý do hủy.";
+      if (note.length < 5 || note.length > 500) fields.note = "Nhập ghi chú (5–500 ký tự).";
+      if (Object.keys(fields).length)
+        return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", { fields });
+    }
 
     if (item.id === stationSim.approval?.id) {
       const err = stationSim.decide(id, body.action);

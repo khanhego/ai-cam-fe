@@ -1,5 +1,6 @@
 import {
   THRESHOLD_KEYS,
+  type Phase3Settings,
   type SettingsInput,
   type SettingsPutBody,
   type ThresholdSettings,
@@ -44,7 +45,7 @@ export function validateSettings(
   minClipDays?: number,
 ): {
   errors: Partial<Record<SettingsKey, string>>;
-  value: Required<Omit<SettingsPutBody, "confirm_reduction">> | null;
+  value: Required<Omit<SettingsPutBody, "confirm_reduction" | keyof Phase3Settings>> | null;
 } {
   const n = Object.fromEntries(SETTINGS_KEYS.map((k) => [k, toInt(form[k])])) as Record<SettingsKey, number>;
   const errors: Partial<Record<SettingsKey, string>> = {};

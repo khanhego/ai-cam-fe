@@ -14,11 +14,15 @@ export const SHOP = {
   TT_B: { id: "shop-tt-b", platform: "TIKTOK", name: "TST TikTok B (mock)" },
 } as const satisfies Record<string, MockShopRef>;
 
-/** Cờ bật kịch bản mock qua query trang (`pnpm dev:mock` — vd `?packerRequired=1`); ngoài trình duyệt → false. */
-export function mockFlag(name: string): boolean {
+/**
+ * Tham số kịch bản mock lấy từ query của trang (`pnpm dev:mock` — vd `?packerRequired=1`, `?backupState=KEY_CHANGED`);
+ * ngoài trình duyệt / không có → null. Test đặt trạng thái trực tiếp trên db mock thay vì qua URL.
+ */
+export function mockParam(name: string): string | null {
   try {
-    return new URLSearchParams(globalThis.location?.search ?? "").get(name) === "1";
+    return new URLSearchParams(globalThis.location?.search ?? "").get(name);
   } catch {
-    return false;
+    return null;
   }
 }
+export const mockFlag = (name: string): boolean => mockParam(name) === "1";

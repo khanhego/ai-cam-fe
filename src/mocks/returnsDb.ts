@@ -9,7 +9,7 @@ import type { PackageDetail, Protection } from "@/lib/api/packages";
 import type { ReconAlert, ReconRule, ReconSeverity } from "@/lib/api/recon";
 import type { ReturnDetail, ReturnListItem } from "@/lib/api/returns";
 import type { StationItem } from "@/lib/api/station";
-import type { WarehouseStatus } from "@/shared/labels";
+import type { ReturnStatusGroup, WarehouseStatus } from "@/shared/labels";
 import type {
   Conclusion,
   Inspection,
@@ -21,7 +21,14 @@ import type {
 
 import { daysBetween, vnDay } from "@/shared/format";
 
-import { mockPackages, startOfVnDay, type MockPackage, type MockSession } from "./packagesDb";
+import {
+  mockPackages,
+  platformShopOf,
+  RETENTION_CLIP_DAYS,
+  startOfVnDay,
+  type MockPackage,
+  type MockSession,
+} from "./packagesDb";
 
 /**
  * Hồ sơ hàng hoàn + hồ sơ khiếu nại giả, dùng chung station (`StationSim` chế độ RETURN) và dashboard (D4, D14, D16,
@@ -101,10 +108,16 @@ export type MockClaim = {
   close_reason: string | null;
   created_at: string;
   closed_at: string | null;
+  /** item 03 (BR-41): lúc chuyển "Đã gửi" / có kết quả — null khi chưa. */
+  submitted_at?: string | null;
+  result_at?: string | null;
   /** Bằng chứng: phiên / ảnh (auto = tự chọn). */
   evidence: { id: string; kind: "SESSION" | "SNAPSHOT"; ref_id: string; auto: boolean; added_at: string }[];
   notes: MockClaimNote[];
 };
+
+/** item 03: cài đặt mock dùng khi tính `response_due_at` (API-80 `refund_only_default_hours` — handler settings ghi). */
+export const phase3Config = { refundOnlyDefaultHours: 48 };
 
 export const mockReturnCases: MockReturnCase[] = [];
 export const mockClaims: MockClaim[] = [];
@@ -417,6 +430,19 @@ export function resetMockReturns() {
       received_at: iso(startOfVnDay(1) + 9 * 3600_000 + 140_000),
       conclusion: "DAMAGED",
       single_session: true,
+    }),
+    // item 03 (04 §1 TikTok `…061` REFUND_ONLY): Chỉ hoàn tiền chưa xử lý, hạn sàn còn 30 giờ (D2 / D14 — BR-40).
+    caseSeed(61, [p("TTTST0000000016")], {
+      kind: "REFUND_ONLY",
+      status: "NO_PARCEL",
+      needs_parcel: false,
+      platform_return_sn: "TTRF000000061",
+      platform_status: "RETURN_OR_REFUND_REQUEST_PENDING",
+      reason: "MISSING_ITEM",
+      reason_label: "Thiếu hàng",
+      seller_due_at: iso(now + 30 * 3600_000),
+      reported_at: iso(now - 18 * 3600_000),
+      expected_since: null,
     }),
   );
   // Phiên RETURN đã đóng của hồ sơ đã nhận + hồ sơ khiếu nại tự tạo.
@@ -863,7 +889,9 @@ function seedClaims(now: number) {
   );
 }
 
-export type MockReconAlert = Omit<ReconAlert, "package" | "allowed_status_targets"> & { package_id: string };
+export type MockReconAlert = Omit<ReconAlert, "package" | "allowed_status_targets" | "platform" | "shop"> & {
+  package_id: string;
+};
 export const mockReconAlerts: MockReconAlert[] = [];
 /** Khóa `recon:run` của J-14 (API-123 → 409 RECON_IN_PROGRESS khi đang giữ). */
 export const reconState = { running: false };
@@ -1022,8 +1050,49 @@ export function waitingDays(rc: Pick<MockReturnCase, "expected_since" | "receive
   return daysBetween(vnDay(rc.expected_since), vnDay(new Date(now)));
 }
 
-export function toReturnItem(rc: MockReturnCase, now = Date.now()): ReturnListItem {
+/** Nhóm yêu cầu trả từ chữ sàn (02 §5.3 — mock thay `platforms/<sàn>/mapping.py`). */
+const RETURN_GROUP: Record<string, ReturnStatusGroup> = {
+  REQUESTED: "REQUESTED",
+  JUDGING: "REQUESTED",
+  SELLER_DISPUTE: "REQUESTED",
+  PROCESSING: "ACCEPTED",
+  ACCEPTED: "ACCEPTED",
+  CANCELLED: "CANCELLED",
+  REFUND_PAID: "DONE",
+  CLOSED: "CLOSED",
+  // TikTok (02 §5.3 — giả định, Q19)
+  RETURN_OR_REFUND_REQUEST_PENDING: "REQUESTED",
+  AWAITING_BUYER_SHIP: "ACCEPTED",
+  BUYER_SHIPPED_ITEM: "ACCEPTED",
+  RECEIVE_REJECTED: "ACCEPTED",
+  REQUEST_REJECTED: "CANCELLED",
+  RETURN_OR_REFUND_REQUEST_CANCEL: "CANCELLED",
+  RETURN_OR_REFUND_REQUEST_COMPLETE: "DONE",
+};
+
+/** item 03 (02 §6.2 API-110): hạn phản hồi chỉ với `REFUND_ONLY` (DEC-451 — tính lúc đọc). */
+export function responseDue(
+  rc: MockReturnCase,
+): Pick<ReturnListItem, "response_due_at" | "response_due_source"> {
+  if (rc.kind !== "REFUND_ONLY") return { response_due_at: null, response_due_source: null };
+  if (rc.seller_due_at) return { response_due_at: rc.seller_due_at, response_due_source: "PLATFORM" };
+  if (!rc.reported_at) return { response_due_at: null, response_due_source: null };
   return {
+    response_due_at: iso(Date.parse(rc.reported_at) + phase3Config.refundOnlyDefaultHours * 3600_000),
+    response_due_source: "DEFAULT",
+  };
+}
+
+export function toReturnItem(rc: MockReturnCase, now = Date.now()): ReturnListItem {
+  const firstPkg = rc.package_ids.map(findPackage).find(Boolean);
+  const openClaim = mockClaims
+    .filter((c) => claimIsOpen(c) && (c.return_case_id === rc.id || rc.package_ids.includes(c.package_id)))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  return {
+    ...platformShopOf(firstPkg),
+    platform_status_group: rc.platform_status ? (RETURN_GROUP[rc.platform_status] ?? null) : null,
+    ...responseDue(rc),
+    claim: openClaim ? { id: openClaim.id, code: openClaim.code } : null,
     id: rc.id,
     code: rc.code,
     kind: rc.kind,
@@ -1078,6 +1147,7 @@ export function toReconAlert(a: MockReconAlert): ReconAlert {
   const { package_id, ...rest } = a;
   return {
     ...rest,
+    ...platformShopOf(pkg),
     package: {
       id: package_id,
       tracking_number: pkg?.tracking_number ?? "—",
@@ -1113,6 +1183,7 @@ export function toClaimItem(c: MockClaim, now = Date.now(), dueSoonHours = 48): 
     deadline_at: c.deadline_at,
     ...claimDue(c, now, dueSoonHours),
     created_at: c.created_at,
+    ...platformShopOf(pkg),
   };
 }
 
@@ -1133,16 +1204,85 @@ export function findSnapshotAnywhere(id: string) {
   return null;
 }
 
+/** `removal_keep_until` (02 §6.2 API-132): max(cuối clip / ảnh, bây giờ) + thời gian giữ clip. */
+const keepUntil = (endMs: number) => iso(Math.max(endMs, Date.now()) + RETENTION_CLIP_DAYS * DAY);
+
+const EXCLUDING = ["WRONG_SCAN", "NOT_A_RETURN"];
+
+/** item 03 (BR-39 v0.4, 02 §5.1 SESSION v0.3): trường chỉ đọc của phiên trong bằng chứng — mock chưa có API-189 (T-264). */
+export function sessionReview(s: MockSession) {
+  const review = s.review ?? {};
+  const cancelCause = review.cancel_cause ?? null;
+  const effective = cancelCause ?? s.cancel_reason;
+  const confirmed = review.return_confirmed ?? null;
+  const wrongScan = review.wrong_scan ?? null;
+  const exclusion =
+    s.type === "RETURN"
+      ? wrongScan
+        ? ("MARKED" as const)
+        : effective && EXCLUDING.includes(effective) && !confirmed
+          ? cancelCause
+            ? ("SUPERVISOR_CANCEL" as const)
+            : ("STATION_CANCEL" as const)
+          : null
+      : null;
+  return {
+    cancel_reason: s.cancel_reason,
+    cancel_cause: cancelCause,
+    wrong_scan: wrongScan,
+    review_needed: Boolean(review.review_needed),
+    evidence_exclusion: exclusion,
+    return_confirmed: confirmed,
+  };
+}
+
+/** Phiên chính (DEC-448): phiên RETURN có clip sớm nhất không bị loại, không "Cần soát"; không có → phiên PACK. */
+function primarySessionId(sessions: MockSession[]): string | null {
+  const candidates = sessions
+    .filter((s) => s.type === "RETURN" && s.clips.some((cl) => cl.status !== "DELETED"))
+    .filter((s) => !sessionReview(s).evidence_exclusion && !sessionReview(s).review_needed)
+    .sort((a, b) => a.started_at.localeCompare(b.started_at));
+  return candidates[0]?.id ?? sessions.find((s) => (s.type ?? "PACK") === "PACK")?.id ?? null;
+}
+
+let primaryCache: string | null = null;
+function evidenceExtras(s: MockSession) {
+  return {
+    prior_return: false,
+    primary: s.id === primaryCache,
+    removal_keep_until: keepUntil(Date.parse(s.ended_at ?? s.started_at) || Date.now()),
+  };
+}
+
 export function toClaimDetail(c: MockClaim): ClaimDetail {
   const pkg = findPackage(c.package_id);
   const rc = c.return_case_id ? findCase(c.return_case_id) : undefined;
+  primaryCache = primarySessionId(
+    c.evidence
+      .filter((e) => e.kind === "SESSION")
+      .map((e) => findSessionAnywhere(e.ref_id)?.session)
+      .filter((x): x is MockSession => Boolean(x)),
+  );
   const evidence: ClaimEvidence[] = c.evidence.flatMap((e): ClaimEvidence[] => {
     if (e.kind === "SNAPSHOT") {
       const shot = findSnapshotAnywhere(e.ref_id);
       if (!shot) return [];
-      // BE DEC-312 e: ảnh đã xóa → `url = null`.
-      const snapshot = { ...shot, url: shot.status === "DELETED" ? null : shot.url };
-      return [{ id: e.id, kind: "SNAPSHOT", auto: e.auto, snapshot }];
+      // BE DEC-312 e: ảnh đã xóa / thiếu tệp (item 03) → `url = null`.
+      const snapshot = {
+        ...shot,
+        url: shot.status === "DELETED" || shot.status === "MISSING" ? null : shot.url,
+      };
+      return [
+        {
+          id: e.id,
+          kind: "SNAPSHOT",
+          auto: e.auto,
+          prior_return: false,
+          primary: false,
+          removal_keep_until: keepUntil(Date.parse(shot.taken_at) || Date.now()),
+          snapshot,
+        },
+      ];
     }
     const found = findSessionAnywhere(e.ref_id);
     if (!found) return [];
@@ -1152,7 +1292,9 @@ export function toClaimDetail(c: MockClaim): ClaimDetail {
         id: e.id,
         kind: "SESSION",
         auto: e.auto,
+        ...evidenceExtras(s),
         session: {
+          ...sessionReview(s),
           id: s.id,
           type: s.type ?? "PACK",
           status: s.status,
@@ -1214,6 +1356,41 @@ export function toClaimDetail(c: MockClaim): ClaimDetail {
     missing,
     notes: [...c.notes].sort((a, b) => a.at.localeCompare(b.at)),
     allowed_transitions: CLAIM_TRANSITIONS[c.status],
+    // item 03 (02 §6.2 API-132) — phần BR-38 / BR-39 đầy đủ ở T-260 / T-264 (mock API-134 / 189).
+    submitted_at: c.submitted_at ?? null,
+    result_at: c.result_at ?? null,
+    prior_return_sessions: [],
+    excluded_return_sessions: caseSessions
+      .filter((s) => s.type === "RETURN" && s.clips.some((cl) => cl.status !== "DELETED"))
+      .flatMap((s) => {
+        const r = sessionReview(s);
+        if (!r.evidence_exclusion) return [];
+        return [
+          {
+            session_id: s.id,
+            status: s.status,
+            cancel_reason: s.cancel_reason,
+            cancel_cause: r.cancel_cause,
+            evidence_exclusion: r.evidence_exclusion,
+            wrong_scan: r.wrong_scan,
+            started_at: s.started_at,
+            has_clip: true,
+            in_evidence: used.has(s.id),
+          },
+        ];
+      }),
+    review_sessions: caseSessions
+      .filter((s) => s.type === "RETURN" && sessionReview(s).review_needed)
+      .map((s) => ({
+        session_id: s.id,
+        status: s.status,
+        started_at: s.started_at,
+        in_evidence: used.has(s.id),
+      })),
+    removed_evidence: [],
+    // `shares[]` theo người xem — handler claims ghép (`sharesOfClaim`).
+    shares: [],
+    shares_active_count: 0,
   };
 }
 
