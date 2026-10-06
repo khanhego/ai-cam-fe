@@ -47,6 +47,8 @@ export const COPY = {
   col: {
     code: "Mã hồ sơ",
     package: "Mã kiện",
+    /** item 03 (FR-07.01). */
+    shop: "Sàn · Shop",
     type: "Loại",
     counterparty: "Bên nhận",
     status: "Trạng thái",

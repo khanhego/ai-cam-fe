@@ -5,6 +5,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { hasPermission } from "@/lib/api/auth";
 import { isApiError } from "@/lib/api/errors";
 import { reconApi, RECON_RULES, type ReconAlert, type ReconRule, type ReconSeverity } from "@/lib/api/recon";
+import { PlatformFilter } from "@/shared/filters/PlatformFilter";
+import { ShopChip } from "@/shared/filters/ShopChip";
 import { fmtShort } from "@/shared/format";
 import { platformStatus, WAREHOUSE_STATUS } from "@/shared/labels";
 import { RECON_SEVERITY, RECON_STATUS, reconRuleLabel, type RuleThresholds } from "@/shared/returns/labels";
@@ -123,6 +125,7 @@ function ReconTable({
               <th className="pl-4">{L.col.severity}</th>
               <th>{L.col.rule}</th>
               <th>{L.col.package}</th>
+              <th>{L.col.shop}</th>
               <th>{L.col.warehouse}</th>
               <th>{L.col.platform}</th>
               <th className={!showResult && !onResolve ? "pr-4" : undefined}>{L.col.since}</th>
@@ -138,6 +141,9 @@ function ReconTable({
                 </td>
                 <td>{reconRuleLabel(a.rule, thresholds)}</td>
                 <td>{pkgLink(a)}</td>
+                <td>
+                  <ShopChip platform={a.platform} shop={a.shop} />
+                </td>
                 <td>
                   <WarehouseCell a={a} />
                 </td>
@@ -161,8 +167,9 @@ function ReconTable({
               <span className="text-body-md text-on-surface">{reconRuleLabel(a.rule, thresholds)}</span>
               <SeverityChip a={a} />
             </div>
-            <p className="flex flex-wrap gap-x-2 text-body-sm text-on-surface-variant">
+            <p className="flex flex-wrap items-center gap-x-2 text-body-sm text-on-surface-variant">
               {pkgLink(a)}
+              <ShopChip platform={a.platform} shop={a.shop} />
               <span>
                 <WarehouseCell a={a} /> · {platformStatus(a.package.platform_status)}
               </span>
@@ -237,7 +244,7 @@ export default function ReconPage() {
         }
       />
       <Tabs label={L.tabs} items={tabs} value={filters.status} onChange={(status) => apply({ status })} />
-      <div className="mb-2 grid gap-x-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-2 grid gap-x-3 sm:grid-cols-2 lg:grid-cols-6">
         <SelectField
           name="recon-severity"
           label={L.severity}
@@ -279,6 +286,12 @@ export default function ReconPage() {
           value={filters.to ?? ""}
           min={filters.from}
           onChange={(e) => apply({ to: e.target.value || undefined })}
+        />
+        <PlatformFilter
+          idPrefix="d15"
+          platform={filters.platform ?? null}
+          shopId={filters.shop ?? null}
+          onChange={(v) => apply({ platform: v.platform, shop: v.shopId })}
         />
       </div>
       {hasReconFilters(filters) && (

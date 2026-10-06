@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
 
 import { isKnownAttention, type AnyAttentionItem } from "@/lib/api/reports";
+import { vnDay } from "@/shared/format";
 import { Icon } from "@/shared/ui";
 
 import { attentionText, COPY } from "./copy";
+import { droppedPath } from "./links";
 
 const ICON: Record<AnyAttentionItem["kind"], string> = {
   CANCELLED_AFTER_PACK: "warning",
@@ -19,10 +21,14 @@ const ICON: Record<AnyAttentionItem["kind"], string> = {
   RETURN_UNIDENTIFIED: "help",
   RETURN_SESSION_ABANDONED: "assignment_late",
   RETURN_FORCE_NEW: "link_off",
+  REFUND_ONLY_PENDING: "timer",
+  CLAIM_OVERDUE: "warning",
+  RETURN_SESSION_DROPPED: "assignment_return",
+  BACKUP_STALE: "cloud_off",
 };
 
 /** Nút của từng dòng → màn lọc sẵn (01 §10.5 D2). */
-function action(item: AnyAttentionItem): [string, string] | null {
+function action(item: AnyAttentionItem, today: string): [string, string] | null {
   switch (item.kind) {
     case "CANCELLED_AFTER_PACK":
       return [COPY.view, "/admin/packages?warehouse_status=CANCELLED_AFTER_PACK"];
@@ -49,6 +55,16 @@ function action(item: AnyAttentionItem): [string, string] | null {
       return [COPY.link, "/admin/returns?tab=UNIDENTIFIED"];
     case "RETURN_SESSION_ABANDONED":
       return [COPY.view, "/admin/packages?session_type=RETURN&session_status=ABANDONED"];
+    // item 03 (02 §6.2 API-32 mở rộng).
+    case "REFUND_ONLY_PENDING":
+      return [COPY.view, "/admin/returns?tab=NO_PARCEL&pending_only=true"];
+    case "CLAIM_OVERDUE":
+      return [COPY.view, "/admin/claims?status=NEW&due=overdue"];
+    case "RETURN_SESSION_DROPPED":
+      return [COPY.view, droppedPath(today)];
+    // D23 chưa có trong menu tới T-259 → `canOpen` ẩn nút (DEC-547).
+    case "BACKUP_STALE":
+      return [COPY.view, "/admin/settings/backup"];
   }
 }
 
@@ -60,10 +76,13 @@ export function AttentionList({
   items: all,
   canOpen,
   missingDays,
+  today = vnDay(),
 }: {
   items: { kind: string }[];
   canOpen: (path: string) => boolean;
   missingDays?: number;
+  /** Ngày hôm nay giờ VN (link "7 ngày"). */
+  today?: string;
 }) {
   // Contract API-32: client bỏ qua kind không biết (không render dòng trống — review G3 F12).
   const items = all.filter(isKnownAttention);
@@ -71,7 +90,7 @@ export function AttentionList({
   return (
     <ul className="flex flex-col divide-y divide-outline-variant">
       {items.map((item, i) => {
-        const link = action(item);
+        const link = action(item, today);
         const path = link?.[1].split("?")[0];
         return (
           <li key={`${item.kind}-${i}`} className="flex items-center gap-3 py-3 text-body-md text-on-surface">

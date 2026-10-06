@@ -99,8 +99,8 @@ export type Phase3AttentionItem =
   | { kind: "RETURN_SESSION_DROPPED"; count: number }
   | { kind: "BACKUP_STALE"; reason: BackupStaleReason; hours?: number | null; count?: number | null };
 
-/** Mục D2 đang hiển thị. Item 03: `Phase3AttentionItem` vào đây khi D2 vẽ được (T-261) — tới lúc đó client bỏ qua như kind lạ. */
-export type AnyAttentionItem = AttentionItem | ReturnAttentionItem;
+/** Mục D2 đang hiển thị (item 03 T-261: gồm `Phase3AttentionItem`). */
+export type AnyAttentionItem = AttentionItem | ReturnAttentionItem | Phase3AttentionItem;
 
 export const PHASE3_ATTENTION_KINDS = [
   "REFUND_ONLY_PENDING",
@@ -123,6 +123,7 @@ export const ATTENTION_KINDS = [
   "RETURN_UNIDENTIFIED",
   "RETURN_SESSION_ABANDONED",
   "RETURN_FORCE_NEW",
+  ...PHASE3_ATTENTION_KINDS,
 ] as const satisfies readonly AnyAttentionItem["kind"][];
 
 /** Contract: "client bỏ qua kind không biết" (02 §6.2 API-32) — server có thể thêm kind mới mà không đổi phiên bản. */
@@ -133,8 +134,8 @@ export type DailyReport = {
   date: string;
   counts: DailyCounts & ReturnCounts & Phase3Counts;
   stations: DailyStation[];
-  /** Server có thể trả kind chưa biết (gồm `Phase3AttentionItem` trước T-261) — lọc bằng `isKnownAttention`. */
-  attention: (AnyAttentionItem | Phase3AttentionItem)[];
+  /** Server có thể trả kind chưa biết — lọc bằng `isKnownAttention`. */
+  attention: AnyAttentionItem[];
 };
 
 // ───────────────────────── item 03: báo cáo D20 (API-150..153) ─────────────────────────

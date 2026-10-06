@@ -121,7 +121,9 @@ export function SessionPanel({
       <p className="mt-1 text-body-md text-on-surface tabular-nums">
         {session.station_name} · {fmtTime(session.started_at)} → {fmtTime(session.ended_at)} ·{" "}
         {fmtDuration(session.duration_s)}
-        {session.operator_name ? ` · ${COPY.detail.operator(session.operator_name)}` : ""}
+        {session.operator_name
+          ? ` · ${(session.type === "RETURN" ? COPY.detail.operator : COPY.detail.packer)(session.operator_name)}`
+          : ""}
       </p>
       <div className="mt-2 flex flex-wrap gap-1">
         {cam2Ok && (

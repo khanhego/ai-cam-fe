@@ -1,5 +1,6 @@
-import type { AnyAttentionItem } from "@/lib/api/reports";
+import type { AnyAttentionItem, BackupStaleReason } from "@/lib/api/reports";
 import { fmtNumber, fmtShort } from "@/shared/format";
+import type { Platform } from "@/shared/labels";
 
 /** Chữ D2 — nguyên văn 01 §10.5 (DEC-17). */
 export const COPY = {
@@ -25,6 +26,8 @@ export const COPY = {
     returns_missing: "Quá hạn chưa về",
     recon_open: "Lệch",
     claims_open: "Hồ sơ mở",
+    // item 03 (01 §10.5 D2 "Thẻ mới").
+    returns_dropped_7d: "Phiên hoàn hủy / bỏ dở (7 ngày)",
   },
   kpiDetail: {
     issue: (n: number) => `${fmtNumber(n)} có vấn đề`,
@@ -48,6 +51,27 @@ export const COPY = {
 };
 
 const seconds = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
+/** Tên sàn ngắn trong ngoặc ("Shop Áo Đẹp Outlet (TikTok)" — 01 §10.5 D2). */
+const PLATFORM_SHORT: Record<Platform, string> = { SHOPEE: "Shopee", TIKTOK: "TikTok" };
+
+/** `BACKUP_STALE` theo `reason` (02 §6.2 API-32 item 03). */
+function backupStaleText(reason: BackupStaleReason, hours?: number | null, count?: number | null): string {
+  const n = fmtNumber(count ?? 0);
+  switch (reason) {
+    case "DB_LATE":
+      return `Sao lưu cloud trễ ${fmtNumber(hours ?? 0)} giờ`;
+    case "DB_FAILED_TWICE":
+      return "2 lần sao lưu DB gần nhất không thành công";
+    case "EVIDENCE_LATE":
+      return `${n} tệp chờ sao lưu quá 24 giờ`;
+    case "HASH_MISMATCH":
+      return `${n} tệp lệch mã băm`;
+    case "SOURCE_MISSING":
+      return `${n} tệp bằng chứng không thấy tại kho`;
+    case "ERROR":
+      return "Sao lưu cloud đang lỗi";
+  }
+}
 const ROLE = { CAM1: "Cam 1", CAM2: "Cam 2" } as const;
 
 /** Một dòng "Cần xử lý" (01 §10.5 D2); `missingDays` = ngưỡng "hàng hoàn chưa về" (API-80, mặc định 7). */
@@ -65,8 +89,15 @@ export function attentionText(item: AnyAttentionItem, missingDays = 7): string {
       return `${fmtNumber(item.count)} yêu cầu duyệt đang chờ`;
     case "CLIP_FAILED":
       return `${fmtNumber(item.count)} clip cắt lỗi — cần cắt lại`;
-    case "SYNC_ERROR":
-      return `Đồng bộ Shopee lỗi lúc ${fmtShort(item.at)}`;
+    case "SYNC_ERROR": {
+      // item 03: chỉ ADMIN; có tên shop + sàn; `AUTH_EXPIRED` → hết hạn ủy quyền (01 §10.5 D2).
+      const platform = item.platform ? PLATFORM_SHORT[item.platform] : "Shopee";
+      if (!item.shop_name) return `Đồng bộ ${platform} lỗi lúc ${fmtShort(item.at)}`;
+      const shop = `Shop ${item.shop_name} (${platform})`;
+      return item.code === "AUTH_EXPIRED"
+        ? `${shop} hết hạn ủy quyền`
+        : `${shop} đồng bộ lỗi lúc ${fmtShort(item.at)}`;
+    }
     case "DISK_USAGE":
       return `Ổ lưu video đã dùng ${item.percent}%`;
     case "RETURN_MISSING":
@@ -81,5 +112,16 @@ export function attentionText(item: AnyAttentionItem, missingDays = 7): string {
       return `${fmtNumber(item.count)} phiên mở hoàn bị bỏ dở — cần kiểm lại`;
     case "RETURN_FORCE_NEW":
       return `${fmtNumber(item.count)} kiện hoàn ghi riêng (đơn đã nhận hoàn) — cần gắn đơn`;
+    // item 03 (02 §6.2 API-32 mở rộng, 01 §10.5 D2 "Cần xử lý mới").
+    case "REFUND_ONLY_PENDING":
+      return `${fmtNumber(item.count)} yêu cầu Chỉ hoàn tiền chưa xử lý${
+        item.nearest_due_at ? ` · hạn gần nhất ${fmtShort(item.nearest_due_at)}` : ""
+      }`;
+    case "CLAIM_OVERDUE":
+      return `${fmtNumber(item.count)} hồ sơ quá hạn chưa gửi`;
+    case "RETURN_SESSION_DROPPED":
+      return `${fmtNumber(item.count)} phiên mở hoàn bị hủy / bỏ dở trong 7 ngày`;
+    case "BACKUP_STALE":
+      return backupStaleText(item.reason, item.hours, item.count);
   }
 }

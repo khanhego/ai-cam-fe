@@ -28,6 +28,7 @@ import { ExportDialog } from "./ExportDialog";
 import { exportLayouts } from "./exportLayouts";
 import { SessionPanel } from "./SessionPanel";
 import { timelineText } from "./timeline";
+import { ShopChip } from "@/shared/filters/ShopChip";
 
 const C = COPY.detail;
 const hasPending = (p: PackageDetail | undefined) =>
@@ -211,6 +212,9 @@ export default function PackageDetailPage() {
             <TrackingNumber value={pkg.tracking_number} size="lg" />
             <StatusChip tone={whTone}>{whLabel}</StatusChip>
             {pkg.is_placeholder && <StatusChip tone="warning">{C.placeholder}</StatusChip>}
+            {!pkg.is_placeholder && (
+              <ShopChip platform={order?.platform ?? null} shop={order?.shop ?? null} />
+            )}
             {order?.platform_status && (
               <StatusChip>
                 {C.platform}: {platformStatus(order.platform_status)}

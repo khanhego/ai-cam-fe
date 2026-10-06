@@ -26,3 +26,27 @@ export function nextPlatformFilter(
   const shop = shops.find((s) => s.id === shopId);
   return { platform: shop ? shop.platform : prev.platform, shopId };
 }
+
+/** URL của màn danh sách (DEC-488): `platform` (`SHOPEE` / `TIKTOK`), `shop` (id shop). API dùng `shop_id`. */
+export function platformFromParams(p: URLSearchParams): PlatformFilterValue {
+  const platform = p.get("platform");
+  return { platform: isPlatform(platform) ? platform : null, shopId: p.get("shop")?.trim() || null };
+}
+
+export function platformToParams(v: PlatformFilterValue): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (v.platform) out.platform = v.platform;
+  if (v.shopId) out.shop = v.shopId;
+  return out;
+}
+
+/** Tham số API-30 / 110 / 120 / 130 (02 §6.2 "lọc sàn / shop"). */
+export function platformToApi(v: PlatformFilterValue): { platform?: Platform; shop_id?: string } {
+  return { ...(v.platform ? { platform: v.platform } : {}), ...(v.shopId ? { shop_id: v.shopId } : {}) };
+}
+
+/** Trường `platform` / `shop` cho object bộ lọc màn (không có → bỏ trường, không đặt null). */
+export function platformUrlFields(p: URLSearchParams): { platform?: Platform; shop?: string } {
+  const v = platformFromParams(p);
+  return { ...(v.platform ? { platform: v.platform } : {}), ...(v.shopId ? { shop: v.shopId } : {}) };
+}

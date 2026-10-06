@@ -9,6 +9,8 @@ import {
   type ClaimType,
   type Counterparty,
 } from "@/lib/api/claims";
+import { PlatformFilter } from "@/shared/filters/PlatformFilter";
+import { ShopChip } from "@/shared/filters/ShopChip";
 import { fmtShort } from "@/shared/format";
 import { CLAIM_SOURCE, CLAIM_STATUS, CLAIM_TYPE, COUNTERPARTY } from "@/shared/returns/labels";
 import { useScanListener } from "@/shared/scan/useScanListener";
@@ -70,6 +72,7 @@ function ClaimTable({ items }: { items: ClaimListItem[] }) {
             <tr>
               <th className="pl-4">{COPY.col.code}</th>
               <th>{COPY.col.package}</th>
+              <th>{COPY.col.shop}</th>
               <th>{COPY.col.type}</th>
               <th>{COPY.col.counterparty}</th>
               <th>{COPY.col.status}</th>
@@ -87,6 +90,9 @@ function ClaimTable({ items }: { items: ClaimListItem[] }) {
                 </td>
                 <td>
                   <TrackingNumber value={c.package.tracking_number} to={`/admin/packages/${c.package.id}`} />
+                </td>
+                <td>
+                  <ShopChip platform={c.platform} shop={c.shop} />
                 </td>
                 <td>{CLAIM_TYPE[c.type]}</td>
                 <td>{COUNTERPARTY[c.counterparty]}</td>
@@ -114,8 +120,9 @@ function ClaimTable({ items }: { items: ClaimListItem[] }) {
             <p className="text-body-md text-on-surface">
               {CLAIM_TYPE[c.type]} · {COUNTERPARTY[c.counterparty]}
             </p>
-            <p className="flex flex-wrap gap-x-2 text-body-sm text-on-surface-variant">
+            <p className="flex flex-wrap items-center gap-x-2 text-body-sm text-on-surface-variant">
               <span className="font-mono">{c.package.tracking_number}</span>
+              <ShopChip platform={c.platform} shop={c.shop} />
               <Deadline at={c.deadline_at} active={ACTIVE.has(c.status)} dueSoon={c.due_soon} />
             </p>
           </li>
@@ -181,7 +188,7 @@ export default function ClaimsPage() {
       <Tabs label={L.tabs} items={tabs} value={filters.status} onChange={(status) => apply({ status })} />
       <form
         onSubmit={submitQ}
-        className="mb-2 grid gap-x-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto]"
+        className="mb-2 grid gap-x-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto]"
         role="search"
       >
         <TextField
@@ -227,6 +234,12 @@ export default function ClaimsPage() {
           <option value="soon">{L.dueSoon}</option>
           <option value="overdue">{L.overdue}</option>
         </SelectField>
+        <PlatformFilter
+          idPrefix="d16"
+          platform={filters.platform ?? null}
+          shopId={filters.shop ?? null}
+          onChange={(v) => apply({ platform: v.platform, shop: v.shopId })}
+        />
         <div className="mb-5 flex items-center gap-2">
           <Button type="submit" variant="tonal">
             {L.search}

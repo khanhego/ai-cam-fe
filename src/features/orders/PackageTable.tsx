@@ -1,6 +1,7 @@
 import type { PackageListItem } from "@/lib/api/packages";
 import { fmtDateTime } from "@/shared/format";
-import { platformStatus, SOURCE, WAREHOUSE_STATUS } from "@/shared/labels";
+import { ShopChip } from "@/shared/filters/ShopChip";
+import { PLATFORM_LABEL, platformStatus, SOURCE, WAREHOUSE_STATUS } from "@/shared/labels";
 import { Icon, StatusChip, TrackingNumber } from "@/shared/ui";
 
 import { COPY } from "./copy";
@@ -50,6 +51,7 @@ export function PackageTable({ items }: { items: PackageListItem[] }) {
               <th className="pl-4">{COPY.col.tracking}</th>
               <th>{COPY.col.order}</th>
               <th>{COPY.col.warehouse}</th>
+              <th>{COPY.col.shop}</th>
               <th>{COPY.col.platform}</th>
               <th>{COPY.col.station}</th>
               <th>{COPY.col.packedAt}</th>
@@ -68,6 +70,9 @@ export function PackageTable({ items }: { items: PackageListItem[] }) {
                     <WarehouseChip status={p.warehouse_status} />
                     <ReturnChips p={p} />
                   </span>
+                </td>
+                <td>
+                  <ShopChip platform={p.platform} shop={p.shop} />
                 </td>
                 <td>{platformStatus(p.platform_status)}</td>
                 <td>{p.last_session?.station_name ?? "—"}</td>
@@ -90,7 +95,13 @@ export function PackageTable({ items }: { items: PackageListItem[] }) {
             <div className="flex flex-wrap gap-1">
               <WarehouseChip status={p.warehouse_status} />
               <ReturnChips p={p} />
-              {p.platform_status && <StatusChip>Shopee: {platformStatus(p.platform_status)}</StatusChip>}
+              <ShopChip platform={p.platform} shop={p.shop} />
+              {p.platform_status && (
+                <StatusChip>
+                  {p.platform ? PLATFORM_LABEL[p.platform] : COPY.col.platform}:{" "}
+                  {platformStatus(p.platform_status)}
+                </StatusChip>
+              )}
               {p.source === "CSV" && <StatusChip>Nguồn: {SOURCE.CSV}</StatusChip>}
             </div>
             <p className="text-body-sm text-on-surface-variant">

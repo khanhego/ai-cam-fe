@@ -300,7 +300,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   ORDER_OVERWRITTEN_BY_API: "Shopee ghi đè đơn từ file",
   // item 02 (02 §6.2 API-92, §6.3 #19, §6.5 #1)
   STATION_WORK_MODE: "Đổi chế độ bàn",
-  STATION_OPERATOR: "Đổi người kiểm",
+  STATION_OPERATOR: "Đổi người kiểm / người đóng gói",
   INSPECTION_CORRECT: "Sửa kết luận phiên hoàn",
   RETURN_LINK_ORDER: "Gắn đơn cho hàng hoàn",
   RECON_RESOLVE: "Xử lý cảnh báo lệch",

@@ -108,6 +108,8 @@ type SessionSeed = {
   flags?: SessionFlag[];
   clips?: ClipStatus | null;
   held?: boolean;
+  /** item 03: người đóng gói (FR-03.16). */
+  operator?: string;
 };
 
 type PackageSeed = {
@@ -127,6 +129,8 @@ type PackageSeed = {
   /** item 03. */
   shop?: MockShopRef;
   merged?: string[];
+  /** item 03 (BR-32): mã có ở ≥ 2 shop lúc quét → sự kiện dòng thời gian có `shops`. */
+  ambiguousShops?: { platform: Platform; name: string }[];
 };
 
 const DEFAULT_ITEMS: [string, string | null, number][] = [["Áo thun basic", "Đen / L", 2]];
@@ -363,7 +367,21 @@ function phase3Seeds(): PackageSeed[] {
       shop: SHOP.B,
       status: "PACKED",
       platform: "READY_TO_SHIP",
-      sessions: [packed(1, 300)],
+      // FR-03.16: phiên PACK có người đóng gói (D4 "Người đóng gói: Minh").
+      sessions: [{ ...packed(1, 300), operator: "Minh" }],
+    },
+    // TC-05.93 (EX-P14, BR-32): mã có ở 2 shop → kiện chưa xác minh, cờ AMBIGUOUS_SHOP, dòng thời gian liệt kê shop.
+    {
+      n: "",
+      tracking: "SPXTSTX0000001",
+      orderSn: null,
+      unverified: true,
+      status: "PACKED",
+      sessions: [{ ...packed(1, 330), flags: ["UNVERIFIED", "AMBIGUOUS_SHOP"] }],
+      ambiguousShops: [
+        { platform: "SHOPEE", name: "TST B" },
+        { platform: "TIKTOK", name: "TST TikTok B (mock)" },
+      ],
     },
     {
       n: "",
@@ -449,6 +467,7 @@ function buildSession(pkgId: string, idx: number, s: SessionSeed): MockSession {
     cancel_reason: s.status === "CANCELLED" ? "WRONG_SCAN" : null,
     note: null,
     clips,
+    ...(s.operator ? { operator_name: s.operator } : {}),
   };
 }
 
@@ -492,6 +511,15 @@ function buildPackage(seed: PackageSeed): MockPackage {
         actor: s.station_name,
       });
   }
+  if (seed.ambiguousShops && first)
+    timeline.push({
+      at: first.started_at,
+      source: "WAREHOUSE",
+      from_status: null,
+      to_status: "PACKING",
+      actor: first.station_name,
+      shops: seed.ambiguousShops,
+    });
   const last = sessions[0]?.ended_at ? Date.parse(sessions[0].ended_at) : created;
   if (["HANDED_OVER", "DELIVERED", "CANCELLED_AFTER_PACK"].includes(seed.status)) {
     timeline.push({

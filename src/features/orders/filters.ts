@@ -15,6 +15,10 @@ export const FILTER_KEYS = [
   // item 02 (01 §10.5 D3 EXTEND): loại phiên Đóng gói / Mở hoàn.
   "session_type",
   "source",
+  // item 03 (01 §10.5 D3 EXTEND, DEC-488): sàn / shop (URL `shop` → API `shop_id`); D2 thẻ "Phiên hoàn hủy / bỏ dở".
+  "platform",
+  "shop",
+  "return_dropped",
 ] as const;
 export type FilterKey = (typeof FILTER_KEYS)[number];
 export type Filters = Partial<Record<FilterKey, string>> & { page?: number };
@@ -43,11 +47,16 @@ export function paramsFromFilters(f: Filters): Record<string, string> {
   return out;
 }
 
-export const toApiFilters = (f: Filters): PackageFilters => ({
-  ...f,
-  page: f.page ?? 1,
-  page_size: PAGE_SIZE,
-});
+export function toApiFilters(f: Filters): PackageFilters {
+  const { shop, return_dropped, ...rest } = f;
+  return {
+    ...rest,
+    ...(shop ? { shop_id: shop } : {}),
+    ...(return_dropped === "true" ? { return_dropped: true } : {}),
+    page: f.page ?? 1,
+    page_size: PAGE_SIZE,
+  };
+}
 
 /** Rule client 02b-admin §5 D3: q ≤ 64; from ≤ to; khoảng ≤ 92 ngày (to − from, như TC-07.04: 01/07 → 02/10 = 93). */
 export function validateFilters(f: Filters): Partial<Record<FilterKey, string>> {

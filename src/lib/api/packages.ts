@@ -197,6 +197,11 @@ export type PackageDetail = {
     from_status: string | null;
     to_status: string;
     actor: string | null;
+    /**
+     * item 03 (02 §6.2 API-31: "sự kiện phiên có `AMBIGUOUS_SHOP` thêm `{shops: [{platform, name}]}` trong dòng thời
+     * gian"): có → dòng "Mã có ở {n} shop: …" thay chữ trạng thái (DEC-603 — shape chờ BE T-206 xác nhận).
+     */
+    shops?: { platform: Platform; name: string }[];
   }[];
 };
 

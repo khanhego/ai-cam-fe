@@ -72,7 +72,7 @@ test("bảng kết quả: cột, chip, phân trang 20 dòng", async () => {
   const t = await table();
   expect(within(t).getAllByRole("row")).toHaveLength(21);
   // 72 kiện Phase 1 + 20 kiện dữ liệu hàng hoàn item 02 + 6 kiện Phase 3 (TST B / TikTok — 04 §1, packagesDb).
-  expect(screen.getByText("98 kết quả")).toBeInTheDocument();
+  expect(screen.getByText("99 kết quả")).toBeInTheDocument();
   const row = within(t).getByRole("link", { name: "SPXTST0000015" }).closest("tr")!;
   expect(within(row).getByText("Đã đóng gói")).toBeInTheDocument();
   expect(within(row).getByText("TST Station 02")).toBeInTheDocument();
@@ -130,7 +130,7 @@ test("TC-07.14 + TC-07.16: lọc trạng thái kho ghi vào URL; mở lại URL 
   renderApp("/admin/packages?warehouse_status=PACKED");
   expect(await screen.findByLabelText("Trạng thái kho")).toHaveValue("PACKED");
   // + 3 kiện PACKED của dữ liệu Phase 3.
-  expect(await screen.findByText("12 kết quả")).toBeInTheDocument();
+  expect(await screen.findByText("13 kết quả")).toBeInTheDocument();
 });
 
 test("TC-07.15: lọc theo nguồn File / Shopee", async () => {

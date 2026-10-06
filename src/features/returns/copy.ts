@@ -105,7 +105,12 @@ export const COPY = {
       conclusion: "Kết luận",
       claims: "Hồ sơ khiếu nại",
       actions: "Thao tác",
+      // item 03 (01 §10.5 D14).
+      shop: "Sàn · Shop",
+      due: "Hạn phản hồi",
     },
+    /** item 03: chip lọc tab Chỉ hoàn tiền (`pending_only`, BR-40). */
+    pendingOnly: "Chỉ chưa xử lý",
     noOrder: "Chưa xác định",
     packages: (n: number) => `(${n} kiện)`,
     returnTracking: (code: string) => `Chiều về ${code}`,

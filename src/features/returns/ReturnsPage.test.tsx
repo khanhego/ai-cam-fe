@@ -33,6 +33,7 @@ test("TC-07.37: drawer 'Hàng hoàn'; tab Đang về mặc định có số, g�
   ).toEqual([
     "Mã đơn",
     "Mã kiện / chiều về",
+    "Sàn · Shop",
     "Loại",
     "Lý do",
     "Sàn báo",

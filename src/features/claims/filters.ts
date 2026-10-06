@@ -5,6 +5,8 @@ import {
   type ClaimType,
   type Counterparty,
 } from "@/lib/api/claims";
+import { platformToApi, platformToParams, platformUrlFields } from "@/shared/filters/platformFilterValue";
+import type { Platform } from "@/shared/labels";
 import { CLAIM_TYPE, COUNTERPARTY } from "@/shared/returns/labels";
 
 /** Bộ lọc D16 ↔ URL (02b-admin §1: `/admin/claims?status=&type=&counterparty=&owner=&due=&q=&page=`). */
@@ -17,6 +19,9 @@ export type ClaimUrlFilters = {
   owner?: "me";
   due?: "soon" | "overdue";
   q?: string;
+  /** item 03 (DEC-488): sàn / shop ở URL (`platform`, `shop`). */
+  platform?: Platform | null;
+  shop?: string | null;
   page?: number;
 };
 
@@ -31,6 +36,7 @@ export function claimFiltersFromParams(p: URLSearchParams): ClaimUrlFilters {
   const page = Number(p.get("page"));
   const q = p.get("q")?.trim();
   return {
+    ...platformUrlFields(p),
     status: oneOf(p.get("status"), [...CLAIM_STATUSES, "ALL"] as const) ?? DEFAULT_TAB,
     type: oneOf(p.get("type"), Object.keys(CLAIM_TYPE) as ClaimType[]),
     counterparty: oneOf(p.get("counterparty"), Object.keys(COUNTERPARTY) as Counterparty[]),
@@ -45,6 +51,7 @@ export function paramsFromClaimFilters(f: ClaimUrlFilters): Record<string, strin
   const out: Record<string, string> = {};
   if (f.status !== DEFAULT_TAB) out.status = f.status;
   for (const k of ["type", "counterparty", "owner", "due", "q"] as const) if (f[k]) out[k] = f[k]!;
+  Object.assign(out, platformToParams({ platform: f.platform ?? null, shopId: f.shop ?? null }));
   if (f.page && f.page > 1) out.page = String(f.page);
   return out;
 }
@@ -56,9 +63,10 @@ export const toApiClaimFilters = (f: ClaimUrlFilters): ClaimFilters => ({
   owner: f.owner,
   due: f.due,
   q: f.q,
+  ...platformToApi({ platform: f.platform ?? null, shopId: f.shop ?? null }),
   page: f.page ?? 1,
   page_size: PAGE_SIZE,
 });
 
 export const hasClaimFilters = (f: ClaimUrlFilters) =>
-  Boolean(f.type || f.counterparty || f.owner || f.due || f.q);
+  Boolean(f.type || f.counterparty || f.owner || f.due || f.q || f.platform || f.shop);

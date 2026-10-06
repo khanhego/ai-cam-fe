@@ -11,6 +11,7 @@ import { navFor } from "../shell/nav";
 import { AttentionList } from "./AttentionList";
 import { COPY } from "./copy";
 import { KpiCard } from "./KpiCard";
+import { droppedPath } from "./links";
 import { StationStatusList } from "./StationStatusList";
 
 type DayKey = keyof DailyCounts | "label_on_tray" | "cam2_unverified";
@@ -61,7 +62,7 @@ const WARN = new Set<DayKey>([
  * Thẻ hàng hoàn / lệch / hồ sơ (01 §10.5 D2 EXTEND, FR-09.01): "Hoàn đã nhận" theo ngày đang xem (không đếm kiện tạm
  * — số chưa xác định ở dòng phụ), các thẻ còn lại là số hiện tại. Bấm → D14 / D15 / D16 lọc sẵn.
  */
-function returnCards(c: DailyReport["counts"]) {
+function returnCards(c: DailyReport["counts"], today: string) {
   const otherRecon = c.recon_open.MEDIUM + c.recon_open.LOW;
   const received = [COPY.kpiDetail.issue(c.returns_received_issue)];
   if (c.returns_unidentified > 0) received.push(COPY.kpiDetail.unidentified(c.returns_unidentified));
@@ -87,6 +88,13 @@ function returnCards(c: DailyReport["counts"]) {
       to: "/admin/claims?status=ALL",
       warn: c.claims_due_soon > 0,
       detail: COPY.kpiDetail.dueSoon(c.claims_due_soon),
+    },
+    // item 03 (01 §10.5 D2 "Thẻ mới", FR-09.01, BR-39): số hiện tại 7 ngày, không theo ngày đang xem.
+    {
+      key: "returns_dropped_7d",
+      value: c.returns_dropped_7d,
+      to: droppedPath(today),
+      warn: c.returns_dropped_7d > 0,
     },
   ] as const;
 }
@@ -183,9 +191,9 @@ export default function DailyPage() {
           </section>
           <section
             aria-label={COPY.returnsSection}
-            className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+            className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
           >
-            {returnCards(counts)
+            {returnCards(counts, today)
               .filter((card) => navPaths.has(card.to.split("?")[0]!))
               .map((card) => (
                 <KpiCard
@@ -218,6 +226,7 @@ export default function DailyPage() {
                 items={data.attention}
                 canOpen={(p) => navPaths.has(p)}
                 missingDays={thresholds.return_missing_days}
+                today={today}
               />
             </section>
           </div>
