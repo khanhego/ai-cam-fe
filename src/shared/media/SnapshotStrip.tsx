@@ -5,6 +5,9 @@ import { Button, cx, Dialog, Icon } from "@/shared/ui";
 
 import { fmtDateTime } from "@/shared/format";
 
+/** Ảnh trong dải: `url` null khi ảnh đã bị xóa (API-132 `EvidenceSnapshot` — DEC-312 e). */
+export type StripSnapshot = Omit<Snapshot, "url"> & { url: string | null };
+
 /** Một ô ảnh 96px: nền xám + icon xoay tới khi tải xong; ảnh lỗi (URL ký hết hạn — API-106 403) → `onExpired`. */
 function Thumb({
   snapshot,
@@ -12,7 +15,7 @@ function Thumb({
   onOpen,
   onExpired,
 }: {
-  snapshot: Snapshot;
+  snapshot: StripSnapshot;
   index: number;
   onOpen: () => void;
   onExpired?: () => void;
@@ -24,12 +27,13 @@ function Thumb({
       type="button"
       onClick={onOpen}
       disabled={deleted}
-      aria-label={`Ảnh ${index + 1}`}
+      aria-label={deleted ? `Ảnh ${index + 1}: Ảnh đã bị xóa` : `Ảnh ${index + 1}`}
+      title={deleted ? "Ảnh đã bị xóa" : undefined}
       className="state-layer relative h-24 w-24 shrink-0 overflow-hidden rounded-md bg-surface-container-high"
     >
       {!deleted && (
         <img
-          src={snapshot.url}
+          src={snapshot.url ?? undefined}
           alt=""
           loading="lazy"
           className={cx("h-full w-full object-cover", !loaded && "opacity-0")}
@@ -64,7 +68,7 @@ export function SnapshotStrip({
   label = "Ảnh",
   onExpired,
 }: {
-  snapshots: Snapshot[];
+  snapshots: StripSnapshot[];
   max?: number;
   onCapture?: () => void;
   capturing?: boolean;
@@ -102,7 +106,7 @@ export function SnapshotStrip({
         onClose={() => setOpen(null)}
         wide
       >
-        {shown && <img src={shown.url} alt="" className="w-full rounded-md bg-black object-contain" />}
+        {shown?.url && <img src={shown.url} alt="" className="w-full rounded-md bg-black object-contain" />}
       </Dialog>
     </div>
   );

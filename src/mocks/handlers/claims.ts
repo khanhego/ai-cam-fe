@@ -2,6 +2,9 @@ import { http, HttpResponse } from "msw";
 
 import type { ClaimPatch, ClaimStatus, ClaimType, CreateClaimBody } from "@/lib/api/claims";
 
+import { fmtShort } from "@/shared/format";
+import { CLAIM_STATUS, fmtVnd } from "@/shared/returns/labels";
+
 import { mockUsers } from "../db";
 import { API, apiError, json } from "../http";
 import {
@@ -49,7 +52,7 @@ export function resetMockClaimsHandlers() {
 const updated = (c: MockClaim) =>
   dashboardEvent("claim.updated", { claim_id: c.id, status: c.status, version: c.version });
 
-/** API-130..138 theo 02 §6.2 (BE T-110, T-112 chưa xong). */
+/** API-130..138 theo 02 §6.2 — đối chiếu BE M8 thật (`ai-cam-be` modules/claims: T-110, T-112; DEC-311..315). */
 export const claimsHandlers = [
   http.get(`${API}/claims`, ({ request }) => {
     const [user, denied] = requireRole(request, DASHBOARD_ROLES);
@@ -107,11 +110,14 @@ export const claimsHandlers = [
       (c) => c.package_id === pkg.id && c.type === body.type && claimIsOpen(c) && c.source !== "LEGACY_HOLD",
     );
     if (dup)
-      return apiError(409, "CLAIM_EXISTS", `Kiện này đã có hồ sơ đang mở: ${dup.code}.`, {
+      return apiError(409, "CLAIM_EXISTS", `Kiện này đã có hồ sơ cùng loại đang mở: ${dup.code}.`, {
         claim_id: dup.id,
         code: dup.code,
       });
     const rc = body.return_case_id ? findCase(body.return_case_id) : undefined;
+    // DEC-311 e: hồ sơ hàng hoàn phải chứa kiện.
+    if (body.return_case_id && !rc?.package_ids.includes(pkg.id))
+      return invalid({ return_case_id: "Hồ sơ hàng hoàn không chứa kiện này" });
     const now = new Date().toISOString();
     const n = claimNo++;
     const pack = packSessionOf(pkg);
@@ -174,70 +180,77 @@ export const claimsHandlers = [
     const c = mockClaims.find((x) => x.id === params.id);
     if (!c) return apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ.");
     const body = (await request.json()) as Partial<ClaimPatch>;
+    // Như BE `claims.router._locked` + `service.patch` (DEC-312 a): `version` trước, rồi hồ sơ đã đóng.
     if (body.version !== c.version)
-      return apiError(409, "VERSION_CONFLICT", "Hồ sơ vừa được người khác cập nhật.", {
-        current: toClaimDetail(c),
-        updated_by: c.notes.at(-1)?.author ?? null,
-      });
-    if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng.");
-    const fields: Record<string, string> = {};
+      return apiError(
+        409,
+        "VERSION_CONFLICT",
+        "Hồ sơ vừa được người khác cập nhật. Tải lại để xem bản mới.",
+        {
+          current: toClaimDetail(c),
+        },
+      );
+    if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng, chỉ thêm được ghi chú.");
+    const reason = body.reason?.trim() || null;
+    if (reason !== null && (reason.length < 5 || reason.length > 500))
+      return invalid({ reason: "Nhập lý do 5–500 ký tự" });
+    const ref = body.platform_claim_ref?.trim() || null;
+    if (ref !== null && ref.length > 64) return invalid({ platform_claim_ref: "Tối đa 64 ký tự" });
+    if (
+      body.recovered_amount != null &&
+      (!Number.isInteger(body.recovered_amount) || body.recovered_amount < 0)
+    )
+      return invalid({ recovered_amount: "Số tiền là số nguyên ≥ 0" });
+    const notes: string[] = [];
+    if (body.owner_user_id != null && body.owner_user_id !== c.owner?.id) {
+      const u = mockUsers.find((x) => x.id === body.owner_user_id);
+      if (!u || !["ADMIN", "SUPERVISOR", "CSKH"].includes(u.role) || u.disabled)
+        return invalid({ owner_user_id: "Người phụ trách phải là Admin / Quản lý / CSKH đang hoạt động" });
+      c.owner = { id: u.id, display_name: u.display_name };
+      notes.push(`Người phụ trách: ${u.display_name}.`);
+    }
+    if (body.deadline_at != null && body.deadline_at !== c.deadline_at) {
+      c.deadline_at = body.deadline_at;
+      c.deadline_source = "MANUAL";
+      notes.push(`Hạn khiếu nại: ${fmtShort(body.deadline_at)}.`);
+    }
+    if (ref !== null && ref !== c.platform_claim_ref) {
+      c.platform_claim_ref = ref;
+      notes.push(`Mã khiếu nại bên sàn: ${ref}.`);
+    }
+    if (body.recovered_amount != null && body.recovered_amount !== c.recovered_amount) {
+      c.recovered_amount = body.recovered_amount;
+      notes.push(`Số tiền thu hồi: ${fmtVnd(body.recovered_amount)}.`);
+    }
     const to = body.status;
     if (to && to !== c.status) {
       const allowed = CLAIM_TRANSITIONS[c.status];
       if (!allowed.includes(to))
-        return apiError(409, "INVALID_TRANSITION", "Không chuyển được sang trạng thái này.", { allowed });
-      const reason = body.reason?.trim() ?? "";
-      if (to === "WON" && (!Number.isInteger(body.recovered_amount) || (body.recovered_amount ?? -1) < 0))
-        fields.recovered_amount = "Nhập số tiền thu hồi (≥ 0).";
-      if (
-        to === "CLOSED" &&
-        ["NEW", "SUBMITTED", "WAITING"].includes(c.status) &&
-        (reason.length < 5 || reason.length > 500)
-      )
-        fields.reason = "Lý do 5–500 ký tự.";
-      const ref = body.platform_claim_ref?.trim() ?? "";
-      if (to === "SUBMITTED" && !ref && !reason)
-        fields.platform_claim_ref = "Nhập mã tham chiếu sàn hoặc ghi chú.";
-      if (ref.length > 64) fields.platform_claim_ref = "Tối đa 64 ký tự.";
-    }
-    if (body.owner_user_id) {
-      const u = mockUsers.find((x) => x.id === body.owner_user_id);
-      if (!u || u.role === "STATION" || u.disabled) fields.owner_user_id = "Người phụ trách không hợp lệ.";
-    }
-    if (Object.keys(fields).length) return invalid(fields);
-    const at = new Date().toISOString();
-    const actor = { id: user.id, display_name: user.display_name };
-    const changes: string[] = [];
-    if (to && to !== c.status) {
-      changes.push(`Trạng thái ${c.status} → ${to}`);
+        return apiError(
+          409,
+          "INVALID_TRANSITION",
+          `Không chuyển được từ ${CLAIM_STATUS[c.status][0]} sang ${CLAIM_STATUS[to][0]}.`,
+          { allowed },
+        );
+      if (to === "SUBMITTED" && !c.platform_claim_ref && !reason)
+        return invalid({ platform_claim_ref: "Nhập mã khiếu nại bên sàn hoặc lý do" });
+      if (to === "WON" && c.recovered_amount === null)
+        return invalid({ recovered_amount: "Nhập số tiền thu hồi" });
+      if (to === "CLOSED" && ["NEW", "SUBMITTED", "WAITING"].includes(c.status) && !reason)
+        return invalid({ reason: "Nhập lý do đóng hồ sơ 5–500 ký tự" });
+      notes.unshift(`${CLAIM_STATUS[c.status][0]} → ${CLAIM_STATUS[to][0]}${reason ? `: ${reason}` : ""}.`);
       c.status = to;
       if (to === "CLOSED") {
-        c.closed_at = at;
-        c.close_reason = body.reason?.trim() || null;
+        c.closed_at = new Date().toISOString();
+        c.close_reason = reason;
       }
     }
-    if (body.platform_claim_ref !== undefined && body.platform_claim_ref !== null)
-      c.platform_claim_ref = body.platform_claim_ref.trim() || null;
-    if (body.recovered_amount !== undefined && body.recovered_amount !== null)
-      c.recovered_amount = body.recovered_amount;
-    if (body.owner_user_id !== undefined && body.owner_user_id !== null) {
-      const u = mockUsers.find((x) => x.id === body.owner_user_id)!;
-      c.owner = { id: u.id, display_name: u.display_name };
-      changes.push(`Phụ trách: ${u.display_name}`);
-    }
-    if (body.deadline_at) {
-      c.deadline_at = body.deadline_at;
-      c.deadline_source = "MANUAL";
-      changes.push("Đổi hạn");
-    }
-    if (changes.length)
-      c.notes.push({
-        id: `n-${c.id}-${c.notes.length}`,
-        kind: "STATUS_CHANGE",
-        text: changes.join(" · "),
-        author: actor,
-        at,
-      });
+    // Không có thay đổi → 200, không tăng `version` (DEC-312 a).
+    if (!notes.length) return json(toClaimDetail(c));
+    const at = new Date().toISOString();
+    const actor = { id: user.id, display_name: user.display_name };
+    for (const text of notes)
+      c.notes.push({ id: `n-${c.id}-${c.notes.length}`, kind: "STATUS_CHANGE", text, author: actor, at });
     c.version += 1;
     updated(c);
     return json(toClaimDetail(c));
@@ -255,10 +268,15 @@ export const claimsHandlers = [
       note?: string | null;
     };
     if (body.version !== c.version)
-      return apiError(409, "VERSION_CONFLICT", "Hồ sơ vừa được người khác cập nhật.", {
-        current: toClaimDetail(c),
-      });
-    if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng.");
+      return apiError(
+        409,
+        "VERSION_CONFLICT",
+        "Hồ sơ vừa được người khác cập nhật. Tải lại để xem bản mới.",
+        {
+          current: toClaimDetail(c),
+        },
+      );
+    if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng, chỉ thêm được ghi chú.");
     const rc = c.return_case_id ? findCase(c.return_case_id) : undefined;
     const pkgIds = new Set([c.package_id, ...(rc?.package_ids ?? [])]);
     const sessions = [...pkgIds].flatMap((id) => findPackage(id)?.sessions ?? []);
@@ -286,15 +304,20 @@ export const claimsHandlers = [
         auto: false,
         added_at: at,
       }));
+    const removed = c.evidence.length - kept.length;
+    if (!removed && !added.length) return json(toClaimDetail(c));
     c.evidence = [...kept, ...added];
-    if (removedAuto.length)
-      c.notes.push({
-        id: `n-${c.id}-${c.notes.length}`,
-        kind: "NOTE",
-        text: `Bỏ bằng chứng: ${note}`,
-        author: { id: user.id, display_name: user.display_name },
-        at,
-      });
+    // Như BE `service.set_evidence` (DEC-312 b).
+    const parts = [added.length ? `thêm ${added.length}` : "", removed ? `bỏ ${removed}` : ""].filter(
+      Boolean,
+    );
+    c.notes.push({
+      id: `n-${c.id}-${c.notes.length}`,
+      kind: "NOTE",
+      text: `Cập nhật bằng chứng: ${parts.join(", ")}.${note ? ` Lý do: ${note}` : ""}`,
+      author: { id: user.id, display_name: user.display_name },
+      at,
+    });
     c.version += 1;
     updated(c);
     return json(toClaimDetail(c));
@@ -306,7 +329,7 @@ export const claimsHandlers = [
     const c = mockClaims.find((x) => x.id === params.id);
     if (!c) return apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ.");
     const text = ((await request.json()) as { text?: string }).text?.trim() ?? "";
-    if (text.length < 1 || text.length > 1000) return invalid({ text: "Ghi chú 1–1000 ký tự." });
+    if (text.length < 1 || text.length > 1000) return invalid({ text: "Nhập ghi chú" });
     const note = {
       id: `n-${c.id}-${c.notes.length}`,
       kind: "NOTE" as const,
@@ -315,7 +338,7 @@ export const claimsHandlers = [
       at: new Date().toISOString(),
     };
     c.notes.push(note);
-    c.version += 1;
+    // API-135 không tăng `version` (DEC-312 c) — WS vẫn báo để màn khác tải lại.
     updated(c);
     return json(note, { status: 201 });
   }),
@@ -330,7 +353,9 @@ export const claimsHandlers = [
       (p) => p.claim_id === c.id && ["QUEUED", "RUNNING"].includes(packStatus(p).status),
     );
     if (running)
-      return apiError(409, "PACK_IN_PROGRESS", "Gói bằng chứng đang được tạo.", { pack_id: running.id });
+      return apiError(409, "PACK_IN_PROGRESS", "Hồ sơ đang có gói bằng chứng đang tạo.", {
+        pack_id: running.id,
+      });
     const pack = {
       id: `pack-${++packNo}`,
       claim_id: c.id,
@@ -347,8 +372,9 @@ export const claimsHandlers = [
     const [user, denied] = requireRole(request, DASHBOARD_ROLES);
     if (denied) return denied;
     const p = mockEvidencePacks.get(String(params.id));
-    if (!p || (p.created_by !== user.id && user.role !== "ADMIN"))
-      return apiError(404, "NOT_FOUND", "Không tìm thấy gói bằng chứng.");
+    // Người tạo hoặc ADMIN; quá 24 giờ → 404 (BE `pack.get_pack`).
+    if (!p || (p.created_by !== user.id && user.role !== "ADMIN") || Date.now() > p.started + 24 * 3600_000)
+      return apiError(404, "NOT_FOUND", "Không tìm thấy gói bằng chứng. Tạo gói mới.");
     const st = packStatus(p);
     const ready = st.status === "READY";
     if (st.status === "READY" || st.status === "FAILED")

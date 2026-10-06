@@ -320,6 +320,32 @@ test("FR-08.02 / 08.03: API-133 đổi trạng thái theo version — bắt bu�
   expect((await claimsApi.addNote(c.id, "Vẫn ghi chú được khi đóng")).kind).toBe("NOTE");
 });
 
+test("Mock khớp BE M8 (DEC-312): SUBMITTED → WON; không đổi gì → không tăng version; ghi chú không tăng version; chữ ghi chú đổi trạng thái", async () => {
+  await as("tst_cskh");
+  const c = await claimsApi.get("cl-000124");
+  const same = await claimsApi.patch(c.id, { version: c.version });
+  expect(same.version).toBe(c.version);
+  const sub = await claimsApi.patch(c.id, {
+    version: c.version,
+    status: "SUBMITTED",
+    platform_claim_ref: "SPE-9",
+  });
+  expect(sub.allowed_transitions).toEqual(["WAITING", "WON", "LOST", "CLOSED"]);
+  expect(sub.notes.map((n) => n.text)).toEqual(
+    expect.arrayContaining(["Mới → Đã gửi.", "Mã khiếu nại bên sàn: SPE-9."]),
+  );
+  await claimsApi.addNote(c.id, "Đã chat với Shopee");
+  expect((await claimsApi.get(c.id)).version).toBe(sub.version);
+  // WON cần số tiền (gửi kèm hoặc đã có).
+  expect(
+    (await fail(claimsApi.patch(c.id, { version: sub.version, status: "WON" }))).fieldErrors,
+  ).toHaveProperty("recovered_amount");
+  const won = await claimsApi.patch(c.id, { version: sub.version, status: "WON", recovered_amount: 150_000 });
+  expect(won).toMatchObject({ status: "WON", recovered_amount: 150_000, version: sub.version + 1 });
+  const conflict = await fail(claimsApi.patch(c.id, { version: sub.version, status: "CLOSED" }));
+  expect(Object.keys(conflict.details)).toEqual(["current"]);
+});
+
 test("FR-08.06: API-134 bỏ bằng chứng tự chọn cần lý do; phiên không thuộc kiện → 422", async () => {
   await as("tst_cskh");
   const c = await claimsApi.get("cl-000124");

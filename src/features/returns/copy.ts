@@ -1,0 +1,32 @@
+/** Chữ khối "Hàng hoàn" ở D4 + Dialog Gắn đơn / Sửa kết luận — nguyên văn 01 §10.5 D4 khi có (02b-admin §9). */
+export const COPY = {
+  section: {
+    title: "Hàng hoàn",
+    request: (sn: string) => `Yêu cầu ${sn}`,
+    returnTracking: "Mã chiều về",
+    reason: "Lý do",
+    reported: "Sàn báo",
+    due: "Hạn phản hồi",
+    packages: (n: number) => `${n} kiện`,
+    claims: "Hồ sơ khiếu nại",
+    photos: "Ảnh",
+    noInspection: "Chưa có kết quả kiểm.",
+    mergedInto: (code: string) => `Đã gộp vào ${code}`,
+  },
+  inspection: {
+    result: "Kết quả kiểm",
+    operator: (name: string) => `Người kiểm ${name}`,
+    product: "Sản phẩm",
+    requested: "Yêu cầu",
+    received: "Nhận",
+    condition: "Tình trạng",
+    reference: "Chỉ tham khảo",
+    autoClosed: "Tự đóng",
+    corrected: (n: number) => `Đã sửa ${n} lần`,
+    history: "Lịch sử sửa kết luận",
+    before: "Kết luận trước",
+    reason: "Lý do",
+    note: "Ghi chú",
+    noLines: "Không có dòng sản phẩm.",
+  },
+};

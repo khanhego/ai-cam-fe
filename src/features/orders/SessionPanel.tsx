@@ -7,9 +7,11 @@ import type { Clip, PackageSession } from "@/lib/api/packages";
 import { daysBetween, fmtDuration, fmtTime, shortHash, vnDay } from "@/shared/format";
 import { CAMERA_ROLE, SESSION_FLAG } from "@/shared/labels";
 import { ClipPlayer } from "@/shared/media/ClipPlayer";
+import { SnapshotStrip } from "@/shared/media/SnapshotStrip";
 import { Button, EmptyState, Icon, StatusChip, toast } from "@/shared/ui";
 
 import { COPY } from "./copy";
+import { ProtectedChip } from "./ProtectedChip";
 
 const OPEN = new Set(["OPEN", "MISMATCH", "WAITING_APPROVAL"]);
 const WARN_FLAGS = new Set([
@@ -57,17 +59,23 @@ function retentionDays(session: PackageSession): number | null {
   return daysBetween(vnDay(session.ended_at), vnDay(deleted.retention_until));
 }
 
-/** Khối Clip của D4: player, thông tin phiên, cờ, SHA-256, nút cắt lại (ADMIN/SUPERVISOR), hành động phụ. */
+/**
+ * Khối Clip của D4: player, thông tin phiên (+ người kiểm phiên hoàn), cờ, chip bảo vệ clip (thay "Giữ clip" —
+ * DEC-242), ảnh lúc đóng gói (phiên PACK — FR-02.11), SHA-256, nút cắt lại (ADMIN/SUPERVISOR), hành động phụ.
+ */
 export function SessionPanel({
   packageId,
   session,
   canRebuild,
   actions,
+  onSnapshotExpired,
 }: {
   packageId: string;
   session: PackageSession;
   canRebuild: boolean;
   actions?: ReactNode;
+  /** Ảnh lúc đóng gói không tải được (URL ký hết hạn) → D4 tải lại API-31 một lần. */
+  onSnapshotExpired?: () => void;
 }) {
   const qc = useQueryClient();
   const rebuild = useMutation({
@@ -84,8 +92,6 @@ export function SessionPanel({
     onSettled: () => qc.invalidateQueries({ queryKey: ["package", packageId] }),
   });
 
-  const ready = session.clips.filter((c) => c.status === "READY");
-  const held = ready.length > 0 && ready.every((c) => c.held);
   const cam2Ok = session.status === "COMPLETED" && !session.flags.includes("CAM2_UNVERIFIED");
 
   return (
@@ -115,6 +121,7 @@ export function SessionPanel({
       <p className="mt-1 text-body-md text-on-surface tabular-nums">
         {session.station_name} · {fmtTime(session.started_at)} → {fmtTime(session.ended_at)} ·{" "}
         {fmtDuration(session.duration_s)}
+        {session.operator_name ? ` · ${COPY.detail.operator(session.operator_name)}` : ""}
       </p>
       <div className="mt-2 flex flex-wrap gap-1">
         {cam2Ok && (
@@ -127,12 +134,25 @@ export function SessionPanel({
             {SESSION_FLAG[f] ?? f}
           </StatusChip>
         ))}
-        {held && (
-          <StatusChip tone="info" icon="bookmark">
-            {COPY.detail.held}
-          </StatusChip>
-        )}
       </div>
+      <ProtectedChip session={session} />
+      {session.pack_snapshot && (
+        <div className="mt-3">
+          <SnapshotStrip
+            label={COPY.detail.packSnapshot}
+            snapshots={[
+              {
+                id: session.pack_snapshot.id,
+                kind: "PACK_CLOSE",
+                taken_at: session.ended_at ?? session.started_at,
+                url: session.pack_snapshot.url,
+                status: session.pack_snapshot.status === "DELETED" ? "DELETED" : "READY",
+              },
+            ]}
+            onExpired={onSnapshotExpired}
+          />
+        </div>
+      )}
       <div className="mt-2 flex flex-col text-body-sm text-on-surface-variant">
         {session.clips.map((c) => (
           <HashLine key={c.id} clip={c} />

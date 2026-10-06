@@ -1,5 +1,6 @@
 /**
  * UC-03 với BE thật (04-test-cases M07, M09): D2 → D3 → D4 → xuất. `pnpm e2e:real admin-uc03`.
+ * M8 (T-154): D4 không còn "Giữ clip" (API-42 chỉ ADMIN — TC-02.36); thay bằng chip bảo vệ / gợi ý tạo hồ sơ.
  * Cần stack dev + camera giả (clip READY ≤ 60 giây sau khi đóng phiên).
  */
 import { expect, test } from "@playwright/test";
@@ -30,6 +31,9 @@ test("TC-07.01 + TC-07.07 (UI): đóng phiên ở station → CSKH quét mã ở
   const clip = page.getByRole("region", { name: "Clip" });
   // TC-02.11: đang cắt → tự hiện player (poll 10 giây), không tải lại trang.
   await expect(clip.locator('video[aria-label="Cam 1"]')).toBeVisible({ timeout: 90_000 });
+  // TC-02.36 (M8): API-42 chỉ ADMIN — D4 không còn "Giữ clip"; kiện chưa có hồ sơ → gợi ý tạo hồ sơ (API-31 protection).
+  await expect(page.getByRole("button", { name: "Giữ clip" })).toHaveCount(0);
+  await expect(clip.getByText("Muốn giữ clip? Tạo hồ sơ khiếu nại.")).toBeVisible();
   await clip.getByRole("button", { name: "Xuất clip" }).click();
   const dialog = page.getByRole("dialog", { name: "Xuất clip" });
   await dialog.getByRole("button", { name: "Tạo file xuất" }).click();

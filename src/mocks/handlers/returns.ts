@@ -118,10 +118,13 @@ export const returnsHandlers = [
     const rc = findCase(String(params.id));
     if (!rc) return apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ hàng hoàn.");
     if (rc.kind !== "UNIDENTIFIED" || rc.order || rc.status === "CANCELLED")
-      return apiError(409, "NOT_UNIDENTIFIED", "Hồ sơ này không còn ở trạng thái chưa xác định.");
+      return apiError(409, "NOT_UNIDENTIFIED", "Hồ sơ không còn ở trạng thái chưa xác định. Tải lại.");
     const body = (await request.json()) as { package_id?: string };
     const target = body.package_id ? findPackage(body.package_id) : undefined;
-    if (!target || target.is_placeholder) return apiError(404, "NOT_FOUND", "Không tìm thấy kiện.");
+    if (!target) return apiError(404, "NOT_FOUND", "Không tìm thấy kiện.");
+    // BE `returns.service.link_order` (DEC-314 c): kiện tạm / kiện chưa gắn đơn → NOT_ELIGIBLE.
+    if (target.is_placeholder || !target.order)
+      return apiError(409, "NOT_ELIGIBLE", "Kiện chưa gắn đơn sàn — chọn kiện của đơn.");
     if (target.sessions.some((s) => s.type === "RETURN" && s.status === "COMPLETED"))
       return apiError(409, "PACKAGE_ALREADY_RETURNED", "Đơn này đã có kiện hoàn được nhận.");
     const reason = blockedReason(target);

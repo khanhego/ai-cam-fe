@@ -76,7 +76,10 @@ export type ClaimEvidence =
         clips: EvidenceClip[];
       };
     }
-  | { id: string; kind: "SNAPSHOT"; auto: boolean; snapshot: Snapshot };
+  | { id: string; kind: "SNAPSHOT"; auto: boolean; snapshot: EvidenceSnapshot };
+
+/** Ảnh bằng chứng (BE `EvidenceSnapshot`): `url` null khi ảnh đã bị xóa (`status = DELETED` — DEC-312 e). */
+export type EvidenceSnapshot = Omit<Snapshot, "url"> & { url: string | null };
 
 export type ClaimNote = {
   id: string;
@@ -101,7 +104,7 @@ export type ClaimDetail = {
   return_case: { id: string; code: string; kind: ReturnKind; return_tracking_number: string | null } | null;
   owner: UserBrief | null;
   deadline_at: string | null;
-  deadline_source: "PLATFORM" | "DEFAULT" | "MANUAL";
+  deadline_source: "PLATFORM" | "DEFAULT" | "MANUAL" | null;
   platform_claim_ref: string | null;
   recovered_amount: number | null;
   close_reason: string | null;
@@ -142,7 +145,14 @@ export type EvidencePack = {
   progress: number;
   sha256?: string | null;
   size_bytes?: number | null;
-  missing?: { session_id: string; camera_role: "CAM1" | "CAM2"; reason: string }[];
+  /** `reason`: CLIP_DELETED / CLIP_MISSING / CLIP_NOT_READY / CLIP_FAILED / CLIP_FILE_MISSING / CLIP_CHECKSUM_MISMATCH /
+   * SNAPSHOT_DELETED (+ `snapshot_id`) — DEC-315 b. */
+  missing?: {
+    session_id: string;
+    camera_role: "CAM1" | "CAM2";
+    reason: string;
+    snapshot_id?: string | null;
+  }[];
   files?: { zip: string } | null;
   expires_at?: string | null;
 };
@@ -160,7 +170,7 @@ export const claimsApi = {
     body: { version: number; session_ids: string[]; snapshot_ids: string[]; note?: string | null },
   ) => api.put<ClaimDetail>(`/claims/${id}/evidence`, body),
   addNote: (id: string, text: string) => api.post<ClaimNote>(`/claims/${id}/notes`, { text }),
-  /** API-136: 202; 409 PACK_IN_PROGRESS (`details.pack_id`) / NO_EVIDENCE. */
+  /** API-136: 202; 409 PACK_IN_PROGRESS (`details.pack_id`, có thể null) / NO_EVIDENCE. */
   createPack: (id: string) => api.post<EvidencePack>(`/claims/${id}/evidence-packs`),
   getPack: (packId: string) => api.get<EvidencePack>(`/evidence-packs/${packId}`),
 };

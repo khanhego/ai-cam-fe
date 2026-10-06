@@ -750,10 +750,10 @@ const USERS = {
   admin: { id: "u-admin", display_name: "Quản trị" },
 } as const;
 
-/** Chuyển trạng thái hồ sơ khiếu nại (01 §7.3). Đã `CLOSED` không mở lại. */
+/** Chuyển trạng thái hồ sơ khiếu nại (01 §7.3, BE `claims.service.TRANSITIONS`). Đã `CLOSED` không mở lại. */
 export const CLAIM_TRANSITIONS: Record<ClaimStatus, ClaimStatus[]> = {
   NEW: ["SUBMITTED", "CLOSED"],
-  SUBMITTED: ["WAITING", "CLOSED"],
+  SUBMITTED: ["WAITING", "WON", "LOST", "CLOSED"],
   WAITING: ["WON", "LOST", "CLOSED"],
   WON: ["CLOSED"],
   LOST: ["CLOSED"],
@@ -1104,7 +1104,10 @@ export function toClaimDetail(c: MockClaim): ClaimDetail {
   const evidence: ClaimEvidence[] = c.evidence.flatMap((e): ClaimEvidence[] => {
     if (e.kind === "SNAPSHOT") {
       const shot = findSnapshotAnywhere(e.ref_id);
-      return shot ? [{ id: e.id, kind: "SNAPSHOT", auto: e.auto, snapshot: shot }] : [];
+      if (!shot) return [];
+      // BE DEC-312 e: ảnh đã xóa → `url = null`.
+      const snapshot = { ...shot, url: shot.status === "DELETED" ? null : shot.url };
+      return [{ id: e.id, kind: "SNAPSHOT", auto: e.auto, snapshot }];
     }
     const found = findSessionAnywhere(e.ref_id);
     if (!found) return [];
