@@ -64,7 +64,7 @@ test("UC-02 (BE thật): R5 → R1 → R2 → kết luận + ảnh F2 → quét 
 
   // UC-14 / TC-04.01: đổi chế độ → R5 bắt buộc → R1.
   await page.getByRole("button", { name: "Chuyển sang nhận hàng hoàn" }).click();
-  const r5 = page.getByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const r5 = page.getByRole("dialog", { name: "Người kiểm" });
   await expect(r5).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(r5).toBeVisible();

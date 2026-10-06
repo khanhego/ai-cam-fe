@@ -28,8 +28,13 @@ export function AlertOverlay({
   const scanned = typeof alert.data.code === "string" ? alert.data.code : code;
   const big = "h-14 px-8";
   return (
-    <StationStatePanel tone="warning" icon="warning" title={COPY.alert[alert.code]}>
-      <p className="text-headline-md">{alert.message}</p>
+    <StationStatePanel tone="warning" icon="warning" title={alertTitle(alert)}>
+      <p className="text-headline-md">
+        {alert.message ||
+          (alert.code === "OPERATOR_REQUIRED" && alert.data.mode === "PACK"
+            ? COPY.returnAlert.operatorRequiredPack
+            : "")}
+      </p>
       {alert.code === "ALREADY_HANDED_OVER" &&
         alert.data.is_return === true &&
         !alert.message.includes("hàng hoàn") && (
@@ -71,4 +76,11 @@ export function AlertOverlay({
       )}
     </StationStatePanel>
   );
+}
+
+/** Tiêu đề S4 / R4; `OPERATOR_REQUIRED` ở chế độ đóng gói (item 03) đổi theo `data.mode`. */
+function alertTitle(alert: ScanAlert): string {
+  if (alert.code === "OPERATOR_REQUIRED" && alert.data.mode === "PACK")
+    return COPY.alertPack.OPERATOR_REQUIRED;
+  return COPY.alert[alert.code];
 }

@@ -1,4 +1,4 @@
-import type { AlertCode, ApprovalBrief } from "@/lib/api/station";
+import type { AlertCode, ApprovalBrief, WorkMode } from "@/lib/api/station";
 import { CONCLUSION_LABEL } from "@/shared/returns/inspection";
 import type { Conclusion } from "@/shared/returns/types";
 
@@ -57,6 +57,8 @@ export const COPY = {
     ORDER_CANCEL_REQUESTED: "ĐƠN ĐANG YÊU CẦU HỦY",
     RETURN_MULTIPLE_ORDERS: "MÃ CÓ Ở NHIỀU ĐƠN",
   } satisfies Record<AlertCode, string>,
+  /** Tiêu đề S4 khi quét ở chế độ đóng gói mà chưa có tên (item 03, FR-03.16; chữ thân = `message` server). */
+  alertPack: { OPERATOR_REQUIRED: "CHƯA CÓ NGƯỜI ĐÓNG GÓI" },
   /** Dòng phụ R4 khi server không gửi `message` đủ ý (01 §10.4 R4). */
   returnAlert: {
     notFound: (code: string) => `Không có đơn nào khớp mã ${code}, sàn không trả lời.`,
@@ -67,6 +69,8 @@ export const COPY = {
     multiple: (orderSn: string, n: number) => `Đơn ${orderSn} có ${n} kiện. Chọn đúng kiện đang cầm.`,
     elsewhere: (code: string, station: string) => `${code} đang được kiểm tại ${station}.`,
     operatorRequired: "Nhập tên người kiểm trước khi nhận hàng hoàn.",
+    /** S4 vàng khi quét ở PACK mà Admin bắt buộc tên (item 03, FR-03.16). */
+    operatorRequiredPack: "Nhập tên người đóng gói trước khi đóng gói.",
     findManual: "Tìm thủ công",
     openUnidentified: "Mở phiên chưa xác định",
     recordOther: "Đây là kiện khác — vẫn ghi hình",
@@ -128,14 +132,24 @@ export const COPY = {
     sessionActive: "Đóng phiên trước khi đổi.",
   },
   operator: {
-    title: "Người kiểm hàng hoàn",
+    /** R5 đổi tiêu đề theo chế độ (item 03, 01 §10.4 S1 — `operator.titlePack` / `operator.titleReturn`). */
+    title: "Người kiểm",
+    titlePack: "Người đóng gói",
     label: "Tên người kiểm",
+    labelPack: "Tên người đóng gói",
     submit: "Bắt đầu ca",
     required: "Nhập tên người kiểm.",
+    requiredPack: "Nhập tên người đóng gói.",
     length: "Tên người kiểm 2–40 ký tự.",
+    lengthPack: "Tên người đóng gói 2–40 ký tự.",
     statusBar: (name: string) => `Người kiểm: ${name}`,
+    statusBarPack: (name: string) => `Người đóng gói: ${name}`,
+    /** S1 chưa có tên (item 03): chữ xám + nút "Nhập tên". */
+    missingPack: "Chưa ghi tên người đóng gói",
+    enterName: "Nhập tên",
     change: "Đổi",
     sessionActive: "Đóng phiên trước khi đổi người kiểm.",
+    sessionActivePack: "Đóng phiên trước khi đổi người đóng gói.",
   },
   returns: {
     ready: {
@@ -229,3 +243,23 @@ export const COPY = {
 };
 
 export const cameraName = (role: "CAM1" | "CAM2") => (role === "CAM1" ? "Cam 1" : "Cam 2");
+
+/** Chữ R5 theo chế độ bàn (item 03, 02b-station §9). */
+export function operatorCopy(mode: WorkMode) {
+  const C = COPY.operator;
+  return mode === "PACK"
+    ? {
+        title: C.titlePack,
+        label: C.labelPack,
+        required: C.requiredPack,
+        length: C.lengthPack,
+        sessionActive: C.sessionActivePack,
+      }
+    : {
+        title: C.title,
+        label: C.label,
+        required: C.required,
+        length: C.length,
+        sessionActive: C.sessionActive,
+      };
+}

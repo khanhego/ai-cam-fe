@@ -17,7 +17,7 @@ import {
 import { conclusionError } from "@/shared/returns/inspection";
 import { toast } from "@/shared/ui";
 
-import { COPY } from "./copy";
+import { COPY, operatorCopy } from "./copy";
 import {
   editDraft,
   syncDraft,
@@ -336,6 +336,7 @@ export const useStationStore = create<StationStore>((set, get) => ({
   },
   closeOperator() {
     set({ operatorOpen: false });
+    if (get().alert?.code === "OPERATOR_REQUIRED") get().dismissAlert();
   },
 
   async setWorkMode(mode) {
@@ -494,10 +495,12 @@ export const useStationStore = create<StationStore>((set, get) => ({
     try {
       get().applyState((await stationApi.setOperator(name)).state);
       set({ operatorOpen: false });
+      if (get().alert?.code === "OPERATOR_REQUIRED") get().dismissAlert();
       return null;
     } catch (e) {
       if (isApiError(e) && e.code === "VALIDATION_ERROR") return e.fieldErrors.name ?? e.message;
-      if (isApiError(e) && e.code === "SESSION_ACTIVE") return COPY.operator.sessionActive;
+      if (isApiError(e) && e.code === "SESSION_ACTIVE")
+        return operatorCopy(get().state?.station.work_mode ?? "RETURN").sessionActive;
       if (retryable(e)) return COPY.unexpected;
       report(e, set);
       return null;
@@ -528,7 +531,12 @@ function applyResult(result: ScanResult) {
   }
   switch (alert.code) {
     case "OPERATOR_REQUIRED":
-      set({ alert: null, operatorOpen: true });
+      // Item 03 (FR-03.16, DEC-481): ở chế độ đóng gói hiện overlay vàng (2 bíp) và mở R5 "Người đóng gói" bên trên;
+      // nhập tên xong / hết `ALERT_MS` → overlay đóng. Chế độ nhận hoàn: chỉ mở R5 (như item 02).
+      if (alert.data.mode === "PACK" || result.state.station.work_mode === "PACK") {
+        set({ alert, lookup: null, operatorOpen: true });
+        alertTimer = setTimeout(() => set({ alert: null }), ALERT_MS);
+      } else set({ alert: null, operatorOpen: true });
       return;
     case "INSPECTION_REQUIRED":
       clearTimeout(inlineTimer);

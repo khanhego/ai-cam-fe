@@ -111,7 +111,7 @@ export const heading = (page: Page, name: string) => page.getByRole("heading", {
 /** Station → chế độ nhận hoàn, R5 "Lan QA" → R1 (TC-04.01). */
 export async function startReturnShift(page: Page, operator = "Lan QA") {
   await page.getByRole("button", { name: "Chuyển sang nhận hàng hoàn" }).click();
-  const r5 = page.getByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const r5 = page.getByRole("dialog", { name: "Người kiểm" });
   await r5.getByLabel("Tên người kiểm").fill(operator);
   await r5.getByRole("button", { name: "Bắt đầu ca" }).click();
   await expect(heading(page, "SẴN SÀNG NHẬN HÀNG HOÀN")).toBeVisible();
