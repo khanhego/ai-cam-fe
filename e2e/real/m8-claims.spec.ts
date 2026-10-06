@@ -3,18 +3,14 @@
  * bàn giao tay (API-122) → chế độ nhận hoàn → R2 kết luận "Hộp rỗng" → quét đóng → R1 báo hồ sơ KN-… tự tạo (BR-08)
  * → CSKH: D4 chip "Đang được giữ: hồ sơ khiếu nại KN-…" (API-31 `protection`) → D16 → D17 (2 phiên bằng chứng) →
  * Nhận phụ trách → Đã gửi → Xuất gói bằng chứng → tải zip (encode thật ở worker-export) → zip có `ho-so.json`,
- * SHA-256 file = SHA-256 hiện trên Dialog (API-137).
+ * SHA-256 file = SHA-256 hiện trên Dialog (API-137); T-162: SHA-256 từng tệp khớp `ho-so.json.files`.
  * Như `ai-cam-be/tests/qa/test_m8_live.py` (dữ liệu hàng hoàn `seed-demo` là T-116 — chưa có ở M8).
  * Chạy: `E2E_M8_BE=1 pnpm e2e:real e2e/real/m8-claims.spec.ts` (stack dev đầy đủ: fake-cam1/2, vision, worker,
  * worker-export, beat).
  */
-import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { hidScan, loginAdmin, PASSWORD, resetData, stationReady } from "./helpers";
+import { expectZipMatchesManifest, hidScan, loginAdmin, PASSWORD, resetData, stationReady } from "./helpers";
 
 test.skip(!process.env.E2E_M8_BE, "BE M8 (T-110, T-111, T-119, T-112) — đặt E2E_M8_BE=1 khi chạy e2e:real");
 test.use({ viewport: { width: 1366, height: 768 } });
@@ -152,9 +148,8 @@ test("M8 (BE thật): phiên hoàn Hộp rỗng → KN tự tạo → D4 chip b�
   const download = await downloading;
   expect(download.suggestedFilename()).toBe(`${claimCode}.zip`);
   const file = await download.path();
-  const sha = createHash("sha256").update(readFileSync(file)).digest("hex");
-  expect(`${sha.slice(0, 4)}…${sha.slice(-4)}`).toBe(shown);
-  const listing = execFileSync("unzip", ["-l", file]).toString();
-  expect(listing).toContain(`${claimCode}/ho-so.json`);
-  expect(listing).toMatch(/\d{2}-mo-hoan-\d{8}-\d{4}\/ket-luan\.json/);
+  // T-162: SHA-256 zip = Dialog; mọi tệp trong ho-so.json (clip gốc, video ghép, ảnh, ket-luan.json) khớp SHA-256.
+  const files = expectZipMatchesManifest(file, claimCode, shown);
+  expect(files).toContainEqual(expect.stringMatching(/^\d{2}-mo-hoan-\d{8}-\d{4}\/ket-luan\.json$/));
+  expect(files).toContainEqual(expect.stringMatching(/^\d{2}-dong-goi-\d{8}-\d{4}\/goc-CAM1\.mp4$/));
 });
