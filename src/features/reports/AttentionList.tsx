@@ -35,7 +35,7 @@ function action(item: AnyAttentionItem): [string, string] | null {
     case "CLIP_FAILED":
       return [COPY.view, "/admin/packages"];
     case "SYNC_ERROR":
-      return [COPY.view, "/admin/settings/shopee"];
+      return [COPY.view, "/admin/settings/platforms"];
     case "DISK_USAGE":
       return [COPY.view, "/admin/settings/storage"];
     case "RETURN_MISSING":

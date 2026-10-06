@@ -31,9 +31,20 @@ test("TC-05.01 (UI): chưa kết nối → Kết nối Shopee → về D7 mới 
   expect(await screen.findByText("Chưa kết nối shop Shopee nào.")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Kết nối Shopee" }));
 
-  // item 03 (API-72): callback về `/admin/settings/platforms` — route + Alert kiểm ở T-252 / T-253.
+  // item 03 (API-72): callback về `/admin/settings/platforms?platform=shopee&result=connected&count=1`.
   await waitFor(() => expect(router.state.location.pathname).toBe("/admin/settings/platforms"));
-  expect(router.state.location.search).toBe("?platform=shopee&result=connected&count=1");
+  expect(
+    await screen.findByText("Đã kết nối Shopee. Lần đồng bộ đầu tiên chạy trong vài phút."),
+  ).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "TST Shop A" })).toBeInTheDocument();
+});
+
+test("item 03 (02b-admin §2): /admin/settings/shopee chuyển hướng sang /admin/settings/platforms, giữ query", async () => {
+  const router = renderApp("/admin/settings/shopee?result=denied");
+  await waitFor(() => expect(router.state.location.pathname).toBe("/admin/settings/platforms"));
+  expect(
+    await screen.findByText("Shopee từ chối ủy quyền. Bấm Kết nối lại để thử lần nữa."),
+  ).toBeInTheDocument();
 });
 
 test("TC-05.02 (UI): ?result=denied / error → Alert lỗi đúng chữ", async () => {
@@ -153,6 +164,6 @@ test("TC-P.08 (UI): Supervisor không vào được D7 / D8, menu không có", a
 
   await waitFor(() => expect(router.state.location.pathname).toBe("/admin/forbidden"));
   const nav = screen.getByRole("navigation", { name: "Điều hướng chính" });
-  expect(within(nav).queryByRole("link", { name: /Kết nối Shopee/ })).not.toBeInTheDocument();
+  expect(within(nav).queryByRole("link", { name: /Kết nối sàn/ })).not.toBeInTheDocument();
   expect(within(nav).queryByRole("link", { name: /Lưu trữ video/ })).not.toBeInTheDocument();
 });

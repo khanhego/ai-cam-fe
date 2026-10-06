@@ -81,7 +81,7 @@ export const COPY = {
     sync: "Đồng bộ Shopee",
     noSync: "Chưa kết nối shop nào.",
     lastSuccess: (at: string) => `Thành công gần nhất ${at}`,
-    syncError: "Có lỗi đồng bộ — xem Kết nối Shopee.",
+    syncError: "Có lỗi đồng bộ — xem Kết nối sàn.",
     refresh: "Tự làm mới mỗi 30 giây",
   },
 };

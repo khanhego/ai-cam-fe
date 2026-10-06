@@ -1,6 +1,7 @@
 export { cx } from "./cx";
 export { Dialog } from "./Dialog";
 export { Pagination } from "./Pagination";
+export { PlatformChip } from "./PlatformChip";
 export { Skeleton } from "./Skeleton";
 export { Toaster } from "./Toast";
 export { toast, TOAST_MS, useToastStore } from "./toastStore";

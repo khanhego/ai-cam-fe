@@ -5,6 +5,8 @@ import { RequireRole } from "@/features/auth/RequireRole";
 import { AppShell } from "@/features/shell/AppShell";
 import { ForbiddenPage, NotFoundPage } from "@/features/shell/ErrorPages";
 
+import { LegacyShopeeRedirect } from "./LegacyShopeeRedirect";
+
 /** Trang công cụ chỉ có khi `pnpm dev`; Vite thay `import.meta.env.DEV` = false lúc build nên nhánh này bị loại. */
 const devRoutes: RouteObject[] = import.meta.env.DEV
   ? [{ path: "/_ui", Component: lazy(() => import("./UiGallery")) }]
@@ -90,7 +92,9 @@ export const routes: RouteObject[] = [
           </RequireRole>
         ),
         children: [
-          { path: "shopee", Component: lazy(() => import("@/features/platforms/ShopeePage")) },
+          // D7 Kết nối sàn (T-253 thay `ShopeePage` bằng `PlatformsPage`). D22 / D23 thêm route ở T-258 / T-259.
+          { path: "platforms", Component: lazy(() => import("@/features/platforms/ShopeePage")) },
+          { path: "shopee", element: <LegacyShopeeRedirect /> },
           { path: "storage", Component: lazy(() => import("@/features/settings/StoragePage")) },
           { path: "users", Component: lazy(() => import("@/features/users/UsersPage")) },
           { path: "audit", Component: lazy(() => import("@/features/audit/AuditPage")) },

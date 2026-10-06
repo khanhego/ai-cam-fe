@@ -101,7 +101,7 @@ function ShopCard({
   );
 }
 
-/** D7 — Kết nối Shopee (01 §10.5, FR-05.01, UC-10). Kết quả callback API-72 đọc từ `?result=`. */
+/** D7 — Kết nối sàn (route `/admin/settings/platforms`, item 03; giao diện Shopee của item 01 tới khi T-253 mở rộng). Kết quả callback API-72 đọc từ `?result=`. */
 export default function ShopeePage() {
   const qc = useQueryClient();
   const navigate = useNavigate();

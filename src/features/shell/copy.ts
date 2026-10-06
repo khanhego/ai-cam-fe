@@ -9,5 +9,11 @@ export const COPY = {
     returns: "Hàng hoàn",
     recon: "Lệch trạng thái",
     claims: "Hồ sơ khiếu nại",
+    // item 03 (01 §10.3 drawer, 02b-admin §2)
+    reports: "Báo cáo",
+    shares: "Link chia sẻ",
+    platforms: "Kết nối sàn",
+    notifications: "Thông báo",
+    backup: "Sao lưu",
   },
 };
