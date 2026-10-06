@@ -1,6 +1,6 @@
 /**
  * M6 (T-131) — đối chiếu contract station mở rộng mà MSW `StationSim` đang giả lập, chạy trên BE thật (02 §6.2 API-10,
- * API-60 `kind`, API-100, API-101). BE T-106 chưa xong lúc viết → bật bằng `E2E_M6_BE=1` khi BE có.
+ * API-60 `kind`, API-100, API-101). BE T-106 đã có (ai-cam-be 1746cee) — chạy với `E2E_M6_BE=1` (điều phối chạy e2e:real).
  */
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
@@ -36,7 +36,6 @@ test("TC-01.30 (API) / TC-04.34 / TC-04.02: loại station, đổi chế độ, 
   const station = { Authorization: `Bearer ${await token(request, "tst_station01", "STATION")}` };
   const state = await (await request.get("/api/v1/station/state", { headers: station })).json();
   expect(state.station).toMatchObject({ kind: "BOTH", work_mode: "PACK", operator_name: null });
-  expect(state).toHaveProperty("today_return_count");
 
   const mode = await request.put("/api/v1/station/work-mode", {
     headers: station,

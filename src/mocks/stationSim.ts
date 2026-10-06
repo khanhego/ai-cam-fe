@@ -458,7 +458,8 @@ export class StationSim {
   setWorkMode(mode: WorkMode): SimError | null {
     if (mode !== "PACK" && mode !== "RETURN")
       return err(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", { fields: { work_mode: "Không hợp lệ" } });
-    if (this.kind !== "BOTH") return err(409, "MODE_NOT_ALLOWED", "Station này không đổi chế độ được.");
+    if (this.kind !== "BOTH")
+      return err(409, "MODE_NOT_ALLOWED", "Station này không đổi được chế độ.", { kind: this.kind });
     if (this.busy()) return err(409, "SESSION_ACTIVE", "Đóng phiên trước khi đổi.");
     this.workMode = mode;
     return null;
@@ -466,7 +467,8 @@ export class StationSim {
 
   /** API-101: tên người kiểm strip, 2–40 ký tự (BR-28). */
   setOperator(raw: unknown): SimError | null {
-    const name = typeof raw === "string" ? raw.trim() : "";
+    // BE gộp khoảng trắng (`" ".join(name.split())`, station_config.py).
+    const name = typeof raw === "string" ? raw.split(/\s+/).filter(Boolean).join(" ") : "";
     if (name.length < 2 || name.length > 40)
       return err(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
         fields: { name: name ? "Tên người kiểm 2–40 ký tự." : "Nhập tên người kiểm." },

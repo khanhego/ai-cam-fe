@@ -86,8 +86,9 @@ export const clipsHandlers = [
     return HttpResponse.json({ url: video(id), expires_at: new Date(Date.now() + 600_000).toISOString() });
   }),
 
+  // item 02 (02 §6.1, DEC-209): API-42 chỉ ADMIN — deprecated.
   http.put(`${API}/clips/:id/hold`, async ({ request, params }) => {
-    const [user, denied] = requireRole(request, DASHBOARD_ROLES);
+    const [user, denied] = requireRole(request, ["ADMIN"]);
     if (denied) return denied;
     const clip = findClip(String(params.id));
     if (!clip) return apiError(404, "NOT_FOUND", "Không tìm thấy clip.");

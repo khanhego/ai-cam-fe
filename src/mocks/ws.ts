@@ -18,3 +18,8 @@ export const wsHandlers = [
     });
   }),
 ];
+
+/** Phát sự kiện WS-02 cho dashboard (item 02: `return.updated`, `recon.updated`, `claim.updated`, `evidence_pack.updated`). */
+export function dashboardEvent(type: string, data: unknown) {
+  dashboardWs.broadcast(JSON.stringify({ type, data, at: new Date().toISOString() }));
+}

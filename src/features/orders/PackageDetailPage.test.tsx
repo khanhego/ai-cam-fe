@@ -115,7 +115,8 @@ test("409 CLIP_NOT_FAILED → toast", async () => {
 });
 
 test("FR-02.09: Giữ clip đảo nút ngay, toast, chip Đang giữ; Bỏ giữ trả lại", async () => {
-  await as();
+  // Item 02: API-42 chỉ còn ADMIN (DEC-209) — nút "Giữ clip" sẽ gỡ ở T-154 (DEC-242).
+  await as("tst_admin");
   const user = userEvent.setup();
   renderApp("/admin/packages/pkg-0000001");
 
@@ -148,7 +149,8 @@ test("Giữ clip lỗi → hoàn tác + toast lỗi", async () => {
 });
 
 test("F33: Giữ clip — Cam 1 thành công, Cam 2 lỗi → Cam 1 giữ, Cam 2 hoàn tác, toast nêu Cam 2", async () => {
-  await as();
+  // Item 02: API-42 chỉ còn ADMIN (DEC-209) — nút "Giữ clip" sẽ gỡ ở T-154 (DEC-242).
+  await as("tst_admin");
   server.use(
     http.put("/api/v1/clips/clip-0000001-1-2/hold", () =>
       apiError(500, "INTERNAL", "Có lỗi hệ thống. Thử lại sau ít phút."),

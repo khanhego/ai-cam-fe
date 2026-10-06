@@ -53,6 +53,12 @@ export const authHandlers = [
   http.get(`${API}/me`, ({ request }) => {
     const user = userFromAuth(request.headers.get("Authorization"));
     if (!user) return apiError(401, "UNAUTHENTICATED", "Phiên đăng nhập đã hết hạn. Đăng nhập lại.");
-    return HttpResponse.json({ ...publicUser(user), permissions: PERMISSIONS[user.role] });
+    const pub = publicUser(user);
+    // item 02: `/me` station có `kind`, `work_mode` (BE T-106).
+    const station =
+      pub.station?.id === "st-1"
+        ? { ...pub.station, kind: stationSim.kind, work_mode: stationSim.workMode }
+        : pub.station;
+    return HttpResponse.json({ ...pub, station, permissions: PERMISSIONS[user.role] });
   }),
 ];

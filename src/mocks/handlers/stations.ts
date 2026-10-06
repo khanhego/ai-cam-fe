@@ -4,6 +4,7 @@ import type { Camera, Roi, Station } from "@/lib/api/stations";
 
 import { mockUsers, userFromAuth } from "../db";
 import { API, apiError } from "../http";
+import { stationSim } from "../stationSim";
 import { requireRole } from "./session";
 
 /** API-60..65 theo 02 §6 (API-90 ở `users.ts`) — dữ liệu trong bộ nhớ. */
@@ -14,6 +15,9 @@ export function resetMockStations() {
     id: "st-1",
     name: "TST Station 01",
     is_active: true,
+    kind: "BOTH",
+    work_mode: "PACK",
+    operator_name: null,
     account: { id: "u-st1", username: "tst_station01" },
     cameras: [
       {
@@ -89,7 +93,11 @@ export const stationsHandlers = [
   http.post(`${API}/stations`, async ({ request }) => {
     const denied = admin(request);
     if (denied) return denied;
-    const body = (await request.json()) as { name: string; account_user_id?: string | null };
+    const body = (await request.json()) as {
+      name: string;
+      account_user_id?: string | null;
+      kind?: Station["kind"];
+    };
     if (nameTaken(body.name))
       return apiError(409, "NAME_TAKEN", "Tên station đã tồn tại.", { fields: { name: "Đã tồn tại" } });
     const err = accountError(body.account_user_id);
@@ -98,6 +106,9 @@ export const stationsHandlers = [
       id: `st-${Date.now()}`,
       name: body.name.trim(),
       is_active: true,
+      kind: body.kind ?? "PACK",
+      work_mode: body.kind === "RETURN" ? "RETURN" : "PACK",
+      operator_name: null,
       account: accountOf(body.account_user_id),
       cameras: [],
     };
@@ -114,6 +125,7 @@ export const stationsHandlers = [
       name: string;
       is_active: boolean;
       account_user_id: string | null;
+      kind: NonNullable<Station["kind"]>;
     }>;
     if (body.name !== undefined && nameTaken(body.name, station.id))
       return apiError(409, "NAME_TAKEN", "Tên station đã tồn tại.", { fields: { name: "Đã tồn tại" } });
@@ -124,6 +136,21 @@ export const stationsHandlers = [
     }
     if (body.name !== undefined) station.name = body.name.trim();
     if (body.is_active !== undefined) station.is_active = body.is_active;
+    if (body.kind !== undefined) {
+      // item 02 (02 §6.2 API-60): đổi loại khi station có phiên / yêu cầu chờ → 409 STATION_BUSY.
+      if (!["PACK", "RETURN", "BOTH"].includes(body.kind))
+        return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
+          fields: { kind: "Không hợp lệ" },
+        });
+      const busy = station.id === "st-1" && (stationSim.session !== null || stationSim.approval !== null);
+      if (busy) return apiError(409, "STATION_BUSY", "Station đang có phiên mở. Thử lại khi station rảnh.");
+      station.kind = body.kind;
+      if (body.kind !== "BOTH") station.work_mode = body.kind;
+      if (station.id === "st-1") {
+        stationSim.kind = body.kind;
+        if (body.kind !== "BOTH") stationSim.workMode = body.kind;
+      }
+    }
     return HttpResponse.json(station);
   }),
 

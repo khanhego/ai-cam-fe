@@ -22,6 +22,9 @@ export type ApprovalItem = {
   tracking_number: string;
   context: ApprovalContext | null;
   created_at: string;
+  /** item 02 (02 §6.2 API-20 mở rộng); thiếu → PACK. */
+  session_type?: "PACK" | "RETURN";
+  operator_name?: string | null;
   /** v0.4 (DEC-61): có khi đã xử lý; `decided_at` có cả khi `WITHDRAWN` (DEC-60). */
   decision: ApprovalAction | null;
   decided_by: { id: string; display_name: string } | null;
@@ -52,6 +55,12 @@ export const ACTIONS_BY_TYPE: Record<ApprovalType, ApprovalAction[]> = {
   ASSIST: ["CONTINUE", "CLOSE_WITH_NOTE", "CANCEL_SESSION"],
   REPACK: ["APPROVE_REPACK", "REJECT"],
 };
+
+/** Phiên RETURN đóng bằng quét + kết luận → không có CLOSE_WITH_NOTE (02 §6.2 API-21 mở rộng). */
+export const actionsFor = (item: Pick<ApprovalItem, "type" | "session_type">): ApprovalAction[] =>
+  item.session_type === "RETURN"
+    ? ACTIONS_BY_TYPE[item.type].filter((a) => a !== "CLOSE_WITH_NOTE")
+    : ACTIONS_BY_TYPE[item.type];
 
 export const PENDING_APPROVALS_KEY = ["approvals", "PENDING"] as const;
 

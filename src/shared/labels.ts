@@ -55,6 +55,13 @@ export const SESSION_FLAG: Record<string, string> = {
   REPACK: "Đóng gói lại",
   HAD_MISMATCH: "Từng lệch mã",
   CLOSED_BY_SUPERVISOR: "Quản lý đóng phiên",
+  // item 02 (02 §5.2)
+  AUTO_CLOSED: "Tự đóng",
+  ORDER_CANCELLED: "Đơn bị hủy khi đang đóng",
+  NO_PACK_CLIP: "Không có clip đóng gói",
+  UNANNOUNCED: "Về trước khi sàn báo",
+  UNIDENTIFIED: "Chưa xác định đơn",
+  INSPECTION_CORRECTED: "Đã sửa kết luận",
 };
 
 export const CANCEL_REASON: Record<string, string> = {
@@ -62,6 +69,7 @@ export const CANCEL_REASON: Record<string, string> = {
   WRONG_SCAN: "Quét nhầm",
   OTHER: "Khác",
   SUPERVISOR: "Quản lý hủy",
+  NOT_A_RETURN: "Không phải hàng hoàn",
 };
 
 /** Trạng thái station trên D2 (01 §10.5: Rảnh / Đang đóng gói / Lệch mã / Chờ duyệt). */
@@ -70,6 +78,7 @@ export const STATION_STATE: Record<string, [string, ChipTone]> = {
   PACKING: ["Đang đóng gói", "primary"],
   MISMATCH: ["Lệch mã", "error"],
   WAITING_APPROVAL: ["Chờ duyệt", "warning"],
+  INSPECTING: ["Đang kiểm hoàn", "primary"],
 };
 
 export const SOURCE: Record<string, string> = { API: "Shopee", CSV: "File" };
@@ -125,6 +134,24 @@ export const AUDIT_ACTION: Record<string, string> = {
   SESSIONS_REVOKED: "Thu hồi đăng nhập",
   SHOP_CONNECT: "Kết nối Shopee",
   ORDER_OVERWRITTEN_BY_API: "Shopee ghi đè đơn từ file",
+  // item 02 (02 §6.2 API-92, §6.3 #19, §6.5 #1)
+  STATION_WORK_MODE: "Đổi chế độ bàn",
+  STATION_OPERATOR: "Đổi người kiểm",
+  INSPECTION_CORRECT: "Sửa kết luận phiên hoàn",
+  RETURN_LINK_ORDER: "Gắn đơn cho hàng hoàn",
+  RECON_RESOLVE: "Xử lý cảnh báo lệch",
+  WAREHOUSE_STATUS_ADJUST: "Điều chỉnh trạng thái kho",
+  CLAIM_CREATE: "Tạo hồ sơ khiếu nại",
+  CLAIM_UPDATE: "Sửa hồ sơ khiếu nại",
+  CLAIM_EVIDENCE_UPDATE: "Sửa bằng chứng hồ sơ",
+  EXPORT_CLAIM_PACK: "Xuất gói bằng chứng",
+  DOWNLOAD_CLAIM_PACK: "Tải gói bằng chứng",
+  VIEW_SNAPSHOT: "Xem ảnh",
+  RETENTION_REDUCED: "Giảm thời gian lưu",
+  CLIP_PROTECTION_MIGRATED: "Chuyển cờ giữ clip sang hồ sơ",
+  RETENTION_RAISED_TO_MINIMUM: "Nâng thời gian lưu lên mức tối thiểu",
+  RETURN_CASE_MERGED: "Gộp hồ sơ hàng hoàn",
+  RETURN_FORCE_NEW: "Ghi hình kiện khác cùng mã",
 };
 
 /** Loại đối tượng nhật ký (`audit_log.object_type` do BE ghi). */
@@ -141,4 +168,10 @@ export const AUDIT_OBJECT: Record<string, string> = {
   PACKAGE: "Kiện",
   CSV_IMPORT: "Lần nhập file",
   APPROVAL_REQUEST: "Yêu cầu duyệt",
+  // item 02
+  RETURN_CASE: "Hồ sơ hàng hoàn",
+  CLAIM: "Hồ sơ khiếu nại",
+  RECON_ALERT: "Cảnh báo lệch",
+  SNAPSHOT: "Ảnh",
+  EVIDENCE_PACK: "Gói bằng chứng",
 };

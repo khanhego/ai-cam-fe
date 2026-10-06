@@ -286,6 +286,15 @@ function returnSeeds(): PackageSeed[] {
     { n: "0000053", status: "RETURN_RECEIVED_ISSUE", platform: "TO_RETURN", sessions: [packed(8)] },
     { n: "0000054", status: "RETURN_RECEIVED_OK", platform: "SHIPPED", sessions: [packed(4, 90)] },
     { n: "0000055", status: "RETURN_INSPECTING", platform: "TO_RETURN", sessions: [packed(7)] },
+    // BR-10: sàn đã giao ĐVVC, kho vẫn NEW (phiên bỏ dở hôm qua).
+    {
+      n: "0000056",
+      status: "NEW",
+      platform: "SHIPPED",
+      sessions: [
+        { station: "st-2", status: "ABANDONED", daysAgo: 1, minute: 200, durationS: 1800, clips: "READY" },
+      ],
+    },
     { n: "", tracking: "TAM-000001", orderSn: null, placeholder: true, status: "RETURN_RECEIVED_ISSUE" },
   ];
 }

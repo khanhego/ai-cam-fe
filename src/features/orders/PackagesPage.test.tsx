@@ -71,8 +71,8 @@ test("bảng kết quả: cột, chip, phân trang 20 dòng", async () => {
 
   const t = await table();
   expect(within(t).getAllByRole("row")).toHaveLength(21);
-  // 72 kiện Phase 1 + 19 kiện dữ liệu hàng hoàn item 02 (04 §1, returnsDb).
-  expect(screen.getByText("91 kết quả")).toBeInTheDocument();
+  // 72 kiện Phase 1 + 20 kiện dữ liệu hàng hoàn item 02 (04 §1, returnsDb).
+  expect(screen.getByText("92 kết quả")).toBeInTheDocument();
   const row = within(t).getByRole("link", { name: "SPXTST0000015" }).closest("tr")!;
   expect(within(row).getByText("Đã đóng gói")).toBeInTheDocument();
   expect(within(row).getByText("TST Station 02")).toBeInTheDocument();
@@ -141,7 +141,7 @@ test("TC-07.15: lọc theo nguồn File / Shopee", async () => {
   expect(await codes()).toEqual(["SPXTST0000015"]);
 
   fireEvent.change(screen.getByLabelText("Nguồn"), { target: { value: "API" } });
-  expect(await screen.findByText("89 kết quả")).toBeInTheDocument();
+  expect(await screen.findByText("90 kết quả")).toBeInTheDocument();
 });
 
 test("link từ thẻ D2: lọc theo phiên hiện thành chip, bỏ được", async () => {

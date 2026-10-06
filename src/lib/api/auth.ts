@@ -5,6 +5,19 @@ import { useSession, type ClientKind, type SessionUser } from "./session";
 export type LoginResponse = { access_token: string; expires_in: number; user: SessionUser };
 export type Me = SessionUser & { permissions: string[] };
 
+/** Quyền mới của item 02 (02 §6.1 API-04). ADMIN có `*`. */
+export type Permission =
+  | "returns.read"
+  | "returns.link"
+  | "inspection.correct"
+  | "recon.read"
+  | "recon.resolve"
+  | "warehouse_status.adjust"
+  | "claims.manage";
+
+export const hasPermission = (me: Pick<Me, "permissions"> | null | undefined, p: Permission | string) =>
+  Boolean(me && (me.permissions.includes("*") || me.permissions.includes(p)));
+
 export async function login(username: string, password: string, client: ClientKind): Promise<SessionUser> {
   const data = await api.post<LoginResponse>("/auth/login", { username, password, client }, { auth: false });
   useSession.getState().setClient(client);

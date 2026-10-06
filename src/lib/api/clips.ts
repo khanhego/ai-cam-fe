@@ -1,6 +1,9 @@
 import { api } from "./client";
 
-/** API-40, 42, 43, 44, 46 (02 §6.2). */
+/**
+ * API-40, 42, 43, 44, 46 (02 §6.2). Item 02: API-42 (giữ clip) chỉ ADMIN, deprecated — UI không còn nút (DEC-242);
+ * clip được bảo vệ qua hồ sơ khiếu nại (ADR-009).
+ */
 export type ExportLayout = "CAM1" | "CAM2" | "SIDE_BY_SIDE";
 
 export type ExportJob = {

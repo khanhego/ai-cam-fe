@@ -56,6 +56,9 @@ function simApproval(): ApprovalItem | null {
     tracking_number: a.tracking_number,
     context: stationSim.approvalContext,
     created_at: a.created_at,
+    // item 02 (02 §6.2 API-20 mở rộng).
+    session_type: st.session?.type ?? "PACK",
+    operator_name: st.session?.type === "RETURN" ? st.station.operator_name : null,
     ...UNDECIDED,
   };
 }

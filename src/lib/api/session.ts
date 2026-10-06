@@ -9,7 +9,13 @@ export type SessionUser = {
   username: string;
   display_name: string;
   role: Role;
-  station: { id: string; name: string } | null;
+  /** item 02 (API-04 / API-02 `station` thêm `kind`, `work_mode` — BE T-106). */
+  station: {
+    id: string;
+    name: string;
+    kind?: "PACK" | "RETURN" | "BOTH";
+    work_mode?: "PACK" | "RETURN";
+  } | null;
 };
 
 type SessionState = {

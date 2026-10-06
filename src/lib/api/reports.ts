@@ -10,12 +10,29 @@ export type DailyCounts = {
   cancelled_after_pack: number;
 };
 
+/** item 02 (02 §6.2 API-32 `counts` thêm, §6.5 #9). Tùy chọn tới khi BE T-115. */
+export type ReturnCounts = {
+  returns_received: number;
+  returns_received_issue: number;
+  returns_unidentified: number;
+  returns_expected: number;
+  returns_missing: number;
+  recon_open: { HIGH: number; MEDIUM: number; LOW: number };
+  claims_open: number;
+  claims_due_soon: number;
+  label_on_tray: number;
+  cam2_unverified: number;
+};
+
 export type DailyStation = {
   id: string;
   name: string;
-  state: "READY" | "PACKING" | "MISMATCH" | "WAITING_APPROVAL";
+  state: "READY" | "PACKING" | "MISMATCH" | "WAITING_APPROVAL" | "INSPECTING";
   cameras: { role: "CAM1" | "CAM2"; status: "ONLINE" | "OFFLINE" }[];
   last_scan_at: string | null;
+  /** item 02. */
+  work_mode?: "PACK" | "RETURN";
+  operator_name?: string | null;
   /** Kiện đang đóng gói (null khi không có phiên mở) — tùy chọn, v0.3 (DEC-57). */
   tracking_number?: string | null;
 };
@@ -36,6 +53,18 @@ export type AttentionItem =
   | { kind: "SYNC_ERROR"; shop_id: string; at: string }
   | { kind: "DISK_USAGE"; percent: number };
 
+/**
+ * Mục "Cần xử lý" mới của item 02 (02 §6.2 API-32, §6.3 #13, §6.5 #1). D2 chưa hiển thị (T-160) — `isKnownAttention`
+ * vẫn bỏ qua cho tới khi thêm vào `ATTENTION_KINDS`.
+ */
+export type ReturnAttentionItem =
+  | { kind: "RETURN_MISSING"; count: number }
+  | { kind: "RECON_HIGH"; count: number }
+  | { kind: "CLAIM_DUE_SOON"; count: number }
+  | { kind: "RETURN_UNIDENTIFIED"; count: number }
+  | { kind: "RETURN_SESSION_ABANDONED"; count: number }
+  | { kind: "RETURN_FORCE_NEW"; count: number };
+
 export const ATTENTION_KINDS = [
   "CANCELLED_AFTER_PACK",
   "CAMERA_OFFLINE",
@@ -52,9 +81,9 @@ export const isKnownAttention = (item: { kind: string }): item is AttentionItem 
 
 export type DailyReport = {
   date: string;
-  counts: DailyCounts;
+  counts: DailyCounts & Partial<ReturnCounts>;
   stations: DailyStation[];
-  attention: AttentionItem[];
+  attention: (AttentionItem | ReturnAttentionItem)[];
 };
 
 export const reportsApi = {
