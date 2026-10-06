@@ -8,8 +8,24 @@ import type { Inspection, Snapshot } from "@/shared/returns/types";
  * Kiện, phiên, clip, bản xuất giả cho D2–D4 (02b-admin §12). Bám seed `aicam seed-demo --prefix TST`
  * (04-test-cases §1) cho `SPXTST0000001..30`, thêm lịch sử 7 ngày trước. Giờ tính theo ngày Việt Nam hiện tại.
  */
-export type MockClip = Clip & { session_id: string };
-export type MockSession = Omit<PackageSession, "clips"> & {
+/**
+ * Kiểu lưu trong mock: phần Phase 1 của API-31; trường item 02 (bảo vệ, loại phiên, kết luận, ảnh…) do handler tính
+ * lúc trả (`sessionExtras`, `protectionOf`, `packageReturnExtras`) nên ở đây tùy chọn.
+ */
+type Item02ClipKeys = "protected_by_claim" | "protection";
+type Item02SessionKeys =
+  | "type"
+  | "operator_name"
+  | "return_case_id"
+  | "inspection"
+  | "can_correct"
+  | "snapshots"
+  | "pack_snapshot"
+  | "protected_by_claims";
+type Item02PackageKeys =
+  "is_placeholder" | "return_cases" | "recon_alerts" | "claims" | "allowed_status_targets";
+export type MockClip = Omit<Clip, Item02ClipKeys> & { session_id: string };
+export type MockSession = Omit<PackageSession, "clips" | Item02SessionKeys> & {
   station_id: string;
   package_id: string;
   clips: MockClip[];
@@ -22,7 +38,7 @@ export type MockSession = Omit<PackageSession, "clips"> & {
   /** Ảnh Cam 1 lúc đóng gói (J-17, L8) — phiên PACK. */
   pack_snapshot?: Snapshot | null;
 };
-export type MockPackage = Omit<PackageDetail, "sessions"> & {
+export type MockPackage = Omit<PackageDetail, "sessions" | Item02PackageKeys> & {
   sessions: MockSession[];
   created_at: string;
   /** Kiện tạm của hàng hoàn chưa xác định (`TAM-…`, 02 §6.3 #2). */
@@ -458,7 +474,7 @@ export const findClip = (clipId: string) =>
 export const findSession = (sessionId: string) => allSessions().find((s) => s.id === sessionId);
 
 /** Hàng API-30 từ kiện mock. */
-export function toListItem(p: MockPackage): PackageListItem {
+export function toListItem(p: MockPackage): Omit<PackageListItem, "return_case" | "is_placeholder"> {
   const last = p.sessions.find((s) => s.status === "COMPLETED") ?? p.sessions[0];
   return {
     id: p.id,
@@ -473,9 +489,10 @@ export function toListItem(p: MockPackage): PackageListItem {
 }
 
 /** Bỏ trường nội bộ trước khi trả API-31. */
-export function toDetail(p: MockPackage): PackageDetail {
-  const { created_at, ...rest } = p;
+export function toDetail(p: MockPackage) {
+  const { created_at, is_placeholder, ...rest } = p;
   void created_at;
+  void is_placeholder;
   return {
     ...rest,
     sessions: p.sessions.map((s) => ({

@@ -17,10 +17,10 @@ export type Station = {
   id: string;
   name: string;
   is_active: boolean;
-  /** item 02; thiếu → PACK (BE trước T-106). */
-  kind?: StationKind;
-  work_mode?: "PACK" | "RETURN";
-  operator_name?: string | null;
+  /** item 02 (API-60 — BE T-106): loại station, chế độ hiện tại, người kiểm (chế độ nhận hoàn). */
+  kind: StationKind;
+  work_mode: "PACK" | "RETURN";
+  operator_name: string | null;
   account: { id: string; username: string } | null;
   cameras: Camera[];
 };

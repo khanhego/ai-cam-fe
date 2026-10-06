@@ -5,7 +5,10 @@ import { StatusChip } from "@/shared/ui";
 
 import { COPY } from "./copy";
 
-/** Khối Station của D2: tên, chip camera, trạng thái hiện tại, lần quét gần nhất (01 §10.5). */
+/**
+ * Khối Station của D2: tên, chip camera, chế độ "Nhận hoàn" + người kiểm (item 02), trạng thái hiện tại ("Đang kiểm
+ * hoàn" + mã kiện), lần quét gần nhất (01 §10.5).
+ */
 export function StationStatusList({ stations }: { stations: DailyStation[] }) {
   if (stations.length === 0) return <p className="text-body-md text-on-surface-variant">{COPY.noStations}</p>;
   return (
@@ -29,7 +32,14 @@ export function StationStatusList({ stations }: { stations: DailyStation[] }) {
                 ),
               )}
             </span>
+            {s.work_mode === "RETURN" && <StatusChip tone="info">{COPY.workMode.RETURN}</StatusChip>}
+            {s.operator_name && (
+              <span className="text-body-sm text-on-surface-variant">{COPY.operator(s.operator_name)}</span>
+            )}
             <StatusChip tone={tone}>{label}</StatusChip>
+            {s.tracking_number && (
+              <span className="font-mono text-body-sm text-on-surface">{s.tracking_number}</span>
+            )}
             <span className="ml-auto text-body-sm text-on-surface-variant tabular-nums">
               {COPY.lastScan} {fmtTime(s.last_scan_at)}
             </span>

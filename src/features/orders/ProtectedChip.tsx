@@ -22,7 +22,7 @@ export function ProtectedChip({ session }: { session: PackageSession }) {
   if (!protection) {
     return hasClip ? <p className="mt-2 text-body-sm text-on-surface-variant">{C.hint}</p> : null;
   }
-  const ids = new Map((session.protected_by_claims ?? []).map((c) => [c.code, c.id] as const));
+  const ids = new Map(session.protected_by_claims.map((c) => [c.code, c.id] as const));
   const until = protection.until ? ` ${C.until(fmtDate(protection.until))}` : "";
   const d17 = screenReady("D17");
   return (

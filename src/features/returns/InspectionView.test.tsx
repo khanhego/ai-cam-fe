@@ -19,6 +19,11 @@ const session = (patch: Partial<PackageSession> = {}): PackageSession => ({
   clips: [],
   type: "RETURN",
   operator_name: "Lan",
+  return_case_id: null,
+  can_correct: false,
+  snapshots: [],
+  pack_snapshot: null,
+  protected_by_claims: [],
   inspection: {
     conclusion: "DAMAGED",
     note: "Rách tay áo",

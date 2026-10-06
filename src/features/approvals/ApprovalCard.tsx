@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
 import {
-  ACTIONS_BY_TYPE,
+  actionsFor,
   PENDING_APPROVALS_KEY,
   approvalsApi,
   type AlreadyResolvedDetails,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/approvals";
 import { isApiError } from "@/lib/api/errors";
 import { APPROVAL_TYPE } from "@/shared/labels";
+import { SESSION_TYPE } from "@/shared/returns/labels";
 import {
   Alert,
   Button,
@@ -123,6 +124,7 @@ export function ApprovalCard({
           {item.station.name}
         </h2>
         <StatusChip tone={tone}>{typeLabel}</StatusChip>
+        {item.session_type === "RETURN" && <StatusChip tone="info">{SESSION_TYPE.RETURN}</StatusChip>}
         <span className="flex-1" />
         <span className="text-body-md text-on-surface-variant tabular-nums">{COPY.waiting(minutes)}</span>
       </div>
@@ -131,6 +133,12 @@ export function ApprovalCard({
         <dd>
           <TrackingNumber value={item.tracking_number} />
         </dd>
+        {item.operator_name && (
+          <>
+            <dt className="text-on-surface-variant">{COPY.operatorLabel}</dt>
+            <dd className="text-on-surface">{item.operator_name}</dd>
+          </>
+        )}
         {other && (
           <>
             <dt className="text-on-surface-variant">
@@ -150,7 +158,8 @@ export function ApprovalCard({
             {COPY.live}
           </Link>
         )}
-        {ACTIONS_BY_TYPE[item.type].map((action) => (
+        {/* Phiên hoàn: không có "Đóng phiên có ghi chú" — đóng bằng quét + kết luận (01 §10.5 D13 EXTEND). */}
+        {actionsFor(item).map((action) => (
           <Button
             key={action}
             variant={VARIANT[action]}
@@ -204,7 +213,9 @@ export function ApprovalCard({
           </Button>
         }
       >
-        {COPY.cancelBody(item.tracking_number)}
+        {item.session_type === "RETURN"
+          ? COPY.cancelReturnBody(item.tracking_number)
+          : COPY.cancelBody(item.tracking_number)}
       </Dialog>
     </article>
   );

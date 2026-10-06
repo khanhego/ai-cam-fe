@@ -11,6 +11,25 @@ import { renderApp } from "@/test/render";
 import { server } from "@/test/server";
 
 const card = (name: RegExp) => screen.findByRole("link", { name });
+/** `counts` đủ trường như BE M9 (API-32 Phase 1 + item 02). */
+const COUNTS0 = {
+  packed: 0,
+  had_mismatch: 0,
+  abandoned: 0,
+  cancelled: 0,
+  packed_not_handed_over: 0,
+  cancelled_after_pack: 0,
+  returns_received: 0,
+  returns_received_issue: 0,
+  returns_unidentified: 0,
+  returns_expected: 0,
+  returns_missing: 0,
+  recon_open: { HIGH: 0, MEDIUM: 0, LOW: 0 },
+  claims_open: 0,
+  claims_due_soon: 0,
+  label_on_tray: 0,
+  cam2_unverified: 0,
+};
 
 test("TC-09.01: 6 thẻ số theo API-32, station và mục Cần xử lý (CSKH)", async () => {
   await login("tst_cskh", "matkhau123", "DASHBOARD");
@@ -35,12 +54,12 @@ test("TC-09.01: 6 thẻ số theo API-32, station và mục Cần xử lý (CSKH
   expect(within(attention).getByText("Cam 2 TST Station 01 mất tín hiệu")).toBeInTheDocument();
   expect(within(attention).getByText("1 yêu cầu duyệt đang chờ")).toBeInTheDocument();
   expect(within(attention).getByText("Ổ lưu video đã dùng 83%")).toBeInTheDocument();
-  // CSKH: chỉ có link tới D3; không có link tới màn cấu hình hay D13 (không có quyền / chưa có màn — DEC-51).
-  expect(within(attention).getAllByRole("link")).toHaveLength(1);
-  expect(within(attention).getByRole("link", { name: "Xem" })).toHaveAttribute(
-    "href",
-    "/admin/packages?warehouse_status=CANCELLED_AFTER_PACK",
-  );
+  // CSKH: link tới D3 / D14 / D15 / D16; không có link tới màn cấu hình hay D13 (không có quyền — DEC-51).
+  const hrefs = within(attention)
+    .getAllByRole("link")
+    .map((a) => a.getAttribute("href"));
+  expect(hrefs).toContain("/admin/packages?warehouse_status=CANCELLED_AFTER_PACK");
+  expect(hrefs.some((h) => h?.startsWith("/admin/settings") || h === "/admin/approvals")).toBe(false);
   expect(screen.queryByText("Chưa có phiên đóng gói nào trong ngày.")).not.toBeInTheDocument();
 });
 
@@ -117,14 +136,7 @@ test("Cần xử lý: lệch giờ camera và lỗi đồng bộ", async () => {
     http.get("/api/v1/reports/daily", () =>
       Response.json({
         date: "2026-10-04",
-        counts: {
-          packed: 0,
-          had_mismatch: 0,
-          abandoned: 0,
-          cancelled: 0,
-          packed_not_handed_over: 0,
-          cancelled_after_pack: 0,
-        },
+        counts: COUNTS0,
         stations: [],
         attention: [
           { kind: "CLOCK_DRIFT", camera_id: "c", offset_ms: 1400 },
@@ -146,14 +158,7 @@ test("F12: CLIP_FAILED → '2 clip cắt lỗi — cần cắt lại' + link D3;
     http.get("/api/v1/reports/daily", () =>
       Response.json({
         date: "2026-10-04",
-        counts: {
-          packed: 1,
-          had_mismatch: 0,
-          abandoned: 0,
-          cancelled: 0,
-          packed_not_handed_over: 0,
-          cancelled_after_pack: 0,
-        },
+        counts: { ...COUNTS0, packed: 1 },
         stations: [],
         attention: [
           { kind: "CLIP_FAILED", count: 2 },
@@ -176,14 +181,7 @@ test("F12: chỉ có kind lạ → câu 'Không có việc cần xử lý.'", as
     http.get("/api/v1/reports/daily", () =>
       Response.json({
         date: "2026-10-04",
-        counts: {
-          packed: 1,
-          had_mismatch: 0,
-          abandoned: 0,
-          cancelled: 0,
-          packed_not_handed_over: 0,
-          cancelled_after_pack: 0,
-        },
+        counts: { ...COUNTS0, packed: 1 },
         stations: [],
         attention: [{ kind: "SOMETHING_NEW" }],
       }),
@@ -202,4 +200,84 @@ test("TC-09.05 (UI): D2 Cần xử lý có dòng ổ đĩa kèm % khi API-32 tr�
   const attention = await screen.findByRole("region", { name: "Cần xử lý" });
   const row = (await within(attention).findByText("Ổ lưu video đã dùng 85%")).closest("li")!;
   expect(within(row).getByRole("link", { name: "Xem" })).toHaveAttribute("href", "/admin/settings/storage");
+});
+
+test("TC-09.20 / 09.21 (UI), TC-03.74: thẻ hàng hoàn / lệch / hồ sơ + 2 cờ, Cần xử lý mới, link màn lọc sẵn", async () => {
+  await login("tst_sup", "matkhau123", "DASHBOARD");
+  server.use(
+    http.get("/api/v1/reports/daily", () =>
+      Response.json({
+        date: vnDay(),
+        counts: {
+          ...COUNTS0,
+          packed: 3,
+          returns_received: 4,
+          returns_received_issue: 1,
+          returns_unidentified: 1,
+          returns_expected: 41,
+          returns_missing: 1,
+          recon_open: { HIGH: 1, MEDIUM: 4, LOW: 2 },
+          claims_open: 2,
+          claims_due_soon: 1,
+          label_on_tray: 1,
+          cam2_unverified: 1,
+        },
+        stations: [
+          {
+            id: "st-3",
+            name: "Station 03",
+            state: "INSPECTING",
+            cameras: [],
+            last_scan_at: null,
+            tracking_number: "SPXTST0000041",
+            work_mode: "RETURN",
+            operator_name: "Lan",
+          },
+        ],
+        attention: [
+          { kind: "RETURN_MISSING", count: 1 },
+          { kind: "RECON_HIGH", count: 1 },
+          { kind: "CLAIM_DUE_SOON", count: 1 },
+          { kind: "RETURN_UNIDENTIFIED", count: 1 },
+          { kind: "RETURN_SESSION_ABANDONED", count: 2 },
+          { kind: "RETURN_FORCE_NEW", count: 1 },
+        ],
+      }),
+    ),
+  );
+  renderApp("/admin");
+  const today = vnDay();
+  const href = async (name: RegExp) => (await card(name)).getAttribute("href");
+  expect(await href(/^Phiếu còn trên khay: 1\./)).toBe(
+    `/admin/packages?session_flag=LABEL_ON_TRAY&date_from=${today}&date_to=${today}`,
+  );
+  expect(await href(/^Cam 2 không xác minh: 1\./)).toBe(
+    `/admin/packages?session_flag=CAM2_UNVERIFIED&date_from=${today}&date_to=${today}`,
+  );
+  expect(await href(/^Hoàn đã nhận: 4, 1 có vấn đề · 1 chưa xác định\./)).toBe("/admin/returns?tab=RECEIVED");
+  expect(await href(/^Hoàn đang về: 41\./)).toBe("/admin/returns");
+  expect(await href(/^Quá hạn chưa về: 1\./)).toBe("/admin/returns?tab=MISSING");
+  expect(await href(/^Lệch: 7, 1 Cao · 6 khác\./)).toBe("/admin/recon");
+  expect(await href(/^Hồ sơ mở: 2, 1 sắp hạn\./)).toBe("/admin/claims?status=ALL");
+
+  const stations = screen.getByRole("region", { name: "Station" });
+  expect(within(stations).getByText("Nhận hoàn")).toBeInTheDocument();
+  expect(within(stations).getByText("Người kiểm Lan")).toBeInTheDocument();
+  expect(within(stations).getByText("Đang kiểm hoàn")).toBeInTheDocument();
+  expect(within(stations).getByText("SPXTST0000041")).toBeInTheDocument();
+
+  const attention = screen.getByRole("region", { name: "Cần xử lý" });
+  const linkOf = (text: string) => within(within(attention).getByText(text).closest("li")!).getByRole("link");
+  expect(linkOf("1 kiện hoàn quá 7 ngày chưa về")).toHaveAttribute("href", "/admin/returns?tab=MISSING");
+  expect(linkOf("1 lệch mức Cao")).toHaveAttribute("href", "/admin/recon?severity=HIGH");
+  expect(linkOf("1 hồ sơ sắp hết hạn")).toHaveAttribute("href", "/admin/claims?status=ALL&due=soon");
+  expect(linkOf("1 kiện hoàn chưa xác định")).toHaveTextContent("Gắn đơn");
+  expect(linkOf("2 phiên mở hoàn bị bỏ dở — cần kiểm lại")).toHaveAttribute(
+    "href",
+    "/admin/packages?session_type=RETURN&session_status=ABANDONED",
+  );
+  expect(linkOf("1 kiện hoàn ghi riêng (đơn đã nhận hoàn) — cần gắn đơn")).toHaveAttribute(
+    "href",
+    "/admin/returns?tab=UNIDENTIFIED",
+  );
 });

@@ -45,7 +45,7 @@ function SessionList({
   return (
     <ul className="flex flex-col gap-1">
       {sessions.map((s) => {
-        const type = s.type ?? "PACK";
+        const type = s.type;
         // Phiên hoàn hoàn tất không phải "Đã đóng gói" (item 02).
         const [label, tone] =
           type === "RETURN" && s.status === "COMPLETED"
@@ -169,12 +169,12 @@ export default function PackageDetailPage() {
   const session = sessions.find((s) => s.id === picked) ?? sessions[0];
   const [whLabel, whTone] = WAREHOUSE_STATUS[pkg.warehouse_status] ?? ["—", "neutral"];
   const order = pkg.order;
-  const returnCases = pkg.return_cases ?? [];
-  const alerts = pkg.recon_alerts ?? [];
+  const returnCases = pkg.return_cases;
+  const alerts = pkg.recon_alerts;
   const canClaim = hasPermission(me, "claims.manage");
   const canLink = hasPermission(me, "returns.link");
   const canCorrect = hasPermission(me, "inspection.correct");
-  const targets = pkg.allowed_status_targets ?? [];
+  const targets = pkg.allowed_status_targets;
   // Menu "Điều chỉnh trạng thái" ẩn khi không có chuyển nào (01 §10.5 D4) hoặc không có quyền (02b-admin §7).
   const canAdjust = hasPermission(me, "warehouse_status.adjust") && targets.length > 0;
   const linkingCase = returnCases.find((rc) => rc.id === linking);

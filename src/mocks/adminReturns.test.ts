@@ -1,6 +1,6 @@
 /**
- * API client dashboard item 02 + MSW handler đúng contract 02 §6.2 v0.4 (T-151). Mock thay BE tới khi T-104, T-110,
- * T-112..T-115 xong; API-122, API-60 `kind`, `/me` đối chiếu với BE thật M6 (ai-cam-be T-102, T-106).
+ * API client dashboard item 02 + MSW handler đúng contract 02 §6.2 v0.4 (T-151). Mock đã đối chiếu BE thật M6–M9
+ * (ai-cam-be T-102..T-115, openapi): chỉ dùng cho dev / test FE; E2E BE thật ở `e2e/real/`.
  */
 import { fetchMe, hasPermission, login } from "@/lib/api/auth";
 import { claimsApi } from "@/lib/api/claims";
@@ -148,18 +148,22 @@ test("TC-04.xx (FR-04.11): API-113 sửa kết luận — lý do bắt buộc, B
   ).toBe(403);
 });
 
-test("API-31 mở rộng: khối hàng hoàn, cảnh báo, hồ sơ, bảo vệ clip; CSKH không có allowed_status_targets", async () => {
+test("API-31 mở rộng: khối hàng hoàn, cảnh báo, hồ sơ, bảo vệ clip; allowed_status_targets theo trạng thái kho (như BE, mọi vai)", async () => {
   await as("tst_admin");
   const d = await packagesApi.get("pkg-0000049");
-  expect(d.return_cases?.[0]).toMatchObject({ code: "HH-000049", status: "MISSING" });
-  expect(d.recon_alerts?.[0]).toMatchObject({ rule: "RETURN_OVERDUE", severity: "HIGH", status: "OPEN" });
-  expect(d.claims?.map((c) => c.code)).toContain("KN-000121");
+  expect(d.return_cases[0]).toMatchObject({ code: "HH-000049", status: "MISSING" });
+  expect(d.recon_alerts[0]).toMatchObject({ rule: "RETURN_OVERDUE", severity: "HIGH", status: "OPEN" });
+  expect(d.claims.map((c) => c.code)).toContain("KN-000121");
   expect(d.allowed_status_targets).toEqual(["RETURN_EXPECTED", "DELIVERED"]);
-  const pack = d.sessions.find((s) => (s.type ?? "PACK") === "PACK")!;
+  const pack = d.sessions.find((s) => s.type === "PACK")!;
   expect(pack.pack_snapshot?.url).toMatch(/media\/snapshots/);
   expect(pack.clips[0]!.protection?.reasons).toEqual(expect.arrayContaining(["CLAIM", "RETURN_CASE"]));
+  // BE `orders/packages.detail`: không lọc theo vai — FE ẩn nút theo quyền `warehouse_status.adjust`.
   await as("tst_cskh");
-  expect((await packagesApi.get("pkg-0000049")).allowed_status_targets).toEqual([]);
+  expect((await packagesApi.get("pkg-0000049")).allowed_status_targets).toEqual([
+    "RETURN_EXPECTED",
+    "DELIVERED",
+  ]);
 });
 
 test("API-30 mở rộng: q mã chiều về / HH-, lọc loại phiên, return_case + is_placeholder", async () => {
@@ -462,7 +466,7 @@ test("TC-02.35 / TC-P2.11: API-42 giữ clip chỉ ADMIN", async () => {
   expect((await clipsApi.hold("clip-0000001-1-1", true)).held).toBe(true);
 });
 
-test("FR-09.01: API-32 counts + attention mới (D2 bỏ qua kind chưa hiển thị tới T-160)", async () => {
+test("FR-09.01: API-32 counts + attention mới (D2 hiển thị từ T-160)", async () => {
   await as("tst_cskh");
   const d = await reportsApi.daily(vnDay());
   expect(d.counts).toMatchObject({

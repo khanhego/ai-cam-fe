@@ -8,6 +8,7 @@ export const COPY = {
   error: "Không tải được danh sách yêu cầu duyệt.",
   retry: "Thử lại",
   trackingLabel: "Mã vận đơn",
+  operatorLabel: "Người kiểm",
   scanned: "Vừa quét",
   cam2Saw: "Cam 2 thấy",
   waiting: (minutes: number) => (minutes < 1 ? "Vừa gửi" : `Chờ ${minutes} phút`),
@@ -24,6 +25,7 @@ export const COPY = {
   noteConfirm: "Đóng phiên",
   cancelTitle: "Hủy phiên?",
   cancelBody: (code: string) => `Phiên đóng gói ${code} sẽ bị hủy, kiện quay về chưa đóng gói.`,
+  cancelReturnBody: (code: string) => `Phiên mở hoàn ${code} sẽ bị hủy.`,
   cancelConfirm: "Hủy phiên",
   badge: (n: number) => `${n} yêu cầu đang chờ`,
 };

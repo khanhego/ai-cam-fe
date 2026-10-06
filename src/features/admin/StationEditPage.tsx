@@ -3,8 +3,19 @@ import { useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { isApiError } from "@/lib/api/errors";
-import { stationsApi, type Station } from "@/lib/api/stations";
-import { Alert, Button, EmptyState, PageHeader, SelectField, Skeleton, TextField, toast } from "@/shared/ui";
+import { stationsApi, type Station, type StationKind } from "@/lib/api/stations";
+import { STATION_KIND } from "@/shared/returns/labels";
+import {
+  Alert,
+  Button,
+  EmptyState,
+  PageHeader,
+  SegmentedButtons,
+  SelectField,
+  Skeleton,
+  TextField,
+  toast,
+} from "@/shared/ui";
 
 import { CameraForm } from "./CameraForm";
 import { RoiEditor } from "./RoiEditor";
@@ -16,6 +27,8 @@ function StationForm({ station }: { station?: Station }) {
   const [name, setName] = useState(station?.name ?? "");
   const [accountId, setAccountId] = useState(station?.account?.id ?? "");
   const [active, setActive] = useState(station?.is_active ?? true);
+  // item 02 (01 §10.5 D6, FR-01.01): Đóng gói · Nhận hoàn · Cả hai; station mới mặc định Đóng gói.
+  const [kind, setKind] = useState<StationKind>(station?.kind ?? "PACK");
   const [errors, setErrors] = useState<{ name?: string; account_user_id?: string; form?: string }>({});
 
   const save = useMutation({
@@ -25,8 +38,10 @@ function StationForm({ station }: { station?: Station }) {
             name: name.trim(),
             is_active: active,
             account_user_id: accountId || null,
+            // Chỉ gửi `kind` khi đổi — PATCH `kind` lúc station bận → 409 STATION_BUSY (không chặn sửa tên / tài khoản).
+            ...(kind !== station.kind ? { kind } : {}),
           })
-        : stationsApi.create({ name: name.trim(), account_user_id: accountId || null }),
+        : stationsApi.create({ name: name.trim(), account_user_id: accountId || null, kind }),
     onSuccess: (saved) => {
       toast("Đã lưu.");
       void queryClient.invalidateQueries({ queryKey: ["stations"] });
@@ -39,6 +54,8 @@ function StationForm({ station }: { station?: Station }) {
       if (e.code === "NAME_TAKEN") return setErrors({ name: "Tên station đã tồn tại." });
       if (e.code === "ACCOUNT_IN_USE")
         return setErrors({ account_user_id: "Tài khoản đã gắn station khác." });
+      if (e.code === "STATION_BUSY")
+        return setErrors({ form: "Station đang có phiên mở. Thử lại khi station rảnh." });
       setErrors({
         name: fields.name,
         account_user_id: fields.account_user_id,
@@ -85,6 +102,17 @@ function StationForm({ station }: { station?: Station }) {
             </option>
           ))}
         </SelectField>
+      </div>
+      <p className="mb-2 text-label-lg text-on-surface" id="station-kind">
+        Loại station
+      </p>
+      <div className="mb-5">
+        <SegmentedButtons
+          label="Loại station"
+          options={(Object.keys(STATION_KIND) as StationKind[]).map((k) => [k, STATION_KIND[k]])}
+          value={kind}
+          onChange={setKind}
+        />
       </div>
       {station && (
         <label className="mb-5 flex items-center gap-3 text-body-lg">

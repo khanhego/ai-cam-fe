@@ -33,13 +33,21 @@ export function dailyReport(date: string): DailyReport {
       .map((s) => s.ended_at ?? s.started_at)
       .sort()
       .at(-1);
+    // TST Station 01 lấy từ station giả: trạng thái (INSPECTING khi phiên RETURN mở — BE `reports._stations`),
+    // mã kiện của phiên đang mở, chế độ + người kiểm (02 §6.2 API-32 `stations[]` thêm).
+    const sim = id === "st-1" ? stationSim.state() : null;
+    const state = (
+      sim && ["PACKING", "MISMATCH", "WAITING_APPROVAL", "INSPECTING"].includes(sim.state)
+        ? sim.state
+        : "READY"
+    ) as DailyReport["stations"][number]["state"];
     return {
       id,
       name: st?.name ?? name,
-      state: "READY" as DailyReport["stations"][number]["state"],
-      // item 02 (02 §6.2 API-32 `stations[]` thêm). TST Station 01 lấy từ station giả.
-      work_mode: id === "st-1" ? stationSim.workMode : ("PACK" as const),
-      operator_name: id === "st-1" ? stationSim.operatorName : null,
+      state,
+      tracking_number: sim?.session?.package.tracking_number ?? null,
+      work_mode: sim ? sim.station.work_mode : ("PACK" as const),
+      operator_name: sim ? sim.station.operator_name : null,
       cameras: (st?.cameras ?? []).map((c) => ({ role: c.role, status: c.status })),
       last_scan_at: last ?? null,
     };

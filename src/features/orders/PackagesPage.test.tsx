@@ -176,3 +176,31 @@ test("API-30 lỗi 5xx (hết 2 lần tự thử lại) → Alert + Thử lại"
   await user.click(screen.getByRole("button", { name: "Thử lại" }));
   expect(await table()).toBeInTheDocument();
 });
+
+test("TC-07.30: tra mã chiều về SPXRTTST000041 → mở thẳng D4 kiện 41", async () => {
+  const user = userEvent.setup();
+  const router = renderApp("/admin/packages");
+  await user.type(await screen.findByLabelText("Mã vận đơn hoặc mã đơn"), "SPXRTTST000041{Enter}");
+  await waitFor(() => expect(router.state.location.pathname).toBe("/admin/packages/pkg-0000041"));
+});
+
+test("TC-07.31 (UI): lọc Hoàn quá hạn / Loại phiên Mở hoàn / cờ phiên ở URL; chip 'Hoàn' và 'Kiện tạm'", async () => {
+  const user = userEvent.setup();
+  const router = renderApp("/admin/packages");
+  await table();
+
+  await user.selectOptions(screen.getByLabelText("Trạng thái kho"), "RETURN_MISSING");
+  await waitFor(() => expect(router.state.location.search).toBe("?warehouse_status=RETURN_MISSING"));
+  const row = (await within(await table()).findByText("SPXTST0000049")).closest("tr")!;
+  expect(within(row).getByText("Hoàn quá hạn")).toBeInTheDocument();
+  expect(within(row).getByTitle("Hồ sơ hàng hoàn HH-000049")).toHaveTextContent("Hoàn");
+
+  await user.selectOptions(screen.getByLabelText("Trạng thái kho"), "");
+  await user.selectOptions(screen.getByLabelText("Loại phiên"), "RETURN");
+  await waitFor(() => expect(router.state.location.search).toBe("?session_type=RETURN"));
+  const tam = (await within(await table()).findByText("TAM-000001")).closest("tr")!;
+  expect(within(tam).getByText("Kiện tạm")).toBeInTheDocument();
+
+  await user.selectOptions(screen.getByLabelText("Cờ phiên"), "LABEL_ON_TRAY");
+  await waitFor(() => expect(router.state.location.search).toContain("session_flag=LABEL_ON_TRAY"));
+});

@@ -207,17 +207,21 @@ export const returnsHandlers = [
   http.put(`${API}/sessions/:id/inspection`, async ({ request, params }) => {
     const [user, denied] = requireRole(request, ["ADMIN", "SUPERVISOR"]);
     if (denied) return denied;
+    const body = (await request.json()) as Partial<InspectionInput> & { reason?: string };
+    // BE `sessions/correction.correct`: lý do (gộp khoảng trắng) kiểm trước phiên / hạn 7 ngày.
+    const reason = (body.reason ?? "").split(/\s+/).filter(Boolean).join(" ");
+    if (reason.length < 5 || reason.length > 500)
+      return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
+        fields: { reason: "Nhập lý do 5–500 ký tự" },
+      });
     const found = findSessionAnywhere(String(params.id));
     if (!found) return apiError(404, "NOT_FOUND", "Không tìm thấy phiên.");
     const { pkg, session: s } = found;
     if (s.type !== "RETURN" || s.status !== "COMPLETED" || !s.inspection)
-      return apiError(409, "NOT_RETURN_SESSION", "Phiên không phải phiên mở hoàn đã hoàn tất.");
+      return apiError(409, "NOT_RETURN_SESSION", "Chỉ sửa được kết luận của phiên mở hoàn đã hoàn tất.");
     if (!s.ended_at || Date.now() - Date.parse(s.ended_at) > 7 * DAY)
       return apiError(409, "CORRECTION_WINDOW_EXPIRED", "Đã quá 7 ngày, không sửa được.");
-    const body = (await request.json()) as Partial<InspectionInput> & { reason?: string };
     const fields: Record<string, string> = {};
-    const reason = body.reason?.trim() ?? "";
-    if (reason.length < 5 || reason.length > 500) fields.reason = "Lý do 5–500 ký tự.";
     const note = body.note ?? "";
     if (note.length > INSPECTION_LIMITS.noteMax) fields.note = "Tối đa 500 ký tự";
     if (body.conclusion === "OTHER" && !note.trim()) fields.note = "Nhập ghi chú khi chọn Khác.";

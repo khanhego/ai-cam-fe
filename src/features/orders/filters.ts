@@ -12,6 +12,8 @@ export const FILTER_KEYS = [
   "warehouse_status",
   "session_status",
   "session_flag",
+  // item 02 (01 §10.5 D3 EXTEND): loại phiên Đóng gói / Mở hoàn.
+  "session_type",
   "source",
 ] as const;
 export type FilterKey = (typeof FILTER_KEYS)[number];

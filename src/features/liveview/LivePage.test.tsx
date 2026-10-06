@@ -44,6 +44,9 @@ beforeEach(() => {
     id: "st-2",
     name: "TST Station 02",
     is_active: true,
+    kind: "PACK",
+    work_mode: "PACK",
+    operator_name: null,
     account: null,
     cameras: [
       {

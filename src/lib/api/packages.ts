@@ -1,5 +1,12 @@
 import type { SessionStatus, WarehouseStatus } from "@/shared/labels";
-import type { ClaimBrief, Inspection, ReturnCaseStatus, ReturnKind, Snapshot } from "@/shared/returns/types";
+import type {
+  ClaimBrief,
+  Inspection,
+  InspectionCorrection,
+  ReturnCaseStatus,
+  ReturnKind,
+  Snapshot,
+} from "@/shared/returns/types";
 
 import { api } from "./client";
 import type { SessionFlag } from "./station";
@@ -17,10 +24,10 @@ export type PackageListItem = {
   source: "API" | "CSV";
   last_session: { station_name: string; ended_at: string | null } | null;
   has_clip: boolean;
-  /** item 02: hồ sơ hàng hoàn của kiện (null nếu không có). */
-  return_case?: { id: string; code: string; kind: ReturnKind; status: ReturnCaseStatus } | null;
+  /** item 02: hồ sơ hàng hoàn đại diện của kiện (hồ sơ mở trước, rồi mới nhất) — null nếu không có. */
+  return_case: { id: string; code: string; kind: ReturnKind; status: ReturnCaseStatus } | null;
   /** item 02: kiện tạm của hàng hoàn chưa xác định (chip "Kiện tạm"). */
-  is_placeholder?: boolean;
+  is_placeholder: boolean;
 };
 
 /** Tham số API-30; cũng là search params của D3 (02b-admin §3 `PackageFilters`). */
@@ -55,8 +62,8 @@ export type Clip = {
   /** Cờ của clip (vd. `VIDEO_INCOMPLETE`), v0.3. */
   flags: string[];
   /** item 02 (ADR-009): clip được bảo vệ bởi hồ sơ khiếu nại / hàng hoàn / cờ giữ cũ. */
-  protected_by_claim?: boolean;
-  protection?: Protection | null;
+  protected_by_claim: boolean;
+  protection: Protection | null;
 };
 
 /** 02 §6.2 API-31 v0.2 (DEC-245): lý do bảo vệ clip / ảnh; `until` = hạn khi lý do có hạn. */
@@ -82,18 +89,19 @@ export type PackageSession = {
   cancel_reason: CancelReason | null;
   note: string | null;
   clips: Clip[];
-  /** item 02: thiếu → PACK (BE trước T-115). */
-  type?: "PACK" | "RETURN";
-  operator_name?: string | null;
-  return_case_id?: string | null;
-  /** Phiên RETURN: kết luận + `corrections[]`. */
-  inspection?: Inspection | null;
-  /** Sửa kết luận được (≤ 7 ngày, ADMIN / SUPERVISOR — API-113). */
-  can_correct?: boolean;
-  snapshots?: (Snapshot & { protection?: Protection | null })[];
-  /** Phiên PACK: ảnh Cam 1 lúc đóng gói (J-17, L8). */
-  pack_snapshot?: { id: string; url: string; status: string } | null;
-  protected_by_claims?: { id: string; code: string }[];
+  /** item 02 (API-31 mở rộng — BE T-115). */
+  type: "PACK" | "RETURN";
+  operator_name: string | null;
+  return_case_id: string | null;
+  /** Phiên RETURN: kết luận + `corrections[]` (+ `corrected` = lần sửa gần nhất); phiên PACK → null. */
+  inspection: (Inspection & { corrected?: InspectionCorrection | null }) | null;
+  /** Sửa kết luận được (RETURN `COMPLETED` ≤ 7 ngày, người xem ADMIN / SUPERVISOR — API-113). */
+  can_correct: boolean;
+  /** Ảnh chụp tay (F2) của phiên; ảnh đã xóa → `url = null`. */
+  snapshots: (Omit<Snapshot, "url"> & { url: string | null; protection: Protection | null })[];
+  /** Phiên PACK: ảnh Cam 1 lúc đóng gói (J-17, L8); ảnh đã xóa → `url = null`. */
+  pack_snapshot: { id: string; url: string | null; status: "READY" | "DELETED" } | null;
+  protected_by_claims: { id: string; code: string }[];
 };
 
 export type PackageDetail = {
@@ -112,16 +120,18 @@ export type PackageDetail = {
     items: { product_name: string; variation: string | null; quantity: number; image_url: string | null }[];
   } | null;
   sessions: PackageSession[];
-  /** item 02 (API-31 mở rộng); thiếu → BE trước T-115. */
-  is_placeholder?: boolean;
-  return_cases?: ReturnListItem[];
-  recon_alerts?: Pick<
+  /** item 02 (API-31 mở rộng — BE T-115). Hồ sơ hàng hoàn mới trước (gồm hồ sơ đã gộp / hủy). */
+  is_placeholder: boolean;
+  return_cases: ReturnListItem[];
+  /** Cảnh báo lệch của kiện, mới phát hiện trước. */
+  recon_alerts: Pick<
     ReconAlert,
     "id" | "rule" | "br" | "severity" | "status" | "detected_at" | "closed_at"
   >[];
-  claims?: ClaimBrief[];
-  /** Đích "Điều chỉnh trạng thái" (API-122); rỗng → ẩn menu. */
-  allowed_status_targets?: WarehouseStatus[];
+  /** Hồ sơ khiếu nại của kiện, mới tạo trước. */
+  claims: (ClaimBrief & { type: string })[];
+  /** Đích "Điều chỉnh trạng thái" (API-122) theo trạng thái kho; rỗng → ẩn nút. */
+  allowed_status_targets: WarehouseStatus[];
   timeline: {
     at: string;
     source: "PLATFORM" | "WAREHOUSE" | "MANUAL";

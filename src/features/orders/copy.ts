@@ -12,6 +12,8 @@ export const COPY = {
     station: "Station",
     warehouse: "Trạng thái kho",
     source: "Nguồn",
+    sessionType: "Loại phiên",
+    sessionFlag: "Cờ phiên",
     all: "Tất cả",
     submit: "Tìm",
     clear: "Xóa bộ lọc",
@@ -98,6 +100,8 @@ export const COPY = {
   },
   generic: "Có lỗi hệ thống. Thử lại sau ít phút.",
   hasClip: "Có clip",
+  returnChip: "Hoàn",
+  returnCase: "Hồ sơ hàng hoàn",
   noClip: "Chưa có clip",
   validate: {
     q: "Tối đa 64 ký tự.",

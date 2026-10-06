@@ -23,13 +23,18 @@ import { DASHBOARD_ROLES, requireRole } from "./session";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Phiên nằm trong khoảng ngày (theo ngày Việt Nam của giờ mở hoặc giờ đóng). */
-function inRange(s: MockSession, from: string | null, to: string | null) {
-  const days = [vnDay(s.started_at), s.ended_at ? vnDay(s.ended_at) : null].filter(Boolean) as string[];
-  return days.some((d) => (!from || d >= from) && (!to || d <= to));
+/**
+ * Phiên nằm trong khoảng ngày (ngày Việt Nam) như BE `orders/packages.search`: lọc trạng thái phiên → theo lúc kết
+ * thúc; lọc cờ → theo lúc bắt đầu (khớp định nghĩa thẻ API-32); không lọc phiên → lúc kết thúc (hoặc bắt đầu nếu mở).
+ */
+function inRange(s: MockSession, from: string | null, to: string | null, by: "end" | "start" | "any") {
+  const at = by === "end" ? s.ended_at : by === "start" ? s.started_at : (s.ended_at ?? s.started_at);
+  if (!at) return false;
+  const d = vnDay(at);
+  return (!from || d >= from) && (!to || d <= to);
 }
 
-/** API-30 theo 02 §6.2: `q` khớp chính xác mã vận đơn / mã đơn sàn (không phân biệt hoa thường). */
+/** API-30 theo 02 §6.2 — khớp BE thật: `q` khớp chính xác mã vận đơn / mã đơn sàn / mã chiều về / mã HH- (không phân biệt hoa thường). */
 function search(params: URLSearchParams) {
   const q = params.get("q")?.trim().toUpperCase();
   const from = params.get("date_from");
@@ -64,7 +69,7 @@ function search(params: URLSearchParams) {
     if (!needSession) return true;
     return p.sessions.some(
       (s) =>
-        (!dated || inRange(s, from, to)) &&
+        (!dated || inRange(s, from, to, sessionStatus ? "end" : sessionFlag ? "start" : "any")) &&
         (!stationId || s.station_id === stationId) &&
         (!sessionStatus || s.status === sessionStatus) &&
         (!sessionType || (s.type ?? "PACK") === sessionType) &&
@@ -90,7 +95,7 @@ export const packagesHandlers = [
     if (to && !DATE.test(to)) fields.date_to = "Sai định dạng ngày";
     if (from && to && DATE.test(from) && DATE.test(to)) {
       if (from > to) fields.date_to = "Ngày đến phải sau ngày từ";
-      else if (daysBetween(from, to) > 92) fields.date_to = "Khoảng ngày tối đa 92 ngày";
+      else if (daysBetween(from, to) + 1 > 92) fields.date_to = "Khoảng ngày tối đa 92 ngày";
     }
     if (Object.keys(fields).length)
       return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", { fields });
@@ -118,8 +123,6 @@ export const packagesHandlers = [
     const body: PackageDetail = {
       ...detail,
       ...packageReturnExtras(pkg),
-      // Chỉ ADMIN / SUPERVISOR có quyền điều chỉnh → vai khác nhận danh sách rỗng (ẩn menu).
-      allowed_status_targets: user.role === "CSKH" ? [] : allowedTargets(pkg),
       sessions: detail.sessions.map((s, i): PackageSession => {
         const ms = pkg.sessions[i]!;
         const protection = protectionOf(ms);

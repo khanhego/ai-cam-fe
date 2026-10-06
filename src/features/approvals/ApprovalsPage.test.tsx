@@ -251,3 +251,31 @@ test("TC-P (D13): CSKH không thấy mục Yêu cầu duyệt và bị chặn �
   const nav = screen.getByRole("navigation", { name: "Điều hướng chính" });
   expect(within(nav).queryByRole("link", { name: /Yêu cầu duyệt/ })).not.toBeInTheDocument();
 });
+
+test("TC-04.30 (UI): thẻ Gọi quản lý từ phiên hoàn — chip 'Mở hoàn', người kiểm, không có 'Đóng phiên có ghi chú'", async () => {
+  mockApprovals.push({
+    id: "apr-return-1",
+    type: "ASSIST",
+    status: "PENDING",
+    station: { id: "st-3", name: "Station 03" },
+    session_id: "ses-ret-1",
+    tracking_number: "SPXTST0000041",
+    context: null,
+    created_at: new Date().toISOString(),
+    session_type: "RETURN",
+    operator_name: "Lan",
+    decision: null,
+    decided_by: null,
+    decided_at: null,
+    note: null,
+  });
+  await login("tst_sup", "matkhau123", "DASHBOARD");
+  renderApp("/admin/approvals");
+  const row = await card("Station 03");
+  expect(within(row).getByText("Gọi quản lý")).toBeInTheDocument();
+  expect(within(row).getByText("Mở hoàn")).toBeInTheDocument();
+  expect(within(row).getByText("Lan")).toBeInTheDocument();
+  expect(within(row).getByRole("button", { name: "Cho tiếp tục" })).toBeInTheDocument();
+  expect(within(row).getByRole("button", { name: "Hủy phiên" })).toBeInTheDocument();
+  expect(within(row).queryByRole("button", { name: "Đóng phiên có ghi chú" })).not.toBeInTheDocument();
+});

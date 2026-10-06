@@ -41,7 +41,7 @@ export function ReturnCaseSection({
   const [kindLabel, kindTone] = RETURN_KIND[returnCase.kind] ?? ["—", "neutral"];
   const [statusLabel, statusTone] = RETURN_CASE_STATUS[returnCase.status] ?? ["—", "neutral"];
   const returnSessions = sessions.filter((s) => s.type === "RETURN" && s.inspection);
-  const snapshots = returnSessions.flatMap((s) => s.snapshots ?? []);
+  const snapshots = returnSessions.flatMap((s) => s.snapshots);
   const reason = d?.reason_label ?? returnCase.reason_label;
   return (
     <div className="flex flex-col gap-3">

@@ -22,9 +22,9 @@ export type ApprovalItem = {
   tracking_number: string;
   context: ApprovalContext | null;
   created_at: string;
-  /** item 02 (02 §6.2 API-20 mở rộng); thiếu → PACK. */
-  session_type?: "PACK" | "RETURN";
-  operator_name?: string | null;
+  /** item 02 (02 §6.2 API-20 mở rộng): loại phiên của yêu cầu (null khi không gắn phiên) + người kiểm. */
+  session_type: "PACK" | "RETURN" | null;
+  operator_name: string | null;
   /** v0.4 (DEC-61): có khi đã xử lý; `decided_at` có cả khi `WITHDRAWN` (DEC-60). */
   decision: ApprovalAction | null;
   decided_by: { id: string; display_name: string } | null;

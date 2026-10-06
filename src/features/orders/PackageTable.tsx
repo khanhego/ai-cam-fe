@@ -12,6 +12,20 @@ function WarehouseChip({ status }: { status: PackageListItem["warehouse_status"]
   return <StatusChip tone={tone}>{label}</StatusChip>;
 }
 
+/** Chip "Hoàn" (kiện có hồ sơ hàng hoàn — 01 §10.5 D3) + "Kiện tạm" (hàng hoàn chưa xác định, 02b-admin §3). */
+function ReturnChips({ p }: { p: PackageListItem }) {
+  return (
+    <>
+      {p.return_case && (
+        <StatusChip tone="info" icon="assignment_return" title={`${COPY.returnCase} ${p.return_case.code}`}>
+          {COPY.returnChip}
+        </StatusChip>
+      )}
+      {p.is_placeholder && <StatusChip tone="warning">{COPY.detail.placeholder}</StatusChip>}
+    </>
+  );
+}
+
 function ClipMark({ has }: { has: boolean }) {
   return has ? (
     <span title={COPY.hasClip} className="text-primary">
@@ -50,7 +64,10 @@ export function PackageTable({ items }: { items: PackageListItem[] }) {
                 </td>
                 <td className="font-mono">{p.platform_order_sn ?? "—"}</td>
                 <td>
-                  <WarehouseChip status={p.warehouse_status} />
+                  <span className="flex flex-wrap gap-1">
+                    <WarehouseChip status={p.warehouse_status} />
+                    <ReturnChips p={p} />
+                  </span>
                 </td>
                 <td>{platformStatus(p.platform_status)}</td>
                 <td>{p.last_session?.station_name ?? "—"}</td>
@@ -72,6 +89,7 @@ export function PackageTable({ items }: { items: PackageListItem[] }) {
             </div>
             <div className="flex flex-wrap gap-1">
               <WarehouseChip status={p.warehouse_status} />
+              <ReturnChips p={p} />
               {p.platform_status && <StatusChip>Shopee: {platformStatus(p.platform_status)}</StatusChip>}
               {p.source === "CSV" && <StatusChip>Nguồn: {SOURCE.CSV}</StatusChip>}
             </div>

@@ -45,3 +45,20 @@ test("TC-07.33 (UI): D14 tab Chưa xác định → Gắn đơn → SPXTST000004
   await page.getByRole("tab", { name: /^Chưa xác định/ }).click();
   await expect(page.getByText("Không có kiện hoàn chưa xác định.")).toBeVisible();
 });
+
+test("TC-09.21 (UI): D2 thẻ Quá hạn chưa về + Cần xử lý 'lệch mức Cao' → D14 / D15 lọc sẵn", async ({
+  page,
+}) => {
+  await loginDashboard(page, "tst_cskh");
+  const attention = page.getByRole("region", { name: "Cần xử lý" });
+  await expect(attention.getByText("1 kiện hoàn quá 7 ngày chưa về")).toBeVisible();
+  await expect(attention.getByText("3 lệch mức Cao")).toBeVisible();
+  await page.getByRole("link", { name: /^Quá hạn chưa về: 1\./ }).click();
+  await expect(page).toHaveURL(/\/admin\/returns\?tab=MISSING$/);
+  await expect(page.getByRole("tab", { name: "Quá hạn 1" })).toHaveAttribute("aria-selected", "true");
+
+  await page.getByRole("link", { name: "Tổng quan" }).click();
+  await attention.getByText("3 lệch mức Cao").locator("..").getByRole("link", { name: "Xem" }).click();
+  await expect(page).toHaveURL(/\/admin\/recon\?severity=HIGH$/);
+  await expect(page.getByRole("table").getByRole("row")).toHaveCount(4);
+});

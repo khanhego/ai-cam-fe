@@ -1226,11 +1226,14 @@ export function packageReturnExtras(
 > {
   return {
     is_placeholder: Boolean(pkg.is_placeholder),
+    // BE `orders/packages.detail`: mọi hồ sơ chứa kiện (kể cả đã gộp / hủy), mới tạo trước.
     return_cases: mockReturnCases
-      .filter((c) => c.package_ids.includes(pkg.id) && c.status !== "CANCELLED")
+      .filter((c) => c.package_ids.includes(pkg.id))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
       .map((c) => toReturnItem(c)),
     recon_alerts: mockReconAlerts
       .filter((a) => a.package_id === pkg.id)
+      .sort((a, b) => b.detected_at.localeCompare(a.detected_at))
       .map(({ id, rule, br, severity, status, detected_at, closed_at }) => ({
         id,
         rule,
@@ -1240,8 +1243,12 @@ export function packageReturnExtras(
         detected_at,
         closed_at,
       })),
-    claims: mockClaims.filter((c) => c.package_id === pkg.id).map(CLAIM_BRIEF),
-    allowed_status_targets: allowedTargets(pkg),
+    claims: mockClaims
+      .filter((c) => c.package_id === pkg.id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map(CLAIM_BRIEF),
+    // BE: theo trạng thái kho, không theo vai (FE ẩn nút theo quyền `warehouse_status.adjust`).
+    allowed_status_targets: MANUAL_TRANSITIONS[pkg.warehouse_status] ?? [],
   };
 }
 
@@ -1290,13 +1297,18 @@ export function sessionExtras(s: MockSession, role: string) {
       s.status === "COMPLETED" &&
       (role === "ADMIN" || role === "SUPERVISOR") &&
       Date.now() - ended <= 7 * DAY,
-    snapshots: (s.snapshots ?? []).map((x) => ({ ...x, protection: protectionOf(s) })),
+    // BE: ảnh đã xóa → `url = null`, không có `protection`.
+    snapshots: (s.snapshots ?? []).map((x) => ({
+      ...x,
+      url: x.status === "DELETED" ? null : x.url,
+      protection: x.status === "DELETED" ? null : protectionOf(s),
+    })),
     pack_snapshot:
       type === "PACK" && s.status === "COMPLETED" && s.clips.length
         ? {
             id: `snap-pack-${s.id}`,
             url: mockSnapshot(`snap-pack-${s.id}`, "PACK_CLOSE", "").url,
-            status: "READY",
+            status: "READY" as const,
           }
         : null,
     protected_by_claims: mockClaims
