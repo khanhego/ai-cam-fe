@@ -6,9 +6,9 @@ import { ROLE_LABEL } from "@/shared/labels";
 import { cx, Icon, IconButton } from "@/shared/ui";
 
 import { useAuth } from "../auth/useAuth";
-import { ApprovalBadge } from "../approvals/ApprovalBadge";
 import { playApprovalChime } from "../approvals/chime";
 import { canApprove, navFor, type NavItem } from "./nav";
+import { NavBadge } from "./NavBadge";
 import { currentTheme, setTheme } from "./theme";
 import { useDashboardSocket } from "./useDashboardSocket";
 
@@ -30,7 +30,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
     >
       <Icon name={item.icon} />
       {item.label}
-      {item.badge === "approvals" && <ApprovalBadge />}
+      {item.badge && <NavBadge kind={item.badge} />}
     </NavLink>
   );
   return (
@@ -93,7 +93,9 @@ function MobileDrawer({ onClose, children }: { onClose: () => void; children: Re
         className="absolute inset-0 bg-scrim/40"
         onClick={onClose}
       />
-      <aside className="relative h-full w-72 bg-surface-container-low shadow-elevation-3">{children}</aside>
+      <aside className="relative h-full w-72 overflow-y-auto bg-surface-container-low shadow-elevation-3">
+        {children}
+      </aside>
     </div>
   );
 }
@@ -140,7 +142,7 @@ export function AppShell() {
         <IconButton icon="logout" label="Đăng xuất" onClick={onLogout} />
       </header>
       <div className="flex">
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 border-r border-outline-variant lg:block">
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 overflow-y-auto border-r border-outline-variant lg:block">
           <NavList items={items} />
         </aside>
         {drawerOpen && (

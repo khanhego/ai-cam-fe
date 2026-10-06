@@ -1,6 +1,7 @@
 import type { Role, SessionUser } from "@/lib/api/session";
 
 import { resetMockApprovals } from "./handlers/approvals";
+import { resetMockClaimsHandlers } from "./handlers/claims";
 import { resetMockExportRules } from "./handlers/clips";
 import { resetMockImports } from "./handlers/imports";
 import { resetMockSettings } from "./handlers/settings";
@@ -9,6 +10,7 @@ import { resetMockReports } from "./handlers/reports";
 import { resetMockStations } from "./handlers/stations";
 import { resetMockAudit } from "./handlers/users";
 import { resetMockPackages } from "./packagesDb";
+import { resetMockReturns } from "./returnsDb";
 import { resetStationSim } from "./stationSim";
 
 /** Dữ liệu giả theo seed `aicam seed-demo --prefix TST` (04-test-cases §1). Mật khẩu chung: matkhau123. */
@@ -64,8 +66,22 @@ export const mockUsers: MockUser[] = seedUsers();
 
 export const PERMISSIONS: Record<Role, string[]> = {
   ADMIN: ["*"],
-  SUPERVISOR: ["packages.read", "clips.export", "approvals.decide", "imports.write", "live.read"],
-  CSKH: ["packages.read", "clips.export"],
+  SUPERVISOR: [
+    "packages.read",
+    "clips.export",
+    "approvals.decide",
+    "imports.write",
+    "live.read",
+    // item 02 (02 §6.1 API-04)
+    "returns.read",
+    "returns.link",
+    "inspection.correct",
+    "recon.read",
+    "recon.resolve",
+    "warehouse_status.adjust",
+    "claims.manage",
+  ],
+  CSKH: ["packages.read", "clips.export", "returns.read", "recon.read", "claims.manage"],
   STATION: ["station.scan"],
 };
 
@@ -97,6 +113,9 @@ export function resetMockDb() {
   resetStationSim();
   resetMockStations();
   resetMockPackages();
+  // Sau packagesDb: ghi phiên RETURN mẫu vào kiện.
+  resetMockReturns();
+  resetMockClaimsHandlers();
   resetMockReports();
   resetMockApprovals();
   resetMockExportRules();

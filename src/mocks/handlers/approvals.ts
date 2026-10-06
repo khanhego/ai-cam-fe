@@ -13,7 +13,7 @@ import { dashboardWs, stationWs } from "../ws";
 import { requireRole } from "./session";
 
 /**
- * API-20 / API-21 theo 02 §6.2 (BE T-13 chưa xong — DEC-81). Yêu cầu đang chờ = yêu cầu của station giả
+ * API-20 / API-21 theo 02 §6.2 — khớp BE thật (`approvals/views.py`, item 02 `session_type`, `operator_name`). Yêu cầu đang chờ = yêu cầu của station giả
  * (`stationSim`, TST Station 01 — đồng bộ station ↔ dashboard trong cùng trang) + yêu cầu seed của TST Station 02.
  */
 export const mockApprovals: ApprovalItem[] = [];
@@ -34,6 +34,8 @@ export function resetMockApprovals() {
     tracking_number: "SPXTST0000020",
     context: { expected: "SPXTST0000020", actual: "SPXTST0000021", source: "CAM2", tray_match: "DIFFERENT" },
     created_at: new Date(Date.now() - 3 * 60_000).toISOString(),
+    session_type: "PACK",
+    operator_name: null,
     ...UNDECIDED,
   });
 }
@@ -56,6 +58,9 @@ function simApproval(): ApprovalItem | null {
     tracking_number: a.tracking_number,
     context: stationSim.approvalContext,
     created_at: a.created_at,
+    // item 02 — như BE `approvals/views.py`: loại / người kiểm của phiên; không phiên → REPACK = PACK, khác null.
+    session_type: st.session?.type ?? (a.type === "REPACK" ? "PACK" : null),
+    operator_name: st.session?.operator_name ?? null,
     ...UNDECIDED,
   };
 }

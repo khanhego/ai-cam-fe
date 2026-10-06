@@ -1,66 +1,32 @@
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import type { ReactNode } from "react";
 
-import { stationApi, type RecentSession, type StationState } from "@/lib/api/station";
-import { ClipPlayer } from "@/shared/media/ClipPlayer";
-import { Alert, Button, Dialog, Icon, Skeleton, StatusChip } from "@/shared/ui";
+import type { StationState } from "@/lib/api/station";
+import { Alert, Button, Icon } from "@/shared/ui";
 
 import { cameraName, COPY } from "./copy";
+import { RecentSessions } from "./RecentSessions";
 import { StationStatePanel } from "./StationStatePanel";
 
-const time = (iso: string) =>
-  new Intl.DateTimeFormat("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(new Date(iso));
-
-function RecentList({ onView }: { onView: (s: RecentSession) => void }) {
-  const recent = useQuery({ queryKey: ["station", "recent"], queryFn: stationApi.recent });
-  if (recent.isPending) return <Skeleton lines={5} className="h-10" />;
-  if (recent.isError) return null;
-  if (recent.data.items.length === 0) return <p className="text-body-lg">{COPY.recent.empty}</p>;
-  return (
-    <ul className="flex flex-col gap-2">
-      {recent.data.items.map((s) => {
-        const cutting = s.clips.length === 0 || s.clips.some((c) => c.status === "PENDING");
-        return (
-          <li
-            key={s.id}
-            className="flex items-center gap-3 rounded-md bg-surface-container-lowest px-4 py-2 text-on-surface"
-          >
-            <span className="tabular-nums text-body-lg">{time(s.ended_at ?? s.started_at)}</span>
-            <span className="flex-1 font-mono text-body-lg">{s.tracking_number}</span>
-            {cutting ? (
-              <StatusChip tone="warning" icon="autorenew">
-                {COPY.recent.cutting}
-              </StatusChip>
-            ) : (
-              <Button variant="tonal" icon="play_arrow" onClick={() => onView(s)}>
-                {COPY.recent.view}
-              </Button>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/** S1 — Sẵn sàng (01 §10.4). */
+/** S1 — Sẵn sàng (01 §10.4). Item 02: nút "Chuyển sang nhận hàng hoàn" (station "Cả hai"), thông báo sau đóng. */
 export function ReadyPanel({
   state,
   notice,
   onDismissNotice,
+  closedNotice,
+  onSwitchMode,
 }: {
   state: StationState;
   notice: string | null;
   onDismissNotice: () => void;
+  /** Thông báo cờ của phiên vừa đóng (FR-03.14). */
+  closedNotice?: ReactNode;
+  /** Có → hiện nút đổi chế độ (chỉ station "Cả hai" khi rảnh). */
+  onSwitchMode?: () => void;
 }) {
-  const [viewing, setViewing] = useState<RecentSession | null>(null);
   const offline = state.cameras.filter((c) => c.status === "OFFLINE");
   return (
     <StationStatePanel tone="success" icon="qr_code_scanner" title={COPY.ready.title}>
+      {closedNotice}
       {notice && (
         <Alert
           kind="warning"
@@ -84,19 +50,15 @@ export function ReadyPanel({
           <p className="text-headline-md">{COPY.ready.hint}</p>
           <p className="text-title-lg tabular-nums">{COPY.ready.today(state.today_count)}</p>
         </div>
-        <div>
-          <h2 className="mb-3 text-title-lg">{COPY.recent.title}</h2>
-          <RecentList onView={setViewing} />
-        </div>
+        <RecentSessions type="PACK" empty={COPY.recent.empty} />
       </div>
-      <Dialog
-        open={viewing !== null}
-        title={viewing?.tracking_number ?? ""}
-        onClose={() => setViewing(null)}
-        wide
-      >
-        {viewing && <ClipPlayer clips={viewing.clips} />}
-      </Dialog>
+      {onSwitchMode && (
+        <div className="flex justify-end">
+          <Button variant="elevated" icon="assignment_return" className="h-14 px-8" onClick={onSwitchMode}>
+            {COPY.workMode.toReturn}
+          </Button>
+        </div>
+      )}
     </StationStatePanel>
   );
 }

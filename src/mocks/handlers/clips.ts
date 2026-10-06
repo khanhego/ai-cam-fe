@@ -3,6 +3,7 @@ import { http, HttpResponse } from "msw";
 import type { ExportLayout } from "@/lib/api/clips";
 
 import { API, apiError } from "../http";
+import { stationSim } from "../stationSim";
 import {
   findClip,
   findSession,
@@ -68,10 +69,15 @@ function exportBody(e: MockExport, uid: string) {
 /** API-40, 41 (mock bằng video mẫu), 42, 43, 44, 45, 46 theo 02 §6.2. */
 export const clipsHandlers = [
   http.get(`${API}/clips/:id/play-url`, ({ request, params }) => {
-    const [, denied] = requireRole(request, [...DASHBOARD_ROLES, "STATION"]);
+    const [user, denied] = requireRole(request, [...DASHBOARD_ROLES, "STATION"]);
     if (denied) return denied;
     const id = String(params.id);
     const clip = findClip(id);
+    // Item 02 (02 §6.1 API-40): STATION chỉ xem clip PACK của kiện đang có phiên RETURN hoạt động ở station mình;
+    // clip phiên của chính station (phiên gần đây) vẫn xem được.
+    const ownRecent = stationSim.recent.some((r) => r.clips.some((c) => c.id === id));
+    if (user.role === "STATION" && clip && !ownRecent && !stationSim.canViewPackClip(id))
+      return apiError(403, "FORBIDDEN", "Tài khoản không có quyền thực hiện thao tác này.");
     if (clip) {
       const err = clipStateError(clip);
       if (err) return err;
@@ -80,8 +86,9 @@ export const clipsHandlers = [
     return HttpResponse.json({ url: video(id), expires_at: new Date(Date.now() + 600_000).toISOString() });
   }),
 
+  // item 02 (02 §6.1, DEC-209): API-42 chỉ ADMIN — deprecated.
   http.put(`${API}/clips/:id/hold`, async ({ request, params }) => {
-    const [user, denied] = requireRole(request, DASHBOARD_ROLES);
+    const [user, denied] = requireRole(request, ["ADMIN"]);
     if (denied) return denied;
     const clip = findClip(String(params.id));
     if (!clip) return apiError(404, "NOT_FOUND", "Không tìm thấy clip.");
@@ -188,6 +195,17 @@ export const clipsHandlers = [
       started_at: session.started_at,
       ended_at: session.ended_at,
       layout: e.layout,
+      // Trường Phase 2 như BE `session_info_fields` + `video_gaps` (02 API-45, DEC-261 — C-10).
+      session_type: session.type ?? "PACK",
+      session_status: session.status,
+      flags: session.flags ?? [],
+      operator_name: session.operator_name ?? null,
+      cameras: (["CAM1", "CAM2"] as const).map((camera_role) => ({
+        camera_role,
+        clock_offset_ms: null,
+        clock_checked_at: null,
+      })),
+      video_gaps: [],
       sha256: body.sha256,
       source_clip_sha256: body.source_clip_sha256,
     });

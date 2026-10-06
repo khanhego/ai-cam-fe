@@ -1,19 +1,33 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { hasPermission } from "@/lib/api/auth";
+import type { ClaimType } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
 import { packagesApi, type PackageDetail, type PackageSession } from "@/lib/api/packages";
+import { settingsApi } from "@/lib/api/settings";
 import { fmtDuration, fmtShort } from "@/shared/format";
 import { platformStatus, SESSION_STATUS, SOURCE, WAREHOUSE_STATUS } from "@/shared/labels";
-import { Alert, Button, cx, EmptyState, Skeleton, StatusChip, TrackingNumber } from "@/shared/ui";
+import { RECON_SEVERITY, RECON_STATUS, reconRuleLabel, SESSION_TYPE } from "@/shared/returns/labels";
+import { Alert, Button, cx, Dialog, EmptyState, Skeleton, StatusChip, TrackingNumber } from "@/shared/ui";
 
 import { useAuth } from "../auth/useAuth";
+import { ClaimChips } from "../claims/ClaimChips";
+import { CreateClaimDialog } from "../claims/CreateClaimDialog";
+import { AdjustStatusForm } from "../reconciliation/AdjustStatusForm";
+import { COPY as RECON_COPY } from "../reconciliation/copy";
+import { CorrectInspectionDialog } from "../returns/CorrectInspectionDialog";
+import { LinkOrderDialog } from "../returns/LinkOrderDialog";
+import { ReturnCaseSection } from "../returns/ReturnCaseSection";
+import { screenReady } from "../shell/nav";
+import { COPY as CLAIM_COPY } from "../claims/copy";
+import { COPY as RETURN_COPY } from "../returns/copy";
 import { COPY } from "./copy";
 import { ExportDialog } from "./ExportDialog";
 import { exportLayouts } from "./exportLayouts";
-import { HoldToggle } from "./HoldToggle";
 import { SessionPanel } from "./SessionPanel";
+import { timelineText } from "./timeline";
 
 const C = COPY.detail;
 const hasPending = (p: PackageDetail | undefined) =>
@@ -31,7 +45,12 @@ function SessionList({
   return (
     <ul className="flex flex-col gap-1">
       {sessions.map((s) => {
-        const [label, tone] = SESSION_STATUS[s.status] ?? ["—", "neutral"];
+        const type = s.type;
+        // Phiên hoàn hoàn tất không phải "Đã đóng gói" (item 02).
+        const [label, tone] =
+          type === "RETURN" && s.status === "COMPLETED"
+            ? ([C.returnDone, "success"] as const)
+            : (SESSION_STATUS[s.status] ?? ["—", "neutral"]);
         const active = s.id === selected;
         return (
           <li key={s.id}>
@@ -55,7 +74,10 @@ function SessionList({
                 <span className="text-body-md tabular-nums">
                   {fmtShort(s.started_at)} {s.station_name}
                 </span>
-                <span className="flex items-center gap-2">
+                <span className="flex flex-wrap items-center gap-2">
+                  <StatusChip tone={type === "RETURN" ? "primary" : "neutral"}>
+                    {SESSION_TYPE[type]}
+                  </StatusChip>
                   <StatusChip tone={tone}>{label}</StatusChip>
                   <span className="text-body-sm tabular-nums">{fmtDuration(s.duration_s)}</span>
                 </span>
@@ -68,15 +90,11 @@ function SessionList({
   );
 }
 
-function timelineText(t: PackageDetail["timeline"][number]) {
-  const status =
-    t.source === "PLATFORM"
-      ? `${C.platform}: ${platformStatus(t.to_status)}`
-      : `${C.warehouse}: ${WAREHOUSE_STATUS[t.to_status as keyof typeof WAREHOUSE_STATUS]?.[0] ?? "—"}`;
-  return t.actor ? `${status} · ${t.actor}` : status;
-}
-
-/** D4 — Chi tiết đơn (01 §10.5, FR-07.02, 02.09): clip Cam 1 / Cam 2 / Ghép, phiên, sản phẩm, dòng thời gian. */
+/**
+ * D4 — Chi tiết đơn (01 §10.5, FR-07.02, 02.06, 02.09, 02.11, 08.01): khối Hàng hoàn (kết quả kiểm, ảnh, hồ sơ khiếu
+ * nại), cảnh báo lệch, clip Cam 1 / Cam 2 / Ghép + chip bảo vệ (thay "Giữ clip"), phiên (chip Mở hoàn / Đóng gói),
+ * hồ sơ khiếu nại, sản phẩm, dòng thời gian; "Tạo hồ sơ khiếu nại".
+ */
 export default function PackageDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
@@ -89,6 +107,23 @@ export default function PackageDetailPage() {
   });
   const [picked, setPicked] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [creatingClaim, setCreatingClaim] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState<string | null>(null);
+  // Tên quy tắc có số cấu hình ("quá {N} ngày") lấy từ API-80 — vai đọc được cài đặt (02b-admin §9).
+  const settings = useQuery({
+    queryKey: ["settings"],
+    queryFn: settingsApi.get,
+    enabled: me.role === "ADMIN" || me.role === "SUPERVISOR",
+  });
+  // Ảnh không tải được (URL ký hết hạn — 02b-admin §4): tải lại API-31 một lần.
+  const reloadedForImage = useRef(false);
+  const onSnapshotExpired = () => {
+    if (reloadedForImage.current) return;
+    reloadedForImage.current = true;
+    void query.refetch();
+  };
 
   if (query.isPending) {
     return (
@@ -133,9 +168,40 @@ export default function PackageDetailPage() {
   const sessions = [...pkg.sessions].sort((a, b) => b.started_at.localeCompare(a.started_at));
   const session = sessions.find((s) => s.id === picked) ?? sessions[0];
   const [whLabel, whTone] = WAREHOUSE_STATUS[pkg.warehouse_status] ?? ["—", "neutral"];
-  const ready = session?.clips.filter((c) => c.status === "READY") ?? [];
-  const held = ready.length > 0 && ready.every((c) => c.held);
   const order = pkg.order;
+  const returnCases = pkg.return_cases;
+  const alerts = pkg.recon_alerts;
+  const canClaim = hasPermission(me, "claims.manage");
+  const canLink = hasPermission(me, "returns.link");
+  const canCorrect = hasPermission(me, "inspection.correct");
+  const targets = pkg.allowed_status_targets;
+  // Menu "Điều chỉnh trạng thái" ẩn khi không có chuyển nào (01 §10.5 D4) hoặc không có quyền (02b-admin §7).
+  const canAdjust = hasPermission(me, "warehouse_status.adjust") && targets.length > 0;
+  const linkingCase = returnCases.find((rc) => rc.id === linking);
+  const correctingSession = sessions.find((s) => s.id === correcting && s.inspection);
+  const caseOfSession = (s: PackageSession) =>
+    returnCases.find((rc) => rc.id === s.return_case_id) ?? latestCase;
+  /** Nút "Sửa kết luận" (≤ 7 ngày, `can_correct`) hoặc chữ "Đã quá 7 ngày, không sửa được." (FR-04.11). */
+  const correctAction = (s: PackageSession) => {
+    if (!canCorrect || s.status !== "COMPLETED") return null;
+    if (s.can_correct)
+      return (
+        <Button variant="text" size="sm" icon="edit" onClick={() => setCorrecting(s.id)}>
+          {RETURN_COPY.correct.open}
+        </Button>
+      );
+    return <span className="text-body-sm text-on-surface-variant">{RETURN_COPY.correct.expired}</span>;
+  };
+  const latestCase = returnCases[0];
+  // Loại mặc định theo kết luận phiên hoàn gần nhất có vấn đề, không thì "Khách báo thiếu / sai" (01 §10.5 D4).
+  const lastIssue = sessions.find(
+    (s) => s.type === "RETURN" && s.inspection?.conclusion && s.inspection.conclusion !== "OK",
+  )?.inspection?.conclusion;
+  const defaultType: ClaimType = lastIssue && lastIssue !== "OK" ? lastIssue : "BUYER_CLAIM";
+  const sessionsOf = (caseId: string) => {
+    const own = sessions.filter((s) => s.return_case_id === caseId);
+    return own.length > 0 || returnCases.length > 1 ? own : sessions.filter((s) => s.type === "RETURN");
+  };
 
   return (
     <>
@@ -144,12 +210,13 @@ export default function PackageDetailPage() {
           <h1 className="flex flex-wrap items-center gap-2 text-headline-sm text-on-surface">
             <TrackingNumber value={pkg.tracking_number} size="lg" />
             <StatusChip tone={whTone}>{whLabel}</StatusChip>
+            {pkg.is_placeholder && <StatusChip tone="warning">{C.placeholder}</StatusChip>}
             {order?.platform_status && (
               <StatusChip>
                 {C.platform}: {platformStatus(order.platform_status)}
               </StatusChip>
             )}
-            {!pkg.verified && <StatusChip tone="warning">{C.unverified}</StatusChip>}
+            {!pkg.verified && !pkg.is_placeholder && <StatusChip tone="warning">{C.unverified}</StatusChip>}
           </h1>
           {order && (
             <p className="mt-1 text-body-md text-on-surface-variant">
@@ -164,10 +231,75 @@ export default function PackageDetailPage() {
             </p>
           )}
         </div>
-        {session && ready.length > 0 && (
-          <HoldToggle packageId={pkg.id} clipIds={ready.map((c) => c.id)} held={held} />
+        {(canClaim || canAdjust) && (
+          <div className="flex flex-wrap gap-2">
+            {canClaim && (
+              <Button variant="tonal" icon="gavel" onClick={() => setCreatingClaim(true)}>
+                {CLAIM_COPY.create.open}
+              </Button>
+            )}
+            {canAdjust && (
+              <Button variant="outlined" icon="tune" onClick={() => setAdjusting(true)}>
+                {RECON_COPY.adjust.open}
+              </Button>
+            )}
+          </div>
         )}
       </div>
+
+      {returnCases.map((rc) => (
+        <section key={rc.id} className="card mb-4 p-4" aria-labelledby={`d4-return-${rc.id}`}>
+          <h2 id={`d4-return-${rc.id}`} className="mb-3 text-title-md text-on-surface">
+            {RETURN_COPY.section.title}
+          </h2>
+          <ReturnCaseSection
+            returnCase={rc}
+            sessions={sessionsOf(rc.id)}
+            onSnapshotExpired={onSnapshotExpired}
+            inspectionActions={correctAction}
+            caseActions={
+              canLink && rc.kind === "UNIDENTIFIED" && !rc.order && rc.status !== "CANCELLED" ? (
+                <Button variant="tonal" size="sm" icon="link" onClick={() => setLinking(rc.id)}>
+                  {RETURN_COPY.link.open}
+                </Button>
+              ) : undefined
+            }
+          />
+        </section>
+      ))}
+
+      {alerts.length > 0 && (
+        <section className="card mb-4 p-4" aria-labelledby="d4-recon">
+          <div className="mb-2 flex items-center gap-2">
+            <h2 id="d4-recon" className="text-title-md text-on-surface">
+              {C.recon}
+            </h2>
+            {screenReady("D15") && (
+              <Link to="/admin/recon?status=ALL" className="text-label-lg text-primary hover:underline">
+                {C.reconLink}
+              </Link>
+            )}
+          </div>
+          <ul className="flex flex-col gap-1 text-body-md text-on-surface">
+            {alerts.map((a) => {
+              const [sev, sevTone] = RECON_SEVERITY[a.severity];
+              const [st, stTone] = RECON_STATUS[a.status];
+              return (
+                <li key={a.id} className="flex flex-wrap items-center gap-2">
+                  <StatusChip tone={sevTone}>{sev}</StatusChip>
+                  <span>
+                    {a.br} {reconRuleLabel(a.rule, settings.data ?? {})}
+                  </span>
+                  <StatusChip tone={stTone}>{st}</StatusChip>
+                  <span className="text-on-surface-variant tabular-nums">
+                    {fmtShort(a.closed_at ?? a.detected_at)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <div className="mb-4 grid gap-4 *:min-w-0 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <section className="card p-4" aria-labelledby="d4-clip">
@@ -179,6 +311,7 @@ export default function PackageDetailPage() {
               packageId={pkg.id}
               session={session}
               canRebuild={me.role === "ADMIN" || me.role === "SUPERVISOR"}
+              onSnapshotExpired={onSnapshotExpired}
               actions={
                 exportLayouts(session).length > 0 && (
                   <Button icon="ios_share" onClick={() => setExporting(true)}>
@@ -204,6 +337,46 @@ export default function PackageDetailPage() {
       </div>
 
       {exporting && session && <ExportDialog session={session} onClose={() => setExporting(false)} />}
+      {adjusting && (
+        <Dialog open title={RECON_COPY.adjust.title} onClose={() => setAdjusting(false)}>
+          <AdjustStatusForm
+            packageId={pkg.id}
+            currentStatus={pkg.warehouse_status}
+            allowedTargets={targets}
+            onDone={() => setAdjusting(false)}
+          />
+        </Dialog>
+      )}
+      {linkingCase && <LinkOrderDialog returnCase={linkingCase} onClose={() => setLinking(null)} />}
+      {correctingSession && (
+        <CorrectInspectionDialog
+          session={correctingSession}
+          returnCase={caseOfSession(correctingSession)}
+          onClose={() => setCorrecting(null)}
+        />
+      )}
+      {creatingClaim && (
+        <CreateClaimDialog
+          packageId={pkg.id}
+          returnCaseId={latestCase?.id ?? null}
+          defaultType={defaultType}
+          defaultCounterparty={latestCase?.kind === "FAILED_DELIVERY" ? "CARRIER" : "PLATFORM"}
+          onClose={() => setCreatingClaim(false)}
+        />
+      )}
+
+      {pkg.claims && (
+        <section className="card mb-4 p-4" aria-labelledby="d4-claims">
+          <h2 id="d4-claims" className="mb-2 text-title-md text-on-surface">
+            {C.claims}
+          </h2>
+          {pkg.claims.length > 0 ? (
+            <ClaimChips claims={pkg.claims} />
+          ) : (
+            <p className="text-body-md text-on-surface-variant">{C.noClaims}</p>
+          )}
+        </section>
+      )}
 
       <section className="card mb-4 p-4" aria-labelledby="d4-items">
         <h2 id="d4-items" className="mb-2 text-title-md text-on-surface">

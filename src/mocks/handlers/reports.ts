@@ -1,10 +1,12 @@
 import { http, HttpResponse } from "msw";
 
-import type { AttentionItem, DailyReport } from "@/lib/api/reports";
+import type { AttentionItem, DailyReport, ReturnAttentionItem } from "@/lib/api/reports";
 import { vnDay } from "@/shared/format";
 
 import { API, apiError } from "../http";
 import { allSessions, mockPackages, STATIONS } from "../packagesDb";
+import { claimDue, mockClaims, mockReconAlerts, mockReturnCases } from "../returnsDb";
+import { stationSim } from "../stationSim";
 import { pendingApprovals } from "./approvals";
 import { DASHBOARD_ROLES, requireRole } from "./session";
 import { mockStations } from "./stations";
@@ -18,7 +20,8 @@ resetMockReports();
 
 /** API-32 theo định nghĩa đếm trong 02 §6.2 (phiên theo ngày Việt Nam). */
 export function dailyReport(date: string): DailyReport {
-  const sessions = allSessions();
+  // Số Phase 1 chỉ đếm phiên đóng gói (phiên RETURN của item 02 có số riêng — 02 §6.2 API-32 mở rộng).
+  const sessions = allSessions().filter((s) => (s.type ?? "PACK") === "PACK");
   const endedOn = (status: string) =>
     sessions.filter((s) => s.status === status && s.ended_at && vnDay(s.ended_at) === date).length;
   const pkgCount = (status: string) => mockPackages.filter((p) => p.warehouse_status === status).length;
@@ -30,16 +33,27 @@ export function dailyReport(date: string): DailyReport {
       .map((s) => s.ended_at ?? s.started_at)
       .sort()
       .at(-1);
+    // TST Station 01 lấy từ station giả: trạng thái (INSPECTING khi phiên RETURN mở — BE `reports._stations`),
+    // mã kiện của phiên đang mở, chế độ + người kiểm (02 §6.2 API-32 `stations[]` thêm).
+    const sim = id === "st-1" ? stationSim.state() : null;
+    const state = (
+      sim && ["PACKING", "MISMATCH", "WAITING_APPROVAL", "INSPECTING"].includes(sim.state)
+        ? sim.state
+        : "READY"
+    ) as DailyReport["stations"][number]["state"];
     return {
       id,
       name: st?.name ?? name,
-      state: "READY" as const,
+      state,
+      tracking_number: sim?.session?.package.tracking_number ?? null,
+      work_mode: sim ? sim.station.work_mode : ("PACK" as const),
+      operator_name: sim ? sim.station.operator_name : null,
       cameras: (st?.cameras ?? []).map((c) => ({ role: c.role, status: c.status })),
       last_scan_at: last ?? null,
     };
   });
 
-  const attention: AttentionItem[] = [];
+  const attention: (AttentionItem | ReturnAttentionItem)[] = [];
   const cap = pkgCount("CANCELLED_AFTER_PACK");
   if (cap > 0) attention.push({ kind: "CANCELLED_AFTER_PACK", count: cap });
   for (const st of mockStations)
@@ -52,6 +66,29 @@ export function dailyReport(date: string): DailyReport {
   const approvals = pendingApprovals().length;
   if (approvals > 0) attention.push({ kind: "APPROVAL_PENDING", count: approvals });
   attention.push(...mockAttentionExtra);
+  // item 02: mục mới (02 §6.2 API-32, §6.3 #13, §6.5 #1).
+  const missing = mockReturnCases.filter((c) => c.status === "MISSING").length;
+  const reconHigh = mockReconAlerts.filter((a) => a.status === "OPEN" && a.severity === "HIGH").length;
+  const dueSoon = mockClaims.filter((c) => claimDue(c).due_soon).length;
+  const unidentified = mockReturnCases.filter(
+    (c) => c.kind === "UNIDENTIFIED" && !c.order && c.status !== "CANCELLED",
+  ).length;
+  if (missing) attention.push({ kind: "RETURN_MISSING", count: missing });
+  if (reconHigh) attention.push({ kind: "RECON_HIGH", count: reconHigh });
+  if (dueSoon) attention.push({ kind: "CLAIM_DUE_SOON", count: dueSoon });
+  if (unidentified) attention.push({ kind: "RETURN_UNIDENTIFIED", count: unidentified });
+
+  const returnSessions = allSessions().filter(
+    (s) => s.type === "RETURN" && s.status === "COMPLETED" && s.ended_at && vnDay(s.ended_at) === date,
+  );
+  const received = returnSessions.filter(
+    (s) => !mockPackages.find((p) => p.id === s.package_id)?.is_placeholder,
+  );
+  const packEnded = sessions.filter(
+    (s) => s.status === "COMPLETED" && s.ended_at && vnDay(s.ended_at) === date,
+  );
+  const open = { HIGH: 0, MEDIUM: 0, LOW: 0 };
+  for (const a of mockReconAlerts) if (a.status === "OPEN") open[a.severity] += 1;
 
   return {
     date,
@@ -63,6 +100,19 @@ export function dailyReport(date: string): DailyReport {
       cancelled: endedOn("CANCELLED"),
       packed_not_handed_over: pkgCount("PACKED"),
       cancelled_after_pack: cap,
+      returns_received: received.length,
+      returns_received_issue: received.filter(
+        (s) => s.inspection?.conclusion && s.inspection.conclusion !== "OK",
+      ).length,
+      returns_unidentified: returnSessions.length - received.length,
+      returns_expected: mockReturnCases.filter((c) => ["EXPECTED", "PARTIALLY_RECEIVED"].includes(c.status))
+        .length,
+      returns_missing: missing,
+      recon_open: open,
+      claims_open: mockClaims.filter((c) => c.status !== "CLOSED").length,
+      claims_due_soon: dueSoon,
+      label_on_tray: packEnded.filter((s) => s.flags.includes("LABEL_ON_TRAY")).length,
+      cam2_unverified: packEnded.filter((s) => s.flags.includes("CAM2_UNVERIFIED")).length,
     },
     stations,
     attention,

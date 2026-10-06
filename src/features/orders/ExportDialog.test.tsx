@@ -43,10 +43,19 @@ test("TC-07.07 (UI): Ghép mặc định → tiến độ → 2 nút tải; info
   const body = (await (await fetch(info.getAttribute("href")!)).json()) as {
     tracking_number: string;
     source_clip_sha256: Record<string, string>;
+    session_type: string;
+    cameras: { camera_role: string }[];
+    video_gaps: unknown[];
+    flags: string[];
   };
   const clips = findSession("ses-0000001-1")!.clips;
   expect(body.tracking_number).toBe("SPXTST0000001");
   expect(body.source_clip_sha256).toEqual({ CAM1: clips[0]!.sha256, CAM2: clips[1]!.sha256 });
+  // C-10: trường Phase 2 như BE.
+  expect(body).toMatchObject({ session_type: "PACK", video_gaps: [], flags: expect.any(Array) });
+  expect(body).toHaveProperty("session_status");
+  expect(body).toHaveProperty("operator_name");
+  expect(body.cameras.map((c) => c.camera_role)).toEqual(["CAM1", "CAM2"]);
 });
 
 test("chọn Cam 1 → API-43 layout CAM1", async () => {

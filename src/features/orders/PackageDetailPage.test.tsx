@@ -1,11 +1,10 @@
-/** D4 Chi tiết đơn + ClipPlayer + Giữ clip + cắt lại (01 §10.5, FR-07.02, 02.09) — TC-07.06, 07.11 (UI), 02.06 (bước 7), 02.10 (UI), 02.11. */
+/** D4 Chi tiết đơn + ClipPlayer + chip bảo vệ clip + cắt lại (01 §10.5, FR-07.02, 02.09) — TC-07.06, 07.11 (UI), 02.06 (bước 7), 02.10 (UI), 02.11, 02.36. */
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 
 import { login } from "@/lib/api/auth";
 import { apiError } from "@/mocks/http";
-import { findClip } from "@/mocks/packagesDb";
 import { renderApp } from "@/test/render";
 import { server } from "@/test/server";
 
@@ -114,59 +113,6 @@ test("409 CLIP_NOT_FAILED → toast", async () => {
   expect(await screen.findByText("Clip không ở trạng thái lỗi.")).toBeInTheDocument();
 });
 
-test("FR-02.09: Giữ clip đảo nút ngay, toast, chip Đang giữ; Bỏ giữ trả lại", async () => {
-  await as();
-  const user = userEvent.setup();
-  renderApp("/admin/packages/pkg-0000001");
-
-  await user.click(await screen.findByRole("button", { name: "Giữ clip" }));
-  expect(screen.getByRole("button", { name: "Bỏ giữ" })).toBeInTheDocument();
-  expect(await screen.findByText("Đã giữ clip. Clip sẽ không bị xóa tự động.")).toBeInTheDocument();
-  expect(within(await clipRegion()).getByText("Đang giữ")).toBeInTheDocument();
-  await waitFor(() => expect(findClip("clip-0000001-1-1")?.held).toBe(true));
-  expect(findClip("clip-0000001-1-2")?.held).toBe(true);
-
-  await user.click(screen.getByRole("button", { name: "Bỏ giữ" }));
-  expect(await screen.findByRole("button", { name: "Giữ clip" })).toBeInTheDocument();
-  await waitFor(() => expect(findClip("clip-0000001-1-1")?.held).toBe(false));
-});
-
-test("Giữ clip lỗi → hoàn tác + toast lỗi", async () => {
-  await as();
-  server.use(
-    http.put("/api/v1/clips/:id/hold", () =>
-      apiError(500, "INTERNAL", "Có lỗi hệ thống. Thử lại sau ít phút."),
-    ),
-  );
-  renderApp("/admin/packages/pkg-0000001");
-
-  await userEvent.click(await screen.findByRole("button", { name: "Giữ clip" }));
-  expect(
-    await screen.findByText("Không giữ được clip Cam 1, Cam 2: Có lỗi hệ thống. Thử lại sau ít phút."),
-  ).toBeInTheDocument();
-  expect(await screen.findByRole("button", { name: "Giữ clip" })).toBeInTheDocument();
-});
-
-test("F33: Giữ clip — Cam 1 thành công, Cam 2 lỗi → Cam 1 giữ, Cam 2 hoàn tác, toast nêu Cam 2", async () => {
-  await as();
-  server.use(
-    http.put("/api/v1/clips/clip-0000001-1-2/hold", () =>
-      apiError(500, "INTERNAL", "Có lỗi hệ thống. Thử lại sau ít phút."),
-    ),
-  );
-  renderApp("/admin/packages/pkg-0000001");
-
-  await userEvent.click(await screen.findByRole("button", { name: "Giữ clip" }));
-  expect(
-    await screen.findByText("Không giữ được clip Cam 2: Có lỗi hệ thống. Thử lại sau ít phút. Đã giữ Cam 1."),
-  ).toBeInTheDocument();
-  await waitFor(() => expect(findClip("clip-0000001-1-1")?.held).toBe(true));
-  expect(findClip("clip-0000001-1-2")?.held).toBe(false);
-  // Chưa giữ đủ mọi clip → nút vẫn là "Giữ clip", không có chip "Đang giữ".
-  expect(await screen.findByRole("button", { name: "Giữ clip" })).toBeInTheDocument();
-  expect(within(await clipRegion()).queryByText("Đang giữ")).not.toBeInTheDocument();
-});
-
 test("F32: API-40 410 CLIP_DELETED → 'Clip đã bị xóa ngày …'; 409 FAILED → cắt lỗi", async () => {
   await as();
   server.use(
@@ -190,14 +136,17 @@ test("F32: API-40 409 CLIP_NOT_READY FAILED → 'Clip cắt lỗi — Admin/Supe
   expect(await screen.findByText("Clip cắt lỗi — Admin/Supervisor có thể cắt lại.")).toBeInTheDocument();
 });
 
-test("clip đang giữ + cờ Thiếu video", async () => {
+test("TC-02.36: clip đang được giữ (hồ sơ chuyển từ cờ giữ + cờ giữ cũ) + cờ Thiếu video; không còn nút Giữ clip", async () => {
   await as();
   renderApp("/admin/packages/pkg-0000006");
 
-  expect(await screen.findByRole("button", { name: "Bỏ giữ" })).toBeInTheDocument();
   const clip = await clipRegion();
   expect(within(clip).getByText("Thiếu video")).toBeInTheDocument();
-  expect(within(clip).getByText("Đang giữ")).toBeInTheDocument();
+  expect(within(clip).getByText("Đang được giữ: hồ sơ khiếu nại KN-000122")).toBeInTheDocument();
+  expect(within(clip).getByText("Đang được giữ: Admin giữ clip")).toBeInTheDocument();
+  // G3-F23: nhóm chip có tên đọc được.
+  expect(within(clip).getByRole("group", { name: "Bảo vệ clip" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Giữ clip|Bỏ giữ/ })).not.toBeInTheDocument();
 });
 
 test("kiện chưa đóng gói → EmptyState; 3 sản phẩm", async () => {

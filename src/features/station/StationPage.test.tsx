@@ -64,9 +64,9 @@ test("S3: quét đóng sai mã → lệch mã, hiện mã đang đóng gói và 
 
   await scan("SPXTST0000002");
 
-  expect(await screen.findByText("LỆCH MÃ — KHÔNG DÁN PHIẾU NÀY")).toBeInTheDocument();
+  // Item 02 FR-03.13: chữ hai tình huống (Hardening.test.tsx kiểm chi tiết).
+  expect(await screen.findByText("LỆCH MÃ — DỪNG LẠI, CHƯA DÁN PHIẾU")).toBeInTheDocument();
   expect(screen.getByText("Vừa quét")).toBeInTheDocument();
-  expect(screen.getByText("Gỡ phiếu sai, dán đúng phiếu SPXTST0000001 rồi quét lại mã.")).toBeInTheDocument();
 });
 
 test("S4: đơn đã hủy → cảnh báo, không mở phiên", async () => {

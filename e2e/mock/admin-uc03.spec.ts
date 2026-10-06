@@ -1,4 +1,4 @@
-/** UC-03 trên MSW (02b-admin §13): D2 → D3 → quét mã → D4 → xem clip → giữ → xuất → tải. TC-07.01, 07.07 (UI), 09.02. */
+/** UC-03 trên MSW (02b-admin §13): D2 → D3 → quét mã → D4 → xem clip → xuất → tải. TC-07.01, 07.07 (UI), 09.02, 02.36. */
 import { expect, test, type Page } from "@playwright/test";
 
 async function loginDashboard(page: Page, username = "tst_cskh") {
@@ -9,7 +9,9 @@ async function loginDashboard(page: Page, username = "tst_cskh") {
   await expect(page.getByRole("heading", { name: "Tổng quan" })).toBeVisible();
 }
 
-test("UC-03: tra cứu bằng máy quét → chi tiết → giữ clip → xuất Ghép → 2 nút tải", async ({ page }) => {
+test("UC-03: tra cứu bằng máy quét → chi tiết → không còn Giữ clip (gợi ý tạo hồ sơ) → xuất Ghép → 2 nút tải", async ({
+  page,
+}) => {
   await loginDashboard(page);
 
   await page.getByRole("link", { name: /Tra cứu đơn/ }).click();
@@ -25,9 +27,9 @@ test("UC-03: tra cứu bằng máy quét → chi tiết → giữ clip → xuấ
   await clip.getByRole("tab", { name: "Ghép" }).click();
   await expect(clip.locator("video")).toHaveCount(2);
 
-  await page.getByRole("button", { name: "Giữ clip" }).click();
-  await expect(page.getByRole("button", { name: "Bỏ giữ" })).toBeVisible();
-  await expect(page.getByText("Đã giữ clip. Clip sẽ không bị xóa tự động.")).toBeVisible();
+  // TC-02.36 (FR-02.09, DEC-242): nút "Giữ clip" đã gỡ, thay bằng chip bảo vệ / gợi ý tạo hồ sơ khiếu nại.
+  await expect(page.getByRole("button", { name: "Giữ clip" })).toHaveCount(0);
+  await expect(clip.getByText("Muốn giữ clip? Tạo hồ sơ khiếu nại.")).toBeVisible();
 
   await clip.getByRole("button", { name: "Xuất clip" }).click();
   const dialog = page.getByRole("dialog", { name: "Xuất clip" });

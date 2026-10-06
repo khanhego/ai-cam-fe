@@ -10,6 +10,7 @@ import {
   userFromAuth,
 } from "../db";
 import { API, apiError } from "../http";
+import { stationSim } from "../stationSim";
 
 type LoginBody = { username: string; password: string; client: "STATION" | "DASHBOARD" };
 
@@ -44,12 +45,20 @@ export const authHandlers = [
   http.post(`${API}/auth/logout`, ({ request }) => {
     const user = userFromAuth(request.headers.get("Authorization"));
     if (user) mockRefresh.delete(user.role === "STATION" ? "STATION" : "DASHBOARD");
+    // BR-28 (02 §6.3 #17): station đăng xuất → xóa tên người kiểm.
+    if (user?.role === "STATION") stationSim.clearOperator();
     return new HttpResponse(null, { status: 204 });
   }),
 
   http.get(`${API}/me`, ({ request }) => {
     const user = userFromAuth(request.headers.get("Authorization"));
     if (!user) return apiError(401, "UNAUTHENTICATED", "Phiên đăng nhập đã hết hạn. Đăng nhập lại.");
-    return HttpResponse.json({ ...publicUser(user), permissions: PERMISSIONS[user.role] });
+    const pub = publicUser(user);
+    // item 02: `/me` station có `kind`, `work_mode` (BE T-106).
+    const station =
+      pub.station?.id === "st-1"
+        ? { ...pub.station, kind: stationSim.kind, work_mode: stationSim.workMode }
+        : pub.station;
+    return HttpResponse.json({ ...pub, station, permissions: PERMISSIONS[user.role] });
   }),
 ];

@@ -11,10 +11,16 @@ export type Camera = {
   roi: Roi | null;
   clock_offset_ms: number | null;
 };
+/** item 02 (API-60 `kind`). */
+export type StationKind = "PACK" | "RETURN" | "BOTH";
 export type Station = {
   id: string;
   name: string;
   is_active: boolean;
+  /** item 02 (API-60 — BE T-106): loại station, chế độ hiện tại, người kiểm (chế độ nhận hoàn). */
+  kind: StationKind;
+  work_mode: "PACK" | "RETURN";
+  operator_name: string | null;
   account: { id: string; username: string } | null;
   cameras: Camera[];
 };
@@ -32,9 +38,13 @@ export type Page<T> = { items: T[]; page: number; page_size: number; total: numb
 export const stationsApi = {
   list: () => api.get<{ items: Station[] }>("/stations"),
   get: (id: string) => api.get<Station>(`/stations/${id}`),
-  create: (body: { name: string; account_user_id?: string | null }) => api.post<Station>("/stations", body),
-  patch: (id: string, body: Partial<{ name: string; is_active: boolean; account_user_id: string | null }>) =>
-    api.patch<Station>(`/stations/${id}`, body),
+  create: (body: { name: string; account_user_id?: string | null; kind?: StationKind }) =>
+    api.post<Station>("/stations", body),
+  /** item 02: đổi `kind` khi station có phiên / yêu cầu chờ → 409 STATION_BUSY. */
+  patch: (
+    id: string,
+    body: Partial<{ name: string; is_active: boolean; account_user_id: string | null; kind: StationKind }>,
+  ) => api.patch<Station>(`/stations/${id}`, body),
   setCamera: (stationId: string, role: CameraRole, body: CameraInput) =>
     api.put<Camera>(`/stations/${stationId}/cameras/${role}`, body),
   testCamera: (body: CameraInput) =>

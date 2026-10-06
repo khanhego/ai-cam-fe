@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 
 import { login } from "@/lib/api/auth";
 import { mockStations } from "@/mocks/handlers/stations";
+import { stationSim } from "@/mocks/stationSim";
 import { renderApp } from "@/test/render";
 
 beforeEach(async () => {
@@ -107,4 +108,27 @@ test("review M1 #11: camera đã lưu → ô tài khoản / mật khẩu ghi ch�
   const cam1 = (await screen.findByRole("heading", { name: /Cam 1/ })).closest("section")!;
 
   expect(within(cam1).getAllByText("Để trống để giữ giá trị đã lưu")).toHaveLength(2);
+});
+
+test("TC-01.30 (UI): D6 loại station — cột Loại; đổi 'Nhận hoàn' → lưu; STATION_BUSY khi station có phiên mở", async () => {
+  const user = userEvent.setup();
+  renderApp("/admin/settings/stations");
+  const row = (await screen.findByText("TST Station 01")).closest("tr")!;
+  expect(within(row).getByText("Cả hai")).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: "Loại" })).toBeInTheDocument();
+
+  await user.click(within(row).getByRole("button", { name: "Sửa TST Station 01" }));
+  const group = await screen.findByRole("group", { name: "Loại station" });
+  expect(within(group).getByRole("button", { name: "Cả hai" })).toHaveAttribute("aria-pressed", "true");
+
+  // Station đang có phiên mở → 409 STATION_BUSY.
+  stationSim.scan("SPXTST0000003", "busy-1");
+  await user.click(within(group).getByRole("button", { name: "Nhận hoàn" }));
+  await user.click(screen.getByRole("button", { name: "Lưu" }));
+  expect(await screen.findByText("Station đang có phiên mở. Thử lại khi station rảnh.")).toBeInTheDocument();
+
+  expect(stationSim.cancel(stationSim.session!.id, "OTHER")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Lưu" }));
+  expect(await screen.findByText("Đã lưu.")).toBeInTheDocument();
+  expect(mockStations.find((s) => s.id === "st-1")!.kind).toBe("RETURN");
 });

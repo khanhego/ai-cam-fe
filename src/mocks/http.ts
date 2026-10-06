@@ -11,3 +11,14 @@ export function apiError(
 }
 
 export const API = "/api/v1";
+
+/**
+ * JSON response không qua kiểu generic `JsonBodyType` của MSW: kiểu body lồng sâu của item 02 (phiên + kết luận +
+ * bảo vệ clip) làm `tsc` kiểm kiểu rất chậm. Body vẫn được kiểm bằng kiểu contract ở nơi tạo.
+ */
+export function json(data: unknown, init: { status?: number } = {}) {
+  return new HttpResponse(JSON.stringify(data), {
+    status: init.status ?? 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}

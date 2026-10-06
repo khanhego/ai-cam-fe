@@ -1,19 +1,34 @@
 import type { SessionStatus, WarehouseStatus } from "@/shared/labels";
+import type {
+  ClaimBrief,
+  Inspection,
+  InspectionCorrection,
+  ReturnCaseStatus,
+  ReturnKind,
+  Snapshot,
+} from "@/shared/returns/types";
 
 import { api } from "./client";
 import type { SessionFlag } from "./station";
+import type { ReconAlert } from "./recon";
+import type { ReturnListItem } from "./returns";
 import type { Page } from "./stations";
 
-/** API-30, API-31 (02 §6.2). */
+/** API-30, API-31 (02 §6.2); item 02 mở rộng (02 §6.2 "API-30 / API-31 / API-32 mở rộng") + API-122. */
 export type PackageListItem = {
   id: string;
   tracking_number: string;
   platform_order_sn: string | null;
   warehouse_status: WarehouseStatus;
   platform_status: string | null;
-  source: "API" | "CSV";
+  /** null với kiện tạm / dữ liệu cũ (C-07). */
+  source: "API" | "CSV" | null;
   last_session: { station_name: string; ended_at: string | null } | null;
   has_clip: boolean;
+  /** item 02: hồ sơ hàng hoàn đại diện của kiện (hồ sơ mở trước, rồi mới nhất) — null nếu không có. */
+  return_case: { id: string; code: string; kind: ReturnKind; status: ReturnCaseStatus } | null;
+  /** item 02: kiện tạm của hàng hoàn chưa xác định (chip "Kiện tạm"). */
+  is_placeholder: boolean;
 };
 
 /** Tham số API-30; cũng là search params của D3 (02b-admin §3 `PackageFilters`). */
@@ -25,6 +40,8 @@ export type PackageFilters = {
   warehouse_status?: string;
   session_status?: string;
   session_flag?: string;
+  /** item 02: `PACK` | `RETURN`. */
+  session_type?: string;
   source?: string;
   page?: number;
   page_size?: number;
@@ -45,10 +62,21 @@ export type Clip = {
   deleted_at: string | null;
   /** Cờ của clip (vd. `VIDEO_INCOMPLETE`), v0.3. */
   flags: string[];
+  /** item 02 (ADR-009): clip được bảo vệ bởi hồ sơ khiếu nại / hàng hoàn / cờ giữ cũ. */
+  protected_by_claim: boolean;
+  protection: Protection | null;
+};
+
+/** 02 §6.2 API-31 v0.2 (DEC-245): lý do bảo vệ clip / ảnh; `until` = hạn khi lý do có hạn. */
+export type Protection = {
+  reasons: ("CLAIM" | "RETURN_CASE" | "HELD")[];
+  claims: string[];
+  return_cases: string[];
+  until: string | null;
 };
 
 /** Lý do hủy phiên (02 §5 `session.cancel_reason`). */
-export type CancelReason = "OUT_OF_STOCK" | "WRONG_SCAN" | "OTHER" | "SUPERVISOR";
+export type CancelReason = "OUT_OF_STOCK" | "WRONG_SCAN" | "OTHER" | "SUPERVISOR" | "NOT_A_RETURN";
 
 export type PackageSession = {
   id: string;
@@ -62,6 +90,19 @@ export type PackageSession = {
   cancel_reason: CancelReason | null;
   note: string | null;
   clips: Clip[];
+  /** item 02 (API-31 mở rộng — BE T-115). */
+  type: "PACK" | "RETURN";
+  operator_name: string | null;
+  return_case_id: string | null;
+  /** Phiên RETURN: kết luận + `corrections[]` (+ `corrected` = lần sửa gần nhất); phiên PACK → null. */
+  inspection: (Inspection & { corrected?: InspectionCorrection | null }) | null;
+  /** Sửa kết luận được (RETURN `COMPLETED` ≤ 7 ngày, người xem ADMIN / SUPERVISOR — API-113). */
+  can_correct: boolean;
+  /** Ảnh chụp tay (F2) của phiên; ảnh đã xóa → `url = null`. */
+  snapshots: (Omit<Snapshot, "url"> & { url: string | null; protection: Protection | null })[];
+  /** Phiên PACK: ảnh Cam 1 lúc đóng gói (J-17, L8); ảnh đã xóa → `url = null`. */
+  pack_snapshot: { id: string; url: string | null; status: "READY" | "DELETED" } | null;
+  protected_by_claims: { id: string; code: string }[];
 };
 
 export type PackageDetail = {
@@ -80,6 +121,18 @@ export type PackageDetail = {
     items: { product_name: string; variation: string | null; quantity: number; image_url: string | null }[];
   } | null;
   sessions: PackageSession[];
+  /** item 02 (API-31 mở rộng — BE T-115). Hồ sơ hàng hoàn mới trước (gồm hồ sơ đã gộp / hủy). */
+  is_placeholder: boolean;
+  return_cases: ReturnListItem[];
+  /** Cảnh báo lệch của kiện, mới phát hiện trước. */
+  recon_alerts: Pick<
+    ReconAlert,
+    "id" | "rule" | "br" | "severity" | "status" | "detected_at" | "closed_at"
+  >[];
+  /** Hồ sơ khiếu nại của kiện, mới tạo trước. */
+  claims: (ClaimBrief & { type: string })[];
+  /** Đích "Điều chỉnh trạng thái" (API-122) theo trạng thái kho; rỗng → ẩn nút. */
+  allowed_status_targets: WarehouseStatus[];
   timeline: {
     at: string;
     source: "PLATFORM" | "WAREHOUSE" | "MANUAL";
@@ -90,7 +143,17 @@ export type PackageDetail = {
   }[];
 };
 
+/** API-122 (02 §6.2): điều chỉnh tay `warehouse_status` — lý do 5–500; `recon_alert_id` → cảnh báo RESOLVED. */
+export type AdjustStatusBody = { to_status: WarehouseStatus; reason: string; recon_alert_id?: string | null };
+export type AdjustStatusResult = {
+  package: { id: string; tracking_number: string; warehouse_status: WarehouseStatus };
+  recon_alert: ReconAlert | null;
+};
+
 export const packagesApi = {
   search: (filters: PackageFilters) => api.get<Page<PackageListItem>>("/packages", { query: filters }),
   get: (id: string) => api.get<PackageDetail>(`/packages/${id}`),
+  /** 409 TRANSITION_NOT_ALLOWED (`details.allowed`) / SESSION_ACTIVE; 422 VALIDATION_ERROR. */
+  adjustStatus: (id: string, body: AdjustStatusBody) =>
+    api.post<AdjustStatusResult>(`/packages/${id}/warehouse-status`, body),
 };

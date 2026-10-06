@@ -52,7 +52,16 @@ function ItemList({ session }: { session: StationSession }) {
   );
 }
 
-/** S2 — Đang đóng gói (01 §10.4). */
+/** Đơn vừa bị hủy trên sàn khi đang đóng (FR-03.15, L9, BR-21) — banner đỏ trên danh sách sản phẩm. */
+function OrderCancelledBanner() {
+  return (
+    <Alert kind="error">
+      <span className="text-headline-sm">{COPY.orderCancelled.banner}</span>
+    </Alert>
+  );
+}
+
+/** S2 — Đang đóng gói (01 §10.4). Item 02: banner đơn vừa hủy + nút "Hủy phiên" nhấn mạnh. */
 export function PackingPanel({ state, onCallManager }: { state: StationState; onCallManager: () => void }) {
   const session = state.session!;
   const now = useServerNow();
@@ -60,6 +69,7 @@ export function PackingPanel({ state, onCallManager }: { state: StationState; on
   const elapsed = now - Date.parse(session.started_at);
   const warn = now >= Date.parse(session.warn_at);
   const warnMinutes = Math.round((Date.parse(session.warn_at) - Date.parse(session.started_at)) / 60_000);
+  const cancelled = session.flags.includes("ORDER_CANCELLED");
   return (
     <StationStatePanel
       tone="primary"
@@ -72,6 +82,7 @@ export function PackingPanel({ state, onCallManager }: { state: StationState; on
       }
     >
       {warn && <Alert kind="warning">{COPY.packing.warn15(warnMinutes)}</Alert>}
+      {cancelled && <OrderCancelledBanner />}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <TrackingNumber value={session.package.tracking_number} size="display" copy={false} />
         {session.package.order && (
@@ -101,7 +112,12 @@ export function PackingPanel({ state, onCallManager }: { state: StationState; on
       <p className="text-headline-md">{COPY.packing.hint}</p>
       <div className="mt-auto flex justify-between gap-6">
         {/* Nút trên nền màu trạng thái: dùng nền surface để đủ tương phản (outlined chữ primary trên primary-container bị chìm). */}
-        <Button variant="elevated" className="h-14 px-8" onClick={() => setCancelOpen(true)}>
+        <Button
+          variant={cancelled ? "tonal" : "elevated"}
+          icon={cancelled ? "cancel" : undefined}
+          className="h-14 px-8"
+          onClick={() => setCancelOpen(true)}
+        >
           {COPY.packing.cancel}
         </Button>
         <Button variant="tonal" icon="support_agent" className="h-14 px-8" onClick={onCallManager}>

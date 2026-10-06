@@ -46,7 +46,9 @@ function SignedVideo({
   onPlay,
   onPause,
   onSeeked,
+  forbiddenText,
 }: {
+  forbiddenText?: string;
   clip: ClipRef;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
   label: string;
@@ -63,6 +65,8 @@ function SignedVideo({
     return <EmptyState icon="delete" title={CLIP_COPY.deleted(state.deletedAt, state.days)} />;
   if (state?.kind === "pending") return <EmptyState icon="autorenew" title={CLIP_COPY.pending} />;
   if (state?.kind === "failed") return <Alert kind="error">{CLIP_COPY.failedRebuild}</Alert>;
+  if (forbiddenText && url.isError && isApiError(url.error) && url.error.status === 403)
+    return <Alert kind="warning">{forbiddenText}</Alert>;
   if (url.isError || failures > 1) {
     return (
       <Alert
@@ -105,7 +109,7 @@ function SignedVideo({
 }
 
 /** Tab "Ghép" (DEC-21): 2 `<video>` cạnh nhau, Cam 1 điều khiển, Cam 2 theo `currentTime`. */
-function SideBySide({ cam1, cam2 }: { cam1: ClipRef; cam2: ClipRef }) {
+function SideBySide({ cam1, cam2, forbiddenText }: { cam1: ClipRef; cam2: ClipRef; forbiddenText?: string }) {
   const a = useRef<HTMLVideoElement>(null);
   const b = useRef<HTMLVideoElement>(null);
   const sync = () => {
@@ -118,6 +122,7 @@ function SideBySide({ cam1, cam2 }: { cam1: ClipRef; cam2: ClipRef }) {
         clip={cam1}
         videoRef={a}
         label="Cam 1 (điều khiển cả hai)"
+        forbiddenText={forbiddenText}
         onPlay={() => {
           sync();
           void b.current?.play().catch(() => undefined);
@@ -125,7 +130,7 @@ function SideBySide({ cam1, cam2 }: { cam1: ClipRef; cam2: ClipRef }) {
         onPause={() => b.current?.pause()}
         onSeeked={sync}
       />
-      <SignedVideo clip={cam2} videoRef={b} label="Cam 2" />
+      <SignedVideo clip={cam2} videoRef={b} label="Cam 2" forbiddenText={forbiddenText} />
     </div>
   );
 }
@@ -139,7 +144,10 @@ export function ClipPlayer({
   sideBySide = false,
   retentionDays,
   failedAction,
+  forbiddenText,
 }: {
+  /** Có → API-40 403 hiện chữ này thay lỗi phát (station xem clip đóng gói — 02b-station §7). */
+  forbiddenText?: string;
   clips: ClipRef[];
   /** Hiện tab "Ghép" khi cả hai clip READY. */
   sideBySide?: boolean;
@@ -160,8 +168,17 @@ export function ClipPlayer({
   }
   return (
     <div>
-      {current === "SIDE" && cam1 && cam2 && <SideBySide key="side" cam1={cam1} cam2={cam2} />}
-      {clip?.status === "READY" && <SignedVideo key={clip.id} clip={clip} label={LABEL[clip.camera_role]} />}
+      {current === "SIDE" && cam1 && cam2 && (
+        <SideBySide key="side" cam1={cam1} cam2={cam2} forbiddenText={forbiddenText} />
+      )}
+      {clip?.status === "READY" && (
+        <SignedVideo
+          key={clip.id}
+          clip={clip}
+          label={LABEL[clip.camera_role]}
+          forbiddenText={forbiddenText}
+        />
+      )}
       {clip?.status === "PENDING" && <EmptyState icon="autorenew" title={CLIP_COPY.pending} />}
       {clip?.status === "DELETED" && (
         <EmptyState icon="delete" title={CLIP_COPY.deleted(clip.retention_until, retentionDays)} />

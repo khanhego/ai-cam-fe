@@ -71,14 +71,15 @@ test("bảng kết quả: cột, chip, phân trang 20 dòng", async () => {
 
   const t = await table();
   expect(within(t).getAllByRole("row")).toHaveLength(21);
-  expect(screen.getByText("72 kết quả")).toBeInTheDocument();
+  // 72 kiện Phase 1 + 20 kiện dữ liệu hàng hoàn item 02 (04 §1, returnsDb).
+  expect(screen.getByText("92 kết quả")).toBeInTheDocument();
   const row = within(t).getByRole("link", { name: "SPXTST0000015" }).closest("tr")!;
   expect(within(row).getByText("Đã đóng gói")).toBeInTheDocument();
   expect(within(row).getByText("TST Station 02")).toBeInTheDocument();
   expect(within(row).getByText("Có clip")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Sau" }));
-  expect(await screen.findByText("Trang 2 / 4")).toBeInTheDocument();
+  expect(await screen.findByText("Trang 2 / 5")).toBeInTheDocument();
 });
 
 test("TC-07.03: lọc theo ngày hôm nay / ngày không có phiên", async () => {
@@ -128,7 +129,7 @@ test("TC-07.14 + TC-07.16: lọc trạng thái kho ghi vào URL; mở lại URL 
   document.body.innerHTML = "";
   renderApp("/admin/packages?warehouse_status=PACKED");
   expect(await screen.findByLabelText("Trạng thái kho")).toHaveValue("PACKED");
-  expect(await screen.findByText("8 kết quả")).toBeInTheDocument();
+  expect(await screen.findByText("9 kết quả")).toBeInTheDocument();
 });
 
 test("TC-07.15: lọc theo nguồn File / Shopee", async () => {
@@ -140,7 +141,7 @@ test("TC-07.15: lọc theo nguồn File / Shopee", async () => {
   expect(await codes()).toEqual(["SPXTST0000015"]);
 
   fireEvent.change(screen.getByLabelText("Nguồn"), { target: { value: "API" } });
-  expect(await screen.findByText("71 kết quả")).toBeInTheDocument();
+  expect(await screen.findByText("90 kết quả")).toBeInTheDocument();
 });
 
 test("link từ thẻ D2: lọc theo phiên hiện thành chip, bỏ được", async () => {
@@ -174,4 +175,32 @@ test("API-30 lỗi 5xx (hết 2 lần tự thử lại) → Alert + Thử lại"
   server.resetHandlers();
   await user.click(screen.getByRole("button", { name: "Thử lại" }));
   expect(await table()).toBeInTheDocument();
+});
+
+test("TC-07.30: tra mã chiều về SPXRTTST000041 → mở thẳng D4 kiện 41", async () => {
+  const user = userEvent.setup();
+  const router = renderApp("/admin/packages");
+  await user.type(await screen.findByLabelText("Mã vận đơn hoặc mã đơn"), "SPXRTTST000041{Enter}");
+  await waitFor(() => expect(router.state.location.pathname).toBe("/admin/packages/pkg-0000041"));
+});
+
+test("TC-07.31 (UI): lọc Hoàn quá hạn / Loại phiên Mở hoàn / cờ phiên ở URL; chip 'Hoàn' và 'Kiện tạm'", async () => {
+  const user = userEvent.setup();
+  const router = renderApp("/admin/packages");
+  await table();
+
+  await user.selectOptions(screen.getByLabelText("Trạng thái kho"), "RETURN_MISSING");
+  await waitFor(() => expect(router.state.location.search).toBe("?warehouse_status=RETURN_MISSING"));
+  const row = (await within(await table()).findByText("SPXTST0000049")).closest("tr")!;
+  expect(within(row).getByText("Hoàn quá hạn")).toBeInTheDocument();
+  expect(within(row).getByTitle("Hồ sơ hàng hoàn HH-000049")).toHaveTextContent("Hoàn");
+
+  await user.selectOptions(screen.getByLabelText("Trạng thái kho"), "");
+  await user.selectOptions(screen.getByLabelText("Loại phiên"), "RETURN");
+  await waitFor(() => expect(router.state.location.search).toBe("?session_type=RETURN"));
+  const tam = (await within(await table()).findByText("TAM-000001")).closest("tr")!;
+  expect(within(tam).getByText("Kiện tạm")).toBeInTheDocument();
+
+  await user.selectOptions(screen.getByLabelText("Cờ phiên"), "LABEL_ON_TRAY");
+  await waitFor(() => expect(router.state.location.search).toContain("session_flag=LABEL_ON_TRAY"));
 });

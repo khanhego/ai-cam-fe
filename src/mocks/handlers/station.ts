@@ -1,11 +1,44 @@
 import { http, HttpResponse } from "msw";
 
+import type { CancelReason } from "@/lib/api/station";
+import type { InspectionInput } from "@/shared/returns/types";
+
 import { userFromAuth } from "../db";
 import { API, apiError } from "../http";
-import { stationSim } from "../stationSim";
+import { stationSim, type SimError } from "../stationSim";
+import { stationWs } from "../ws";
 import { announceApprovalCreated, pendingApprovals, recordWithdrawn } from "./approvals";
 
-/** API-10, 11, 12, 15 theo 02 §6.2, chạy trên StationSim. */
+const simError = (e: SimError) => apiError(e.status, e.code, e.message, e.details ?? {});
+const isSimError = (x: unknown): x is SimError =>
+  typeof x === "object" && x !== null && "status" in x && "code" in x && "message" in x;
+const event = (type: string, data: unknown) => JSON.stringify({ type, data, at: new Date().toISOString() });
+
+/** Ảnh mẫu cho API-106 (02b-station §12). */
+const SNAPSHOT_FILE = "/mock/snapshot.jpg";
+
+/**
+ * Hook dev / test giả lập job server cho station (J-07 quá giờ phiên hoàn, J-04/J-06 đơn hủy khi đang đóng) và phát
+ * WS-01 như BE (02 §6.2 WS-01 mở rộng).
+ */
+export const stationJobs = {
+  expireReturnSession() {
+    const alert = stationSim.expireReturnSession();
+    if (!alert) return null;
+    stationWs.broadcast(event("station.state", stationSim.state()));
+    stationWs.broadcast(event("alert", alert));
+    return alert;
+  },
+  orderCancelled() {
+    const alert = stationSim.flagOrderCancelled();
+    if (!alert) return null;
+    stationWs.broadcast(event("station.state", stationSim.state()));
+    stationWs.broadcast(event("alert", alert));
+    return alert;
+  },
+};
+
+/** API-10, 11, 12, 15 theo 02 §6.2, chạy trên StationSim; item 02: API-100..106 (T-131). */
 function requireStation(request: Request) {
   const user = userFromAuth(request.headers.get("Authorization"));
   if (!user) return apiError(401, "UNAUTHENTICATED", "Phiên đăng nhập đã hết hạn. Đăng nhập lại.");
@@ -33,14 +66,18 @@ export const stationHandlers = [
   http.post(`${API}/station/sessions/:id/cancel`, async ({ request, params }) => {
     const denied = requireStation(request);
     if (denied) return denied;
-    const body = (await request.json()) as { reason: string; note: string | null };
+    const body = (await request.json()) as { reason: CancelReason; note: string | null };
     if (body.reason === "OTHER" && !body.note?.trim()) {
       return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
         fields: { note: "Nhập lý do khi chọn Khác" },
       });
     }
-    if (!stationSim.cancel(String(params.id)))
-      return apiError(409, "SESSION_NOT_OPEN", "Phiên không còn mở.");
+    const error = stationSim.cancel(String(params.id), body.reason);
+    if (error === "VALIDATION_ERROR")
+      return apiError(422, error, "Dữ liệu không hợp lệ.", {
+        fields: { reason: "Lý do không hợp với loại phiên" },
+      });
+    if (error) return apiError(409, error, "Phiên không còn mở.");
     return HttpResponse.json({ state: stationSim.state() });
   }),
 
@@ -75,5 +112,61 @@ export const stationHandlers = [
       return apiError(409, "ALREADY_RESOLVED", "Yêu cầu đã được xử lý.");
     recordWithdrawn(pending);
     return HttpResponse.json({ state: stationSim.state() });
+  }),
+
+  // ---- item 02 (02 §6.2 API-100..106) ----
+  http.put(`${API}/station/work-mode`, async ({ request }) => {
+    const denied = requireStation(request);
+    if (denied) return denied;
+    const body = (await request.json()) as { work_mode?: "PACK" | "RETURN" };
+    const error = stationSim.setWorkMode(body.work_mode as "PACK" | "RETURN");
+    return error ? simError(error) : HttpResponse.json({ state: stationSim.state() });
+  }),
+
+  http.put(`${API}/station/operator`, async ({ request }) => {
+    const denied = requireStation(request);
+    if (denied) return denied;
+    const body = (await request.json()) as { name?: unknown };
+    const error = stationSim.setOperator(body.name);
+    return error ? simError(error) : HttpResponse.json({ state: stationSim.state() });
+  }),
+
+  http.put(`${API}/station/sessions/:id/inspection`, async ({ request, params }) => {
+    const denied = requireStation(request);
+    if (denied) return denied;
+    const body = (await request.json()) as Partial<InspectionInput>;
+    const result = stationSim.saveInspection(String(params.id), body);
+    return isSimError(result) ? simError(result) : HttpResponse.json(result);
+  }),
+
+  http.post(`${API}/station/sessions/:id/snapshots`, ({ request, params }) => {
+    const denied = requireStation(request);
+    if (denied) return denied;
+    const result = stationSim.takeSnapshot(String(params.id));
+    return isSimError(result) ? simError(result) : HttpResponse.json(result, { status: 201 });
+  }),
+
+  http.get(`${API}/station/return-lookup`, ({ request }) => {
+    const denied = requireStation(request);
+    if (denied) return denied;
+    const q = new URL(request.url).searchParams.get("q") ?? "";
+    const result = stationSim.returnLookup(q);
+    return isSimError(result) ? simError(result) : HttpResponse.json(result);
+  }),
+
+  http.post(`${API}/station/return-sessions`, async ({ request }) => {
+    const denied = requireStation(request);
+    if (denied) return denied;
+    const body = (await request.json()) as Record<string, unknown>;
+    const result = stationSim.openFromLookup(body);
+    return isSimError(result) ? simError(result) : HttpResponse.json(result);
+  }),
+
+  // API-106: ảnh ký — mock không kiểm chữ ký, chuyển tới ảnh mẫu tĩnh (`sig=expired` → 403, `sig=deleted` → 410).
+  http.get(`${API}/media/snapshots/:id`, ({ request }) => {
+    const sig = new URL(request.url).searchParams.get("sig");
+    if (sig === "expired") return apiError(403, "SIGNATURE_INVALID", "Liên kết đã hết hạn.");
+    if (sig === "deleted") return apiError(410, "SNAPSHOT_DELETED", "Ảnh đã bị xóa theo chính sách lưu trữ.");
+    return new HttpResponse(null, { status: 302, headers: { Location: SNAPSHOT_FILE } });
   }),
 ];

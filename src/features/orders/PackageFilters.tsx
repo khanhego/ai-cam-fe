@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { SESSION_FLAG, SESSION_STATUS, SOURCE, WAREHOUSE_STATUS, type SessionStatus } from "@/shared/labels";
+import { SESSION_TYPE } from "@/shared/returns/labels";
 import { Button, Icon, SelectField, StatusChip, TextField } from "@/shared/ui";
 
 import { COPY } from "./copy";
@@ -9,8 +10,9 @@ import { validateFilters, type FilterKey, type Filters } from "./filters";
 type Errors = Partial<Record<FilterKey, string>>;
 
 /**
- * Thanh lọc D3 (01 §10.5): ô tìm tự focus (nhận máy quét, Enter là tìm), ngày từ–đến, station, trạng thái kho, nguồn.
- * Select / ngày áp dụng ngay; ô tìm áp dụng khi Enter. Lọc theo phiên (từ thẻ D2) hiện thành chip bỏ được.
+ * Thanh lọc D3 (01 §10.5): ô tìm tự focus (nhận máy quét — cả mã vận đơn chiều về, Enter là tìm), ngày từ–đến,
+ * station, trạng thái kho (gồm 5 trạng thái hoàn), nguồn, loại phiên (Đóng gói / Mở hoàn), cờ phiên (item 02).
+ * Select / ngày áp dụng ngay; ô tìm áp dụng khi Enter. Lọc trạng thái phiên (từ thẻ D2) hiện thành chip bỏ được.
  */
 export function PackageFilters({
   value,
@@ -58,8 +60,6 @@ export function PackageFilters({
       "session_status",
       SESSION_STATUS[value.session_status as SessionStatus]?.[0] ?? value.session_status,
     ]);
-  if (value.session_flag)
-    sessionChips.push(["session_flag", SESSION_FLAG[value.session_flag] ?? value.session_flag]);
 
   return (
     <form role="search" aria-label="Lọc kiện" onSubmit={onSubmit} className="card mb-4 p-4 pb-0" noValidate>
@@ -128,6 +128,32 @@ export function PackageFilters({
         >
           <option value="">{COPY.search.all}</option>
           {Object.entries(SOURCE).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          name="session_type"
+          label={COPY.search.sessionType}
+          value={draft.session_type ?? ""}
+          onChange={set("session_type")}
+        >
+          <option value="">{COPY.search.all}</option>
+          {Object.entries(SESSION_TYPE).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          name="session_flag"
+          label={COPY.search.sessionFlag}
+          value={draft.session_flag ?? ""}
+          onChange={set("session_flag")}
+        >
+          <option value="">{COPY.search.all}</option>
+          {Object.entries(SESSION_FLAG).map(([k, label]) => (
             <option key={k} value={k}>
               {label}
             </option>
