@@ -10,7 +10,8 @@ async function loginDashboard(page: Page, username = "tst_cskh") {
 }
 
 test("UC-03: tra cứu bằng máy quét → chi tiết → giữ clip → xuất Ghép → 2 nút tải", async ({ page }) => {
-  await loginDashboard(page);
+  // Item 02: API-42 (Giữ clip) chỉ còn ADMIN (DEC-209); nút được thay bằng ProtectedChip ở T-154 (DEC-242).
+  await loginDashboard(page, "tst_admin");
 
   await page.getByRole("link", { name: /Tra cứu đơn/ }).click();
   await expect(page.getByLabel("Mã vận đơn hoặc mã đơn")).toBeFocused();

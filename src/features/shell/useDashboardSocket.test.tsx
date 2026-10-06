@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { useSession } from "@/lib/api/session";
 
-import { REPORT_THROTTLE_MS, useDashboardSocket } from "./useDashboardSocket";
+import { REPORT_THROTTLE_MS, RETURNS_THROTTLE_MS, useDashboardSocket } from "./useDashboardSocket";
 
 class FakeSocket {
   static last: FakeSocket;
@@ -21,9 +21,8 @@ class FakeSocket {
   close() {}
 }
 
-function setup(events?: { onApprovalCreated?: () => void }) {
+function setup(events?: { onApprovalCreated?: () => void }, client = new QueryClient()) {
   useSession.getState().setSession("tok", null);
-  const client = new QueryClient();
   const spy = vi.spyOn(client, "invalidateQueries");
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -33,7 +32,7 @@ function setup(events?: { onApprovalCreated?: () => void }) {
   });
   const emit = (type: string, data: unknown = {}) =>
     FakeSocket.last.onmessage?.({ data: JSON.stringify({ type, data, at: "" }) });
-  return { spy, emit };
+  return { spy, emit, client };
 }
 
 const calledWith = (spy: { mock: { calls: unknown[][] } }, key: unknown[]) =>
@@ -117,4 +116,51 @@ test("F34b: WS nối lại → làm mới ngay D13 + D2 (không đợi poll 60 g
 
 test("DEC-69: ngưỡng throttle đủ nhỏ để D2 cập nhật ≤ 5 giây kể cả khi bị dồn", () => {
   expect(REPORT_THROTTLE_MS).toBeLessThanOrEqual(2000);
+});
+
+test("item 02: return.updated → D14 (throttle 2 giây) + D4 + D2; recon.updated → D15 + D4 + D2", () => {
+  vi.useFakeTimers();
+  const { spy, emit } = setup();
+  emit("return.updated", { return_case_id: "rc-1", status: "RECEIVED_ISSUE" });
+  emit("return.updated", { return_case_id: "rc-2", status: "EXPECTED" });
+  expect(calledWith(spy, ["returns"])).toBe(1);
+  expect(spy).toHaveBeenCalledWith({ queryKey: ["package"] });
+  expect(spy).toHaveBeenCalledWith({ queryKey: ["daily"] });
+  vi.advanceTimersByTime(RETURNS_THROTTLE_MS);
+  expect(calledWith(spy, ["returns"])).toBe(2);
+
+  emit("recon.updated", { summary: { open: { HIGH: 1, MEDIUM: 0, LOW: 0 } } });
+  expect(spy).toHaveBeenCalledWith({ queryKey: ["recon"] });
+});
+
+test("item 02: claim.updated → D16 + D17 của đúng hồ sơ + D4 + D2; evidence_pack.updated → ghi trạng thái gói", () => {
+  const { spy, emit, client } = setup();
+  emit("claim.updated", { claim_id: "cl-1", status: "SUBMITTED", version: 4 });
+  expect(spy).toHaveBeenCalledWith({ queryKey: ["claims"] });
+  expect(spy).toHaveBeenCalledWith({ queryKey: ["claim", "cl-1"] });
+  expect(spy).toHaveBeenCalledWith({ queryKey: ["package"] });
+
+  client.setQueryData(["evidence-pack", "pack-1"], {
+    id: "pack-1",
+    status: "RUNNING",
+    progress: 40,
+    claim_id: "cl-1",
+  });
+  emit("evidence_pack.updated", { id: "pack-1", status: "READY", progress: 100 });
+  expect(client.getQueryData(["evidence-pack", "pack-1"])).toEqual({
+    id: "pack-1",
+    status: "READY",
+    progress: 100,
+    claim_id: "cl-1",
+  });
+});
+
+test("item 02: WS nối lại → làm mới thêm D14, D15, D16", async () => {
+  vi.useFakeTimers();
+  const { spy } = setup();
+  FakeSocket.last.onopen?.();
+  FakeSocket.last.onclose?.({ code: 1006 });
+  await vi.advanceTimersByTimeAsync(1000);
+  FakeSocket.last.onopen?.();
+  for (const key of [["returns"], ["recon"], ["claims"]]) expect(calledWith(spy, key)).toBe(1);
 });

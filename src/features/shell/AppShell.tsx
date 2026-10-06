@@ -6,9 +6,9 @@ import { ROLE_LABEL } from "@/shared/labels";
 import { cx, Icon, IconButton } from "@/shared/ui";
 
 import { useAuth } from "../auth/useAuth";
-import { ApprovalBadge } from "../approvals/ApprovalBadge";
 import { playApprovalChime } from "../approvals/chime";
 import { canApprove, navFor, type NavItem } from "./nav";
+import { NavBadge } from "./NavBadge";
 import { currentTheme, setTheme } from "./theme";
 import { useDashboardSocket } from "./useDashboardSocket";
 
@@ -30,7 +30,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
     >
       <Icon name={item.icon} />
       {item.label}
-      {item.badge === "approvals" && <ApprovalBadge />}
+      {item.badge && <NavBadge kind={item.badge} />}
     </NavLink>
   );
   return (

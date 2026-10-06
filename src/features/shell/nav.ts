@@ -1,6 +1,8 @@
 import type { Role } from "@/lib/api/session";
 
 import { COPY as LIVE_COPY } from "../liveview/copy";
+import { COPY } from "./copy";
+import type { BadgeKind } from "./NavBadge";
 
 /**
  * Drawer dashboard (02b-admin §2). Chỉ mục có màn thật mới vào menu (không route tạm — DEC-51);
@@ -14,9 +16,21 @@ export type NavItem = {
   roles: Role[];
   group?: "settings";
   end?: boolean;
-  /** Badge số yêu cầu PENDING (D13). */
-  badge?: "approvals";
+  /** Badge: yêu cầu PENDING (D13), cảnh báo lệch mức Cao, hồ sơ sắp hết hạn (02b-admin §2, DEC-243). */
+  badge?: BadgeKind;
+  /** Màn của item 02 chưa xây → không vào menu (DEC-51, DEC-342); bật ở task làm màn đó. */
+  screen?: Item02Screen;
 };
+
+/** Màn item 02 trong drawer (02b-admin §2) và task xây màn. */
+export type Item02Screen = "D14" | "D15" | "D16";
+/**
+ * Màn item 02 đã có trang thật. Rỗng ở M6 (T-152): mục drawer + route khai báo sẵn, chỉ hiện khi màn xong —
+ * D14 ở T-153, D15 ở T-156, D16 / D17 ở T-157 / T-158 (DEC-342).
+ */
+export const READY_SCREENS: ReadonlySet<Item02Screen> = new Set<Item02Screen>([]);
+
+const RETURNS_ROLES: Role[] = ["ADMIN", "SUPERVISOR", "CSKH"];
 
 export const NAV: NavItem[] = [
   { to: "/admin", label: "Tổng quan", icon: "dashboard", roles: ["ADMIN", "SUPERVISOR", "CSKH"], end: true },
@@ -25,6 +39,30 @@ export const NAV: NavItem[] = [
     label: "Tra cứu đơn",
     icon: "manage_search",
     roles: ["ADMIN", "SUPERVISOR", "CSKH"],
+  },
+  // item 02 (01 §10.3 drawer, ma trận 01 §5.10): sau "Tra cứu đơn".
+  {
+    to: "/admin/returns",
+    label: COPY.nav.returns,
+    icon: "assignment_return",
+    roles: RETURNS_ROLES,
+    screen: "D14",
+  },
+  {
+    to: "/admin/recon",
+    label: COPY.nav.recon,
+    icon: "rule",
+    roles: RETURNS_ROLES,
+    badge: "recon",
+    screen: "D15",
+  },
+  {
+    to: "/admin/claims",
+    label: COPY.nav.claims,
+    icon: "gavel",
+    roles: RETURNS_ROLES,
+    badge: "claims",
+    screen: "D16",
   },
   {
     to: "/admin/approvals",
@@ -66,7 +104,8 @@ export const NAV: NavItem[] = [
   },
 ];
 
-export const navFor = (role: Role) => NAV.filter((item) => item.roles.includes(role));
+export const navFor = (role: Role, ready: ReadonlySet<Item02Screen> = READY_SCREENS) =>
+  NAV.filter((item) => item.roles.includes(role) && (!item.screen || ready.has(item.screen)));
 
 /** Vai được duyệt yêu cầu (01 §5.1): nhận badge + âm báo `approval.created`. */
 export const canApprove = (role: Role) => role === "ADMIN" || role === "SUPERVISOR";
