@@ -55,9 +55,13 @@ type SimSession = StationSession & {
   pkgId?: string;
   caseId?: string;
   before?: WarehouseStatus;
+  /** Mã đã quét để mở phiên RETURN (`pack.open_code` của BE) — `tracking_number` trong `closed_session`, API-15, WS. */
+  openCode?: string;
 };
 
 const SCAN_CODE = /^[A-Z0-9-]{8,40}$/;
+/** Chế độ RETURN nhận thêm mã đơn sàn (02 §6.2 API-11 `INVALID_CODE`). */
+const ORDER_SN = /^[A-Z0-9]{10,20}$/;
 const RETURN_WARN_MIN = 20;
 const RETURN_ABANDON_MIN = 45;
 export const SNAPSHOT_MAX = 20;
@@ -510,7 +514,7 @@ export class StationSim {
     const label = WAREHOUSE_STATUS[pkg.warehouse_status]?.[0] ?? pkg.warehouse_status;
     return this.alert(
       "NOT_SHIPPED",
-      `${code} đang ở trạng thái ${label} trong kho. Đây không phải hàng hoàn.`,
+      `${code} đang ở trạng thái ${label} trong kho. Đây không phải hàng hoàn. Nếu kiện thực sự đã gửi đi, báo quản lý điều chỉnh trạng thái.`,
       {
         warehouse_status: pkg.warehouse_status,
       },
@@ -518,7 +522,12 @@ export class StationSim {
   }
 
   /** Mở phiên RETURN trên kiện (đã qua kiểm `returnOpenable`). Hồ sơ chưa có → `UNANNOUNCED` (attach_or_create). */
-  private openReturn(pkg: MockPackage, rc: MockReturnCase | undefined, extraFlags: SessionFlag[] = []) {
+  private openReturn(
+    pkg: MockPackage,
+    rc: MockReturnCase | undefined,
+    extraFlags: SessionFlag[] = [],
+    openCode = pkg.tracking_number,
+  ) {
     const now = Date.now();
     const id = `ses-${now}-rt`;
     const before = pkg.warehouse_status;
@@ -587,31 +596,34 @@ export class StationSim {
       pkgId: pkg.id,
       caseId: caseRef.id,
       before,
+      openCode: openCode.toUpperCase(),
     };
     return { outcome: "SESSION_OPENED" as const, alert: null };
   }
 
   /** API-11 nhánh `work_mode = RETURN` (02 §6.2). `MISMATCH` không bao giờ trả ở chế độ này. */
   private handleReturn(code: string): Omit<ScanResult, "state"> {
-    if (!SCAN_CODE.test(code))
-      return this.alert("INVALID_CODE", "Mã vừa quét không phải mã vận đơn. Quét lại mã trên phiếu.");
+    // Thứ tự như BE (sessions/service.py, return_scan.py): yêu cầu chờ → IGNORED; đang kiểm → mọi mã ngoài hồ sơ là
+    // RETURN_CODE_DIFFERENT (không INVALID_CODE); rảnh → kiểm định dạng (nhận cả mã đơn sàn).
     if (this.approval) return { outcome: "IGNORED", alert: null };
     const s = this.session;
     if (s) {
       if (s.status === "WAITING_APPROVAL") return { outcome: "IGNORED", alert: null };
       const rc = findCase(s.caseId!)!;
       const pkg = findPackage(s.pkgId!)!;
-      const expected = codesOf(rc, pkg);
+      const expected = codesOf(rc, pkg, s.openCode);
       if (!expected.includes(code))
         return this.alert(
           "RETURN_CODE_DIFFERENT",
           `Mã ${code} không thuộc kiện đang kiểm. Quét lại mã trên kiện này để hoàn tất.`,
           { code, expected_codes: expected },
         );
-      if (!s.inspection?.saved_at || !s.inspection.conclusion)
+      if (!s.inspection?.conclusion)
         return this.alert("INSPECTION_REQUIRED", "Chọn kết luận trước khi quét đóng.");
       return { outcome: "SESSION_COMPLETED", alert: null, closed_session: this.completeReturn(s) };
     }
+    if (!SCAN_CODE.test(code) && !ORDER_SN.test(code))
+      return this.alert("INVALID_CODE", "Mã vừa quét không phải mã vận đơn / mã đơn. Quét lại mã trên kiện.");
     if (!this.operatorName)
       return this.alert("OPERATOR_REQUIRED", "Nhập tên người kiểm trước khi nhận hàng hoàn.");
     const found = resolveReturnCode(code);
@@ -626,7 +638,7 @@ export class StationSim {
         `Đơn ${found.orderSn} có ${found.count} kiện. Chọn đúng kiện đang cầm.`,
         { platform_order_sn: found.orderSn },
       );
-    return this.returnOpenable(found.pkg) ?? this.openReturn(found.pkg, found.rc);
+    return this.returnOpenable(found.pkg) ?? this.openReturn(found.pkg, found.rc, [], code);
   }
 
   /** Đóng phiên RETURN (quét cùng hồ sơ + đã có kết luận, hoặc J-07 tự hoàn tất). */
@@ -644,7 +656,7 @@ export class StationSim {
     this.recent.unshift({
       id: s.id,
       type: "RETURN",
-      tracking_number: s.package.tracking_number,
+      tracking_number: s.openCode ?? s.package.tracking_number,
       status: "COMPLETED",
       flags,
       conclusion,
@@ -658,7 +670,7 @@ export class StationSim {
     return {
       id: s.id,
       type: "RETURN",
-      tracking_number: s.package.tracking_number,
+      tracking_number: s.openCode ?? s.package.tracking_number,
       flags,
       conclusion,
       claim_code: claim?.code ?? null,
@@ -710,38 +722,52 @@ export class StationSim {
     return s;
   }
 
-  /** API-102: ghi đè kết luận + dòng + ghi chú; BR-22 chỉ ở `lines_mode = FULL` (02 §6.3 #8). */
+  /**
+   * API-102: ghi đè kết luận + dòng + ghi chú (như BE `sessions/inspection.py`): dòng lặp / dòng `OTHER` thiếu ghi chú /
+   * ghi chú dòng > 500 → `lines.{i}.*`; `FULL` thiếu dòng → `fields.lines`, `order_item_id` lạ → `lines.{i}.order_item_id`;
+   * BR-22 chỉ ở `FULL`; `REFERENCE` vẫn ghi dòng đã gửi (02 §6.3 #8).
+   */
   saveInspection(sessionId: string, body: Partial<InspectionInput>) {
     const s = this.openReturnSession(sessionId);
     if ("code" in s) return s;
     const insp = s.inspection!;
+    const full = insp.lines_mode === "FULL";
     const fields: Record<string, string> = {};
     const note = typeof body.note === "string" ? body.note : "";
     const conclusion = (body.conclusion ?? null) as Conclusion | null;
     if (note.length > INSPECTION_LIMITS.noteMax) fields.note = "Tối đa 500 ký tự";
     if (conclusion === "OTHER" && !note.trim()) fields.note = "Nhập ghi chú khi chọn Khác.";
     const input = body.lines ?? [];
-    const byId = new Map(input.map((l) => [l.order_item_id, l]));
-    const lines = insp.lines.map((line, i) => {
-      const next = byId.get(line.order_item_id);
-      if (!next) {
-        if (insp.lines_mode === "FULL") fields[`lines.${i}`] = "Thiếu dòng";
-        return line;
-      }
-      const q = next.quantity_received;
+    const seen = new Set<string>();
+    input.forEach((l, i) => {
+      const q = l.quantity_received;
       if (!Number.isInteger(q) || q < INSPECTION_LIMITS.quantityMin || q > INSPECTION_LIMITS.quantityMax)
         fields[`lines.${i}.quantity_received`] = "Số nhận 0–999";
-      return { ...line, quantity_received: q, condition: next.condition, note: next.note ?? null };
-    });
-    input.forEach((l, i) => {
-      if (!insp.lines.some((x) => x.order_item_id === l.order_item_id))
+      if (seen.has(l.order_item_id)) fields[`lines.${i}.order_item_id`] = "Dòng bị lặp";
+      seen.add(l.order_item_id);
+      if (full && !insp.lines.some((x) => x.order_item_id === l.order_item_id))
         fields[`lines.${i}.order_item_id`] = "Không thuộc đơn";
+      if (l.condition === "OTHER" && !l.note?.trim())
+        fields[`lines.${i}.note`] = "Nhập ghi chú khi chọn Khác.";
+      if ((l.note ?? "").length > INSPECTION_LIMITS.noteMax) fields[`lines.${i}.note`] = "Tối đa 500 ký tự";
     });
+    if (full && insp.lines.some((x) => !seen.has(x.order_item_id))) fields.lines = "Thiếu dòng của phiên";
     if (Object.keys(fields).length) return err(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", { fields });
-    const effective = insp.lines_mode === "REFERENCE" ? insp.lines : lines;
-    if (conclusion === "OK" && !canBeOk(effective, insp.lines_mode))
+    const byId = new Map(input.map((l) => [l.order_item_id, l]));
+    const lines = insp.lines.map((line) => {
+      const next = byId.get(line.order_item_id);
+      return next
+        ? {
+            ...line,
+            quantity_received: next.quantity_received,
+            condition: next.condition,
+            note: next.note ?? null,
+          }
+        : line;
+    });
+    if (conclusion === "OK" && !canBeOk(lines, insp.lines_mode))
       return err(422, "CONCLUSION_INCONSISTENT", "Có dòng thiếu / hỏng — không chọn Nguyên vẹn được.");
-    s.inspection = { ...insp, conclusion, note, lines: effective, saved_at: new Date().toISOString() };
+    s.inspection = { ...insp, conclusion, note, lines, saved_at: new Date().toISOString() };
     return { inspection: s.inspection };
   }
 
@@ -857,9 +883,9 @@ export class StationSim {
           return err(409, "FORCE_NEW_NOT_ALLOWED", "Mã này không thuộc kiện đã nhận — quét lại.", { reason });
         const id = `ses-${Date.now()}-rt`;
         const { pkg, rc } = createUnidentified(code, id, note);
-        result = this.openReturn(pkg, rc, ["UNIDENTIFIED"]);
+        result = this.openReturn(pkg, rc, ["UNIDENTIFIED"], code);
       } else if (found.kind === "PACKAGE") {
-        result = this.returnOpenable(found.pkg) ?? this.openReturn(found.pkg, found.rc);
+        result = this.returnOpenable(found.pkg) ?? this.openReturn(found.pkg, found.rc, [], code);
       } else if (found.kind === "MULTIPLE") {
         result = this.alert(
           "RETURN_MULTIPLE_PACKAGES",
@@ -869,7 +895,7 @@ export class StationSim {
       } else {
         const id = `ses-${Date.now()}-rt`;
         const { pkg, rc } = createUnidentified(code, id);
-        result = this.openReturn(pkg, rc, ["UNIDENTIFIED"]);
+        result = this.openReturn(pkg, rc, ["UNIDENTIFIED"], code);
       }
     }
     this.processed.set(scanId, result);
@@ -891,7 +917,7 @@ export class StationSim {
     | null {
     const s = this.session;
     if (!s || s.type !== "RETURN" || s.status !== "OPEN") return null;
-    const base = { session_id: s.id, tracking_number: s.package.tracking_number };
+    const base = { session_id: s.id, tracking_number: s.openCode ?? s.package.tracking_number };
     if (s.inspection?.saved_at && s.inspection.conclusion)
       return {
         code: "SESSION_AUTO_CLOSED",

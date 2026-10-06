@@ -5,19 +5,43 @@ import { isApiError } from "@/lib/api/errors";
 import {
   stationApi,
   type CancelReason,
+  type ClosedSession,
   type Outcome,
   type ScanAlert,
+  type StationServerAlert,
   type StationState,
   type WorkMode,
 } from "@/lib/api/station";
+import { conclusionError } from "@/shared/returns/inspection";
 import { toast } from "@/shared/ui";
 
 import { COPY } from "./copy";
+import {
+  editDraft,
+  syncDraft,
+  toInput,
+  type DraftPatch,
+  type InspectionDraft,
+} from "./returns/inspectionDraft";
 import { sound, type SoundKind } from "./sound";
 
 /** S4 tự đóng sau 5 giây (01 §10.4). */
 export const ALERT_MS = 5000;
+/** R4 tự đóng sau 8 giây (DEC-238). */
+export const RETURN_ALERT_MS = 8000;
+/** Lưu nháp kết luận sau 1 giây không thao tác (DEC-235). */
+export const DRAFT_DEBOUNCE_MS = 1000;
+/** Quét đóng chờ lưu nháp tối đa 3 giây (02b-station §4). */
+export const FLUSH_WAIT_MS = 3000;
+/** Thông báo sau đóng tự ẩn 10 giây (01 §10.4). */
+export const CLOSED_NOTICE_MS = 10_000;
+/** Alert vàng "mã không thuộc kiện đang kiểm" 5 giây. */
+export const CODE_DIFFERENT_MS = 5000;
 const RETRIES = 2;
+
+/** Cảnh báo hiện tại chỗ trên R2 (không overlay — 02b-station §8). */
+export type InlineAlert =
+  { code: "INSPECTION_REQUIRED" } | { code: "RETURN_CODE_DIFFERENT"; scanned: string };
 
 const SOUND_BY_OUTCOME: Partial<Record<Outcome, SoundKind>> = {
   SESSION_OPENED: "ok",
@@ -51,7 +75,7 @@ type StationStore = {
   cancel: (reason: CancelReason, note?: string) => Promise<void>;
   requestApproval: (type: "MISMATCH" | "ASSIST" | "REPACK", trackingNumber?: string) => Promise<void>;
   withdrawApproval: () => Promise<void>;
-  onServerAlert: (data: { code: string; tracking_number?: string }) => void;
+  onServerAlert: (data: StationServerAlert | { code: string; tracking_number?: string }) => void;
   dismissNotice: () => void;
   // ---- item 02 ----
   /** R5 mở theo yêu cầu (nút "Đổi", ALERT `OPERATOR_REQUIRED`); bắt buộc khi chưa có tên thì tính từ state. */
@@ -62,9 +86,24 @@ type StationStore = {
   setWorkMode: (mode: WorkMode) => Promise<void>;
   /** API-101. Trả chữ lỗi để hiện dưới ô (null = xong). */
   setOperator: (name: string) => Promise<string | null>;
+  /** Nháp kết luận R2 (DEC-235). */
+  draft: InspectionDraft | null;
+  editDraft: (patch: DraftPatch) => void;
+  /** Gửi API-102 ngay nếu nháp chưa lưu (chờ lần gửi đang chạy). */
+  flushDraft: () => Promise<void>;
+  inline: InlineAlert | null;
+  /** Phiên vừa đóng (API-11 `closed_session`, WS `SESSION_AUTO_CLOSED`) — `ClosedNotice` ở S1 / R1. */
+  closedNotice: ClosedSession | null;
+  dismissClosedNotice: () => void;
 };
 
 let alertTimer: ReturnType<typeof setTimeout> | undefined;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let inlineTimer: ReturnType<typeof setTimeout> | undefined;
+let closedTimer: ReturnType<typeof setTimeout> | undefined;
+let saving: Promise<void> | null = null;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 function newScanId(): string {
   return crypto.randomUUID();
@@ -111,7 +150,15 @@ export const useStationStore = create<StationStore>((set, get) => ({
 
   applyState(state) {
     const prev = get().state;
-    set({ state, clockOffsetMs: Date.parse(state.server_time) - Date.now() });
+    const draft = syncDraft(get().draft, state);
+    if (!draft) clearTimeout(saveTimer);
+    const sameSession = prev?.session?.id === state.session?.id;
+    set({
+      state,
+      draft,
+      clockOffsetMs: Date.parse(state.server_time) - Date.now(),
+      ...(sameSession ? {} : { inline: null }),
+    });
     // Camera vừa mất tín hiệu: 2 bíp một lần (FR-01.03, review #22).
     const wasOnline = (role: string) => prev?.cameras.find((c) => c.role === role)?.status === "ONLINE";
     if (state.cameras.some((c) => c.status === "OFFLINE" && wasOnline(c.role))) sound.play("warn");
@@ -127,8 +174,12 @@ export const useStationStore = create<StationStore>((set, get) => ({
       return;
     }
     set({ busy: true, lastCode: code.trim().toUpperCase() });
+    get().dismissClosedNotice();
     const clientScanId = newScanId();
     try {
+      // R2: kết luận phải lưu xong trước lần quét đóng (DEC-235) — chờ tối đa 3 giây rồi vẫn gửi.
+      if (get().state?.state === "INSPECTING" && (get().draft?.dirty || saving))
+        await Promise.race([get().flushDraft(), sleep(FLUSH_WAIT_MS)]);
       let attempt = 0;
       for (;;) {
         try {
@@ -136,16 +187,36 @@ export const useStationStore = create<StationStore>((set, get) => ({
           get().applyState(result.state);
           set({ disconnected: false });
           if (result.outcome === "IGNORED") toast("Đang chờ duyệt.");
-          const kind = SOUND_BY_OUTCOME[result.outcome];
+          const alertCode = result.alert?.code;
+          const kind = alertCode === "INSPECTION_REQUIRED" ? "error" : SOUND_BY_OUTCOME[result.outcome];
           if (kind) sound.play(kind);
           clearTimeout(alertTimer);
+          if (result.closed_session) {
+            clearTimeout(closedTimer);
+            set({ closedNotice: result.closed_session });
+            closedTimer = setTimeout(() => set({ closedNotice: null }), CLOSED_NOTICE_MS);
+          }
           // Chưa có người kiểm: mở R5, không overlay (02b-station §8).
-          if (result.alert?.code === "OPERATOR_REQUIRED") {
+          if (alertCode === "OPERATOR_REQUIRED") {
             set({ alert: null, operatorOpen: true });
             break;
           }
+          // Hai mã hiện tại chỗ R2 (không overlay).
+          if (alertCode === "INSPECTION_REQUIRED") {
+            clearTimeout(inlineTimer);
+            set({ alert: null, inline: { code: "INSPECTION_REQUIRED" } });
+            break;
+          }
+          if (alertCode === "RETURN_CODE_DIFFERENT") {
+            clearTimeout(inlineTimer);
+            const scanned = String(result.alert?.data.code ?? get().lastCode ?? "");
+            set({ alert: null, inline: { code: "RETURN_CODE_DIFFERENT", scanned } });
+            inlineTimer = setTimeout(() => set({ inline: null }), CODE_DIFFERENT_MS);
+            break;
+          }
           set({ alert: result.alert });
-          if (result.alert) alertTimer = setTimeout(() => set({ alert: null }), ALERT_MS);
+          const ms = result.state.station.work_mode === "RETURN" ? RETURN_ALERT_MS : ALERT_MS;
+          if (result.alert) alertTimer = setTimeout(() => set({ alert: null }), ms);
           break;
         } catch (e) {
           // Retry với CÙNG client_scan_id: BE trả lại kết quả cũ nếu đã xử lý (DEC-29).
@@ -220,8 +291,20 @@ export const useStationStore = create<StationStore>((set, get) => ({
   },
 
   onServerAlert(data) {
-    if (data.code === "SESSION_ABANDONED") set({ notice: COPY.abandoned(data.tracking_number ?? "") });
+    const code = "tracking_number" in data ? (data.tracking_number ?? "") : "";
+    const returnMode = get().state?.station.work_mode === "RETURN";
+    if (data.code === "SESSION_ABANDONED")
+      set({ notice: returnMode ? COPY.closedNotice.returnAbandoned(code) : COPY.abandoned(code) });
     if (data.code === "SESSION_CANCELLED_BY_SUPERVISOR") set({ notice: COPY.cancelledByManager });
+    // J-07 tự hoàn tất phiên hoàn đã có kết luận (DEC-272).
+    if (data.code === "SESSION_AUTO_CLOSED" && "closed_session" in data) {
+      clearTimeout(closedTimer);
+      set({ closedNotice: data.closed_session as ClosedSession, draft: null, inline: null });
+      closedTimer = setTimeout(() => set({ closedNotice: null }), CLOSED_NOTICE_MS);
+      sound.play("ok");
+    }
+    // J-07 tới warn_at: gửi nháp ngay (server chỉ tự hoàn tất bằng kết luận đã lưu).
+    if (data.code === "SESSION_WARN") void get().flushDraft();
   },
 
   dismissNotice() {
@@ -249,6 +332,53 @@ export const useStationStore = create<StationStore>((set, get) => ({
     }
   },
 
+  draft: null,
+  inline: null,
+  closedNotice: null,
+
+  dismissClosedNotice() {
+    clearTimeout(closedTimer);
+    if (get().closedNotice) set({ closedNotice: null });
+  },
+
+  editDraft(patch) {
+    const d = get().draft;
+    if (!d) return;
+    const next = editDraft(d, patch);
+    const inline = get().inline;
+    set({
+      draft: next,
+      ...(next.conclusion && inline?.code === "INSPECTION_REQUIRED" ? { inline: null } : {}),
+    });
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => void get().flushDraft(), DRAFT_DEBOUNCE_MS);
+  },
+
+  async flushDraft() {
+    clearTimeout(saveTimer);
+    for (;;) {
+      if (saving) {
+        await saving;
+        continue;
+      }
+      const d = get().draft;
+      if (!d || !d.dirty) return;
+      // "Khác" chưa có ghi chú: chưa gửi (server sẽ 422 và không lưu gì) — báo tại ô.
+      if (conclusionError(d.conclusion, d.note, d.lines, d.linesMode) === "NOTE_REQUIRED") {
+        set({
+          draft: { ...d, fieldErrors: { ...d.fieldErrors, note: COPY.returns.inspecting.noteRequired } },
+        });
+        return;
+      }
+      saving = saveDraft(d).finally(() => {
+        saving = null;
+      });
+      await saving;
+      const after = get().draft;
+      if (!after || after.saveStatus === "error" || after.sessionId !== d.sessionId) return;
+    }
+  },
+
   async setOperator(name) {
     try {
       get().applyState((await stationApi.setOperator(name)).state);
@@ -264,8 +394,57 @@ export const useStationStore = create<StationStore>((set, get) => ({
   },
 }));
 
+/** Gửi API-102 một bản nháp (tự thử lại 2 lần khi lỗi mạng / 5xx — 02b-station §6). */
+async function saveDraft(d: InspectionDraft): Promise<void> {
+  const { getState: get, setState: set } = useStationStore;
+  const patch = (p: Partial<InspectionDraft>) => {
+    const cur = get().draft;
+    if (cur && cur.sessionId === d.sessionId) set({ draft: { ...cur, ...p } });
+  };
+  patch({ saveStatus: "saving" });
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const { inspection } = await stationApi.saveInspection(d.sessionId, toInput(d));
+      const cur = get().draft;
+      const state = get().state;
+      if (state?.session?.id === d.sessionId)
+        set({ state: { ...state, session: { ...state.session, inspection } } });
+      if (cur && cur.sessionId === d.sessionId)
+        set({
+          draft:
+            cur.rev === d.rev
+              ? { ...cur, dirty: false, saveStatus: "saved", fieldErrors: {} }
+              : { ...cur, saveStatus: "saving" },
+        });
+      return;
+    } catch (e) {
+      if (retryable(e) && attempt < RETRIES) continue;
+      if (isApiError(e) && (e.code === "SESSION_NOT_OPEN" || e.code === "NOT_RETURN_SESSION")) {
+        if (e.code === "NOT_RETURN_SESSION") console.warn("API-102 NOT_RETURN_SESSION", d.sessionId);
+        set({ draft: null });
+        await get().load();
+        return;
+      }
+      console.warn("API-102 lỗi", { session_id: d.sessionId, error: e });
+      const fieldErrors =
+        isApiError(e) && e.code === "CONCLUSION_INCONSISTENT"
+          ? { conclusion: COPY.returns.inspecting.okLocked }
+          : isApiError(e)
+            ? e.fieldErrors
+            : {};
+      patch({ saveStatus: "error", fieldErrors });
+      if (isApiError(e) && !retryable(e) && e.status !== 422 && e.status !== 409) report(e, set);
+      return;
+    }
+  }
+}
+
 export function resetStationStore() {
   clearTimeout(alertTimer);
+  clearTimeout(saveTimer);
+  clearTimeout(inlineTimer);
+  clearTimeout(closedTimer);
+  saving = null;
   sound.stop();
   useStationStore.setState({
     state: null,
@@ -279,5 +458,8 @@ export function resetStationStore() {
     notice: null,
     blocked: null,
     operatorOpen: false,
+    draft: null,
+    inline: null,
+    closedNotice: null,
   });
 }

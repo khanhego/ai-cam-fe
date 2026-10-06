@@ -62,7 +62,8 @@ export type StationReturnCase = {
 /** Phiên PACK hiệu lực của kiện đang kiểm (cột "Lúc đóng gói" ở R2); null → cờ `NO_PACK_CLIP`. */
 export type PackReference = {
   session_id: string;
-  ended_at: string;
+  /** BE có thể null (sessions/schemas.py). */
+  ended_at: string | null;
   station_name: string;
   clips: { id: string; camera_role: "CAM1" | "CAM2"; status: string }[];
   snapshot: { id: string; url: string } | null;
@@ -204,6 +205,8 @@ export type OpenReturnSessionBody =
 /** WS-01 `alert` (02 §6.2 WS-01): mã Phase 1 + item 02. */
 export type StationServerAlert =
   | { code: "SESSION_ABANDONED"; session_id?: string; tracking_number?: string }
+  /** J-07 tới `warn_at` (BE gửi; FE tự tính cảnh báo theo `warn_at` nên chỉ dùng để flush nháp). */
+  | { code: "SESSION_WARN"; session_id: string; minutes: number }
   | { code: "SESSION_CANCELLED_BY_SUPERVISOR"; session_id?: string; tracking_number?: string }
   | { code: "ORDER_CANCELLED_DURING_SESSION"; session_id: string; tracking_number: string }
   | {

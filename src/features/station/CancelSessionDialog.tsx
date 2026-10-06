@@ -1,16 +1,31 @@
 import { useState } from "react";
 
 import { isApiError } from "@/lib/api/errors";
-import type { CancelReason } from "@/lib/api/station";
+import type { CancelReason, SessionType } from "@/lib/api/station";
 import { Button, Dialog, TextAreaField } from "@/shared/ui";
 
 import { COPY } from "./copy";
 import { useStationStore } from "./stationStore";
 
-/** Hủy phiên kèm lý do (FR-03.08, API-12). "Khác" bắt buộc ghi chú ≤ 200 ký tự. */
-export function CancelSessionDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/**
+ * Hủy phiên kèm lý do (FR-03.08, API-12). "Khác" bắt buộc ghi chú ≤ 200 ký tự. Item 02: lý do theo loại phiên — RETURN:
+ * Quét nhầm / Kiện không phải hàng hoàn / Khác (02 §5.2).
+ */
+export function CancelSessionDialog({
+  open,
+  onClose,
+  sessionType = "PACK",
+}: {
+  open: boolean;
+  onClose: () => void;
+  sessionType?: SessionType;
+}) {
   const cancel = useStationStore((s) => s.cancel);
-  const [reason, setReason] = useState<CancelReason>("OUT_OF_STOCK");
+  const reasons: Partial<Record<CancelReason, string>> =
+    sessionType === "RETURN" ? COPY.cancelDialog.returnReasons : COPY.cancelDialog.reasons;
+  const [reason, setReason] = useState<CancelReason>(
+    sessionType === "RETURN" ? "WRONG_SCAN" : "OUT_OF_STOCK",
+  );
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -43,10 +58,10 @@ export function CancelSessionDialog({ open, onClose }: { open: boolean; onClose:
       }
     >
       <fieldset className="mb-4 flex flex-col gap-3">
-        {(Object.keys(COPY.cancelDialog.reasons) as (keyof typeof COPY.cancelDialog.reasons)[]).map((key) => (
+        {(Object.keys(reasons) as CancelReason[]).map((key) => (
           <label key={key} className="flex items-center gap-3 text-body-lg text-on-surface">
             <input type="radio" name="reason" checked={reason === key} onChange={() => setReason(key)} />
-            {COPY.cancelDialog.reasons[key]}
+            {reasons[key]}
           </label>
         ))}
       </fieldset>

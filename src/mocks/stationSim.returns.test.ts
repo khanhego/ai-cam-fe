@@ -157,7 +157,7 @@ test("TC-04.19: đóng bằng mã gốc cùng hồ sơ, Nguyên vẹn → R1 + c
   expect(r.state.state).toBe("READY");
   expect(r.closed_session).toMatchObject({
     type: "RETURN",
-    tracking_number: "SPXTST0000041",
+    tracking_number: "SPXRTTST000041", // BE: mã đã quét để mở (open_code)
     conclusion: "OK",
     claim_code: null,
     package_status: "RETURN_RECEIVED_OK",
@@ -377,7 +377,7 @@ test("TC-04.26 / TC-04.27 (mock J-07): đã lưu kết luận → SESSION_AUTO_C
   await returnMode();
   await openAndConclude("EMPTY_BOX");
   const auto = stationJobs.expireReturnSession();
-  expect(auto).toMatchObject({ code: "SESSION_AUTO_CLOSED", tracking_number: "SPXTST0000041" });
+  expect(auto).toMatchObject({ code: "SESSION_AUTO_CLOSED", tracking_number: "SPXRTTST000041" });
   expect(auto && "closed_session" in auto && auto.closed_session.flags).toContain("AUTO_CLOSED");
   await scan("SPXTST0000042");
   expect(stationJobs.expireReturnSession()).toMatchObject({ code: "SESSION_ABANDONED" });

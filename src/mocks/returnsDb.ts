@@ -552,15 +552,17 @@ export function resolveReturnCode(raw: string): ResolveResult {
 }
 
 /** Mọi mã thuộc hồ sơ / kiện đang kiểm (BR-23): mã chiều về, mã vận đơn các kiện của hồ sơ, mã đơn. */
-export function codesOf(rc: MockReturnCase, pkg: MockPackage): string[] {
-  const codes = new Set<string>([pkg.tracking_number]);
+export function codesOf(rc: MockReturnCase, pkg: MockPackage, openCode?: string): string[] {
+  // Như BE `returns/service.py` (case_codes): hồ sơ chưa xác định chỉ nhận lại đúng mã đã mở; còn lại = mã mở + mọi
+  // kiện (không phải kiện tạm) của hồ sơ + mã chiều về + mã đơn.
+  const open = (openCode ?? rc.open_code ?? pkg.tracking_number).toUpperCase();
+  if (rc.kind === "UNIDENTIFIED") return [open];
+  const codes = new Set<string>([open]);
+  [pkg.id, ...rc.package_ids].forEach((id) => {
+    const p = findPackage(id);
+    if (p && !p.is_placeholder) codes.add(p.tracking_number);
+  });
   if (rc.return_tracking_number) codes.add(rc.return_tracking_number);
-  if (rc.open_code) codes.add(rc.open_code);
-  if (rc.single_session)
-    rc.package_ids.forEach((id) => {
-      const p = findPackage(id);
-      if (p) codes.add(p.tracking_number);
-    });
   if (rc.order) codes.add(rc.order.platform_order_sn);
   return [...codes].map((c) => c.toUpperCase());
 }

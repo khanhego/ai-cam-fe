@@ -5,11 +5,13 @@ import { useScanListener } from "@/shared/scan/useScanListener";
 import { Skeleton } from "@/shared/ui";
 
 import { AlertOverlay } from "./AlertOverlay";
+import { ClosedNotice } from "./ClosedNotice";
 import { COPY } from "./copy";
 import { DisconnectedOverlay } from "./DisconnectedOverlay";
 import { MismatchPanel } from "./MismatchPanel";
 import { PackingPanel } from "./PackingPanel";
 import { ReadyPanel } from "./ReadyPanel";
+import { InspectingPanel } from "./returns/InspectingPanel";
 import { OperatorDialog } from "./returns/OperatorDialog";
 import { ReturnReadyPanel } from "./returns/ReturnReadyPanel";
 import { canSwitchMode, needsOperator, selectPanel } from "./selectPanel";
@@ -86,23 +88,21 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
     );
   else {
     const panel = selectPanel(s.state);
+    const closedNotice = <ClosedNotice closed={s.closedNotice} onDismiss={s.dismissClosedNotice} />;
     const switchable = canSwitchMode(s.state);
     if (panel === "S2") body = <PackingPanel state={s.state} onCallManager={callManager} />;
     else if (panel === "S3") body = <MismatchPanel state={s.state} onCallManager={callManager} />;
     else if (panel === "S5")
       body = <WaitingApprovalPanel state={s.state} onWithdraw={() => void s.withdrawApproval()} />;
     else if (panel === "R2")
-      body = (
-        <StationStatePanel tone="secondary" icon="assignment_return" title={COPY.returns.inspecting.title}>
-          <p className="font-mono text-display-sm">{s.state.session?.package.tracking_number}</p>
-        </StationStatePanel>
-      );
+      body = <InspectingPanel state={s.state} inline={s.inline} onCallManager={callManager} />;
     else if (panel === "R1")
       body = (
         <ReturnReadyPanel
           state={s.state}
           notice={s.notice}
           onDismissNotice={s.dismissNotice}
+          closedNotice={closedNotice}
           onLookup={() => setLookup("")}
           onSwitchMode={switchable ? () => void s.setWorkMode("PACK") : undefined}
         />
@@ -113,6 +113,7 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
           state={s.state}
           notice={s.notice}
           onDismissNotice={s.dismissNotice}
+          closedNotice={closedNotice}
           onSwitchMode={switchable ? () => void s.setWorkMode("RETURN") : undefined}
         />
       );
