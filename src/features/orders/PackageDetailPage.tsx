@@ -10,11 +10,15 @@ import { settingsApi } from "@/lib/api/settings";
 import { fmtDuration, fmtShort } from "@/shared/format";
 import { platformStatus, SESSION_STATUS, SOURCE, WAREHOUSE_STATUS } from "@/shared/labels";
 import { RECON_SEVERITY, RECON_STATUS, reconRuleLabel, SESSION_TYPE } from "@/shared/returns/labels";
-import { Alert, Button, cx, EmptyState, Skeleton, StatusChip, TrackingNumber } from "@/shared/ui";
+import { Alert, Button, cx, Dialog, EmptyState, Skeleton, StatusChip, TrackingNumber } from "@/shared/ui";
 
 import { useAuth } from "../auth/useAuth";
 import { ClaimChips } from "../claims/ClaimChips";
 import { CreateClaimDialog } from "../claims/CreateClaimDialog";
+import { AdjustStatusForm } from "../reconciliation/AdjustStatusForm";
+import { COPY as RECON_COPY } from "../reconciliation/copy";
+import { CorrectInspectionDialog } from "../returns/CorrectInspectionDialog";
+import { LinkOrderDialog } from "../returns/LinkOrderDialog";
 import { ReturnCaseSection } from "../returns/ReturnCaseSection";
 import { screenReady } from "../shell/nav";
 import { COPY as CLAIM_COPY } from "../claims/copy";
@@ -111,6 +115,9 @@ export default function PackageDetailPage() {
   const [picked, setPicked] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [creatingClaim, setCreatingClaim] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState<string | null>(null);
   // Tên quy tắc có số cấu hình ("quá {N} ngày") lấy từ API-80 — vai đọc được cài đặt (02b-admin §9).
   const settings = useQuery({
     queryKey: ["settings"],
@@ -172,6 +179,26 @@ export default function PackageDetailPage() {
   const returnCases = pkg.return_cases ?? [];
   const alerts = pkg.recon_alerts ?? [];
   const canClaim = hasPermission(me, "claims.manage");
+  const canLink = hasPermission(me, "returns.link");
+  const canCorrect = hasPermission(me, "inspection.correct");
+  const targets = pkg.allowed_status_targets ?? [];
+  // Menu "Điều chỉnh trạng thái" ẩn khi không có chuyển nào (01 §10.5 D4) hoặc không có quyền (02b-admin §7).
+  const canAdjust = hasPermission(me, "warehouse_status.adjust") && targets.length > 0;
+  const linkingCase = returnCases.find((rc) => rc.id === linking);
+  const correctingSession = sessions.find((s) => s.id === correcting && s.inspection);
+  const caseOfSession = (s: PackageSession) =>
+    returnCases.find((rc) => rc.id === s.return_case_id) ?? latestCase;
+  /** Nút "Sửa kết luận" (≤ 7 ngày, `can_correct`) hoặc chữ "Đã quá 7 ngày, không sửa được." (FR-04.11). */
+  const correctAction = (s: PackageSession) => {
+    if (!canCorrect || s.status !== "COMPLETED") return null;
+    if (s.can_correct)
+      return (
+        <Button variant="text" size="sm" icon="edit" onClick={() => setCorrecting(s.id)}>
+          {RETURN_COPY.correct.open}
+        </Button>
+      );
+    return <span className="text-body-sm text-on-surface-variant">{RETURN_COPY.correct.expired}</span>;
+  };
   const latestCase = returnCases[0];
   // Loại mặc định theo kết luận phiên hoàn gần nhất có vấn đề, không thì "Khách báo thiếu / sai" (01 §10.5 D4).
   const lastIssue = sessions.find(
@@ -211,11 +238,18 @@ export default function PackageDetailPage() {
             </p>
           )}
         </div>
-        {canClaim && (
+        {(canClaim || canAdjust) && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="tonal" icon="gavel" onClick={() => setCreatingClaim(true)}>
-              {CLAIM_COPY.create.open}
-            </Button>
+            {canClaim && (
+              <Button variant="tonal" icon="gavel" onClick={() => setCreatingClaim(true)}>
+                {CLAIM_COPY.create.open}
+              </Button>
+            )}
+            {canAdjust && (
+              <Button variant="outlined" icon="tune" onClick={() => setAdjusting(true)}>
+                {RECON_COPY.adjust.open}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -229,6 +263,14 @@ export default function PackageDetailPage() {
             returnCase={rc}
             sessions={sessionsOf(rc.id)}
             onSnapshotExpired={onSnapshotExpired}
+            inspectionActions={correctAction}
+            caseActions={
+              canLink && rc.kind === "UNIDENTIFIED" && !rc.order && rc.status !== "CANCELLED" ? (
+                <Button variant="tonal" size="sm" icon="link" onClick={() => setLinking(rc.id)}>
+                  {RETURN_COPY.link.open}
+                </Button>
+              ) : undefined
+            }
           />
         </section>
       ))}
@@ -300,6 +342,24 @@ export default function PackageDetailPage() {
       </div>
 
       {exporting && session && <ExportDialog session={session} onClose={() => setExporting(false)} />}
+      {adjusting && (
+        <Dialog open title={RECON_COPY.adjust.title} onClose={() => setAdjusting(false)}>
+          <AdjustStatusForm
+            packageId={pkg.id}
+            currentStatus={pkg.warehouse_status}
+            allowedTargets={targets}
+            onDone={() => setAdjusting(false)}
+          />
+        </Dialog>
+      )}
+      {linkingCase && <LinkOrderDialog returnCase={linkingCase} onClose={() => setLinking(null)} />}
+      {correctingSession && (
+        <CorrectInspectionDialog
+          session={correctingSession}
+          returnCase={caseOfSession(correctingSession)}
+          onClose={() => setCorrecting(null)}
+        />
+      )}
       {creatingClaim && (
         <CreateClaimDialog
           packageId={pkg.id}
