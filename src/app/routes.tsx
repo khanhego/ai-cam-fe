@@ -37,6 +37,8 @@ export const routes: RouteObject[] = [
       { index: true, Component: lazy(() => import("@/features/reports/DailyPage")) },
       { path: "packages", Component: lazy(() => import("@/features/orders/PackagesPage")) },
       { path: "packages/:id", Component: lazy(() => import("@/features/orders/PackageDetailPage")) },
+      // item 02 (02b-admin §1, DEC-342): D16 (T-157).
+      { path: "claims", Component: lazy(() => import("@/features/claims/ClaimsPage")) },
       {
         path: "approvals",
         element: (
