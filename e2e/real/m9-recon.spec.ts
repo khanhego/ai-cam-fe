@@ -109,6 +109,16 @@ test("M9 (BE thật): J-13 mock → D14 Đang về / Chỉ hoàn tiền → API-
       "UPDATE package SET status_changed_at = now() - interval '2 days' WHERE tracking_number = 'SPXTST0000041'",
     ),
   ).toBe("UPDATE 1");
+  // Đối soát chỉ xét kiện vào "Đang về" sau mốc go-live (`recon_start_at`, DEC G3-C2) — lùi mốc trước lần tua giờ.
+  expect(psql("UPDATE setting SET recon_start_at = now() - interval '3 days'")).toBe("UPDATE 1");
+  // Đồng hồ BR-12 tính theo mốc hồ sơ vào "Đang về" (`expected_since`, G3 C3), không theo trạng thái kiện.
+  expect(
+    psql(
+      "UPDATE return_case SET expected_since = now() - interval '2 days', created_at = now() - interval '2 days' " +
+        "WHERE id IN (SELECT return_case_id FROM return_case_package rcp JOIN package p ON p.id = rcp.package_id " +
+        "WHERE p.tracking_number = 'SPXTST0000041')",
+    ),
+  ).toMatch(/^UPDATE [1-9]/);
 
   // D15 (Supervisor): Chạy đối soát ngay → cảnh báo mức Cao xuất hiện (WS recon.updated / poll) — TC-06.02, 06.18.
   await page.getByRole("button", { name: "Đăng xuất" }).click();
