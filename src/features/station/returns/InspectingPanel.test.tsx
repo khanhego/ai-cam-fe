@@ -1,5 +1,5 @@
 /**
- * R2 Đang kiểm hàng hoàn với MSW (02b-station §13 integration; TC-04.04, 04.15, 04.18..04.21, 04.24, 04.26, 04.27,
+ * R2 Đang kiểm hàng hoàn với MSW (02b-station §13 integration; TC-04.04, 04.15, 04.18..04.21, 04.24, 04.26..04.29,
  * 04.47). Gõ vào ô bằng `paste` (gõ không độ trễ bị coi là máy quét — captureInInputs).
  */
 import { act, screen, waitFor, within } from "@testing-library/react";
@@ -299,4 +299,86 @@ test("REFERENCE (giao thất bại đơn 2 kiện): bảng chỉ xem, Nguyên v�
   expect(screen.queryByRole("group", { name: /Số nhận/ })).toBeNull();
   expect(radio("Nguyên vẹn")).toBeEnabled();
   await waitFor(() => expect(screen.getByText("Giao thất bại")).toBeInTheDocument());
+});
+
+/** Đếm API-102 (PUT `/inspection`) — nháp gửi lên server. */
+function countDraftPuts() {
+  const counter = { puts: 0 };
+  server.events.on("request:start", ({ request }) => {
+    if (request.method === "PUT" && request.url.includes("/inspection")) counter.puts += 1;
+  });
+  return counter;
+}
+
+/** Đặt lại `warn_at` / `abandon_at` của phiên đang kiểm (giả lập ngưỡng thấp: tới hạn sau vài trăm ms). */
+function setDeadlines(patch: { warn_at?: string; abandon_at?: string }) {
+  const state = useStationStore.getState().state!;
+  useStationStore.setState({ state: { ...state, session: { ...state.session!, ...patch } } });
+}
+
+test("TC-04.29, DEC-272: nháp chưa lưu (debounce chưa tới) → tới warn_at gửi API-102; 30 giây trước abandon_at gửi lần nữa", async () => {
+  await openR2();
+  const counter = countDraftPuts();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    act(() => useStationStore.getState().editDraft({ conclusion: "DAMAGED" }));
+    expect(useStationStore.getState().draft?.dirty).toBe(true);
+    const now = Date.now() + useStationStore.getState().clockOffsetMs; // theo giờ server
+    act(() =>
+      setDeadlines({
+        warn_at: new Date(now + 400).toISOString(),
+        abandon_at: new Date(now + 60_000).toISOString(), // gửi lại lúc +30.000 ms
+      }),
+    );
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(counter.puts).toBe(0);
+    await act(() => vi.advanceTimersByTimeAsync(200)); // qua warn_at (+400 ms), debounce 1 giây chưa tới
+    expect(counter.puts).toBe(1);
+    await act(() => useStationStore.getState().flushDraft());
+    expect(stationSim.session?.inspection?.conclusion).toBe("DAMAGED");
+
+    await act(() => vi.advanceTimersByTimeAsync(29_000)); // +29.500 ms, không có sửa mới → không gửi
+    expect(counter.puts).toBe(1);
+    act(() => useStationStore.getState().editDraft({ conclusion: "WRONG_ITEM" })); // debounce tới +30.500 ms
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(counter.puts).toBe(1);
+    await act(() => vi.advanceTimersByTimeAsync(250)); // qua abandon_at − 30 giây (+30.000 ms)
+    expect(counter.puts).toBe(2);
+    await act(() => useStationStore.getState().flushDraft());
+    expect(stationSim.session?.inspection?.conclusion).toBe("WRONG_ITEM");
+  } finally {
+    vi.useRealTimers();
+    server.events.removeAllListeners();
+  }
+});
+
+test("TC-04.29: WS alert SESSION_WARN (J-07 tới warn_at) → gửi nháp ngay, không chờ debounce", async () => {
+  await openR2();
+  const counter = countDraftPuts();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => useStationStore.getState().editDraft({ conclusion: "DAMAGED" }));
+    expect(counter.puts).toBe(0);
+
+    act(() =>
+      useStationStore.getState().onServerAlert({
+        code: "SESSION_WARN",
+        session_id: stationSim.session!.id,
+        minutes: 20,
+      }),
+    );
+    // Bỏ hẳn timer debounce (giả) — API-102 chỉ có thể đến từ alert.
+    vi.clearAllTimers();
+    vi.useRealTimers();
+
+    await waitFor(() => expect(useStationStore.getState().draft?.saveStatus).toBe("saved"));
+    expect(counter.puts).toBe(1);
+    expect(stationSim.session?.inspection?.conclusion).toBe("DAMAGED");
+    expect(useStationStore.getState().draft?.dirty).toBe(false);
+    expect(useStationStore.getState().notice).toBeNull();
+  } finally {
+    vi.useRealTimers();
+    server.events.removeAllListeners();
+  }
 });
