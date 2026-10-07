@@ -209,3 +209,22 @@ test("D4 khối Link chia sẻ của kiện", async () => {
     `/admin/shares?status=ALL&package_id=${pkgId}`,
   );
 });
+
+test("T-262 / EX-S7 ở D17 (API-132 shares[].revoke_pending — M16): thu hồi khi kho mất Internet → dòng chip 'Đang thu hồi — chờ Internet'", async () => {
+  mockCloud.offline = true;
+  await as("tst_cskh");
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${mockShares[0]!.source.claim_id!}`);
+  const block = within(await screen.findByRole("region", { name: "Link chia sẻ (2 đang hoạt động)" }));
+  const own = block.getByText("CSKH Shopee – phiếu 98765").closest("li")!;
+  await user.click(within(own).getByRole("button", { name: /^Thu hồi/ }));
+  await user.click(
+    within(await screen.findByRole("dialog", { name: "Thu hồi link?" })).getByRole("button", {
+      name: "Thu hồi link",
+    }),
+  );
+  const after = within(await screen.findByRole("region", { name: "Link chia sẻ (1 đang hoạt động)" }));
+  const line = after.getByText("CSKH Shopee – phiếu 98765").closest("li")!;
+  expect(within(line).getByText("Đang thu hồi — chờ Internet")).toBeInTheDocument();
+  expect(within(line).queryByRole("button", { name: /^Thu hồi/ })).toBeNull();
+});

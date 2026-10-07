@@ -53,6 +53,14 @@ test("EX-K7: khóa cũ → Alert + Dialog (790 tệp, 136 GB) → Tải lại �
   ).toBeInTheDocument();
 });
 
+test("T-262 (02b §13 OldKeysAlert): `key.old_keys` rỗng → không Alert, không nút tải lại, lịch sử không '(khóa cũ)'", async () => {
+  mockBackup.oldKeys = false;
+  await open();
+  expect(screen.queryByText(/mã hóa bằng khóa .* \(cũ\)/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Tải lại bằng chứng bằng khóa mới" })).not.toBeInTheDocument();
+  expect(within(screen.getByRole("table", { name: "Lịch sử 14 ngày" })).queryByText("(khóa cũ)")).toBeNull();
+});
+
 test("EX-K7: khóa mới chưa xác nhận → chưa hiện Alert khóa cũ", async () => {
   mockBackup.oldKeys = true;
   mockBackup.confirmedFingerprint = OLD_FINGERPRINT;
