@@ -8,6 +8,7 @@ import {
 } from "@/lib/api/approvals";
 
 import { API, apiError } from "../http";
+import { mockFlag } from "../shopsDb";
 import { stationSim } from "../stationSim";
 import { dashboardWs, stationWs } from "../ws";
 import { requireRole } from "./session";
@@ -38,6 +39,26 @@ export function resetMockApprovals() {
     operator_name: null,
     ...UNDECIDED,
   });
+  // item 03 (T-264, D13 "Hủy phiên mở hoàn?"): `pnpm dev:mock` `?returnApproval=1` → thêm yêu cầu Gọi quản lý từ phiên hoàn.
+  if (mockFlag("returnApproval"))
+    mockApprovals.push({
+      id: "apr-seed-return",
+      type: "ASSIST",
+      status: "PENDING",
+      station: { id: "st-2", name: "TST Station 02" },
+      session_id: "ses-st2-return",
+      tracking_number: "SPXRTTST000045",
+      context: null,
+      created_at: new Date(Date.now() - 2 * 60_000).toISOString(),
+      session_type: "RETURN",
+      operator_name: "Lan",
+      return_summary: {
+        conclusion: "EMPTY_BOX",
+        snapshot_count: 3,
+        opened_at: new Date(Date.now() - 4 * 60_000 - 10_000).toISOString(),
+      },
+      ...UNDECIDED,
+    });
 }
 resetMockApprovals();
 

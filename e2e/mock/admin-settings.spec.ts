@@ -21,8 +21,9 @@ test("TC-02.09 / TC-05.01 (UI, mock): D8 chặn clip < video thô, lưu được
     page.getByRole("region", { name: "Sức khỏe hệ thống" }).getByText(/Đã dùng .* \(83%\)/),
   ).toBeVisible();
 
-  await nav.getByRole("link", { name: "Kết nối Shopee" }).click();
-  const shop = page.getByRole("region", { name: "Shop TST" });
+  // item 03 (T-252, DEC-547): D7 đổi tên "Kết nối sàn", mock nhiều shop (DEC-549) — shop Phase 1 là "TST Shop A".
+  await nav.getByRole("link", { name: "Kết nối sàn" }).click();
+  const shop = page.getByRole("region", { name: "TST Shop A" });
   await expect(shop.getByText("Đã kết nối")).toBeVisible();
   await shop.getByRole("button", { name: "Đồng bộ ngay" }).click();
   await expect(page.getByText("Đã bắt đầu đồng bộ. Số liệu sẽ tự cập nhật.")).toBeVisible();
