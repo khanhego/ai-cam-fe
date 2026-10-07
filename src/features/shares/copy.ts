@@ -13,6 +13,9 @@ export const COPY = {
   prior: "phiên trước",
   primary: "Phiên chính",
   review: "Cần soát",
+  /** mới (G3-FE-5, BR-39) — phiên bị loại nhưng thêm tay vào bằng chứng; `reason` = nhãn lý do như chip D17. */
+  excluded: (reason: string | null) =>
+    reason ? `Bị loại khỏi bằng chứng — ${reason}` : "Bị loại khỏi bằng chứng",
   unavailable: {
     CLIP_PENDING: () => "Chưa có clip",
     CLIP_FAILED: () => "Clip lỗi",

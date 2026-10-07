@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { claimsApi } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
 import {
   SHARE_EXPIRES_DAYS,
@@ -27,6 +28,7 @@ import {
   toast,
 } from "@/shared/ui";
 
+import { exclusionLabel } from "../claims/evidenceChips";
 import { COPY } from "./copy";
 import { copyLink } from "./copyLink";
 import { sharePoll, useBackgroundShares } from "./shareProgress";
@@ -220,6 +222,17 @@ function ShareFormBody({
       return next;
     });
   const src = options.source;
+  // G3-FE-5 (BR-39): phiên bị loại nhưng thêm tay vào bằng chứng → chip "Bị loại…" kèm lý do của D17 (API-132 trong cache).
+  const claimId = source.type === "CLAIM" ? source.claimId : null;
+  const claim = useQuery({
+    queryKey: ["claim", claimId],
+    queryFn: () => claimsApi.get(claimId!),
+    enabled: Boolean(claimId) && options.sessions.some((s) => s.excluded),
+  });
+  const excludedText = (id: string) => {
+    const ev = claim.data?.evidence.find((e) => e.kind === "SESSION" && e.session.id === id);
+    return COPY.excluded(ev?.kind === "SESSION" ? exclusionLabel(ev.session) : null);
+  };
 
   return (
     <Dialog
@@ -277,6 +290,7 @@ function ShareFormBody({
                   <span>{text}</span>
                   {s.primary && <StatusChip tone="primary">{COPY.primary}</StatusChip>}
                   {s.review_needed && <StatusChip tone="warning">{COPY.review}</StatusChip>}
+                  {s.excluded && <StatusChip tone="warning">{excludedText(s.id)}</StatusChip>}
                   {reason && (
                     <span id={`share-unavail-${s.id}`} className="text-body-sm">
                       — {reason}

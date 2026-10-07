@@ -9,7 +9,7 @@ import { http, HttpResponse } from "msw";
 
 import { login } from "@/lib/api/auth";
 import { apiError } from "@/mocks/http";
-import { P3_CLAIM_ID } from "@/mocks/returnsDb";
+import { mockClaims, P3_CLAIM_ID } from "@/mocks/returnsDb";
 import { mockCloud, mockShares, toShare } from "@/mocks/sharesDb";
 import { renderApp } from "@/test/render";
 import { server } from "@/test/server";
@@ -234,4 +234,24 @@ test("G3-FE-3: Sao chép link lỗi (clipboard + execCommand) → Toast lỗi ch
   const link = within(d2).getByLabelText("Link chia sẻ") as HTMLInputElement;
   expect(document.activeElement === link || link.selectionEnd === link.value.length).toBe(true);
   write.mockRestore();
+});
+
+test("G3-FE-5: phiên bị loại (BR-39) thêm tay → chip 'Bị loại khỏi bằng chứng — <lý do như D17>', không chọn sẵn", async () => {
+  const claim = mockClaims.find((c) => c.id === P3_CLAIM_ID)!;
+  for (const id of ["ses-p3-c", "ses-p3-m"])
+    claim.evidence.push({
+      id: `ev-t-${id}`,
+      kind: "SESSION",
+      ref_id: id,
+      auto: false,
+      added_at: claim.created_at,
+    });
+  const { dialog } = await openFromClaim();
+  const marked = await within(dialog).findByText("Bị loại khỏi bằng chứng — Đã đánh dấu quét nhầm");
+  const wrong = await within(dialog).findByText("Bị loại khỏi bằng chứng — Hủy: quét nhầm");
+  for (const chip of [marked, wrong]) {
+    const box = within(chip.closest("label")!).getByRole("checkbox");
+    expect(box).not.toBeChecked();
+    expect(box).toBeEnabled();
+  }
 });

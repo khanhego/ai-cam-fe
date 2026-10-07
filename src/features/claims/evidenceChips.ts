@@ -18,25 +18,34 @@ export type EvidenceChip = { label: string; tone: ChipTone };
  * (FE không tự tính — DEC-511); `evidence_exclusion` ưu tiên ("Đã đánh dấu quét nhầm" / "Hủy: quét nhầm" / "Quản lý hủy:
  * …"); rồi `review_needed` ("Cần soát…"); rồi phiên mở hoàn trước; còn lại phiên hoàn bị hủy → nhãn lý do.
  */
+const cancelLabel = (s: SessionEvidence["session"]): string | null =>
+  s.cancel_cause
+    ? CANCEL_CAUSE[s.cancel_cause]
+    : s.cancel_reason
+      ? (RETURN_CANCEL_REASON[s.cancel_reason] ?? null)
+      : null;
+
+/**
+ * Nhãn lý do phiên bị loại khỏi bằng chứng (BR-39): "Đã đánh dấu quét nhầm" / nhãn lý do hủy; không bị loại → `null`.
+ * Dùng chung chip D17 và chip "Bị loại" ở ShareLinkDialog (G3-FE-5).
+ */
+export function exclusionLabel(s: SessionEvidence["session"]): string | null {
+  if (s.type !== "RETURN" || !s.evidence_exclusion) return null;
+  return s.evidence_exclusion === "MARKED" ? EVIDENCE_EXCLUSION_MARKED : cancelLabel(s);
+}
+
 export function sessionChips(ev: SessionEvidence): EvidenceChip[] {
   const s = ev.session;
   const out: EvidenceChip[] = [];
   if (ev.primary) out.push({ label: COPY.evidence.primary, tone: "primary" });
   if (s.type !== "RETURN") return out;
-  const reason = (): string | null =>
-    s.cancel_cause
-      ? CANCEL_CAUSE[s.cancel_cause]
-      : s.cancel_reason
-        ? (RETURN_CANCEL_REASON[s.cancel_reason] ?? null)
-        : null;
-  if (s.evidence_exclusion === "MARKED") out.push({ label: EVIDENCE_EXCLUSION_MARKED, tone: "warning" });
-  else if (s.evidence_exclusion) {
-    const r = reason();
+  if (s.evidence_exclusion) {
+    const r = exclusionLabel(s);
     if (r) out.push({ label: r, tone: "warning" });
   } else if (s.review_needed) out.push({ label: REVIEW_NEEDED_LABEL, tone: "warning" });
   else if (ev.prior_return) out.push({ label: COPY.evidence.prior(s.status), tone: "info" });
   else if (s.status === "CANCELLED" && !s.return_confirmed) {
-    const r = reason();
+    const r = cancelLabel(s);
     if (r) out.push({ label: r, tone: "neutral" });
   }
   // T-266 (v0.5 — DEC-529): đã gỡ lý do hủy / đã xác nhận "Cần soát".
