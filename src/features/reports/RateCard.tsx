@@ -33,7 +33,16 @@ export function RateCard({
         {label}
         {alert && <Icon name="error" size={16} filled />}
       </span>
-      <span className={cx("text-display-sm tabular-nums", !alert && "text-on-surface")}>{value}</span>
+      <span
+        className={cx(
+          // Giá trị dài ("1 phút 30 giây", "2.350.000 đ") dùng cỡ nhỏ hơn để không vỡ dòng ở thẻ hẹp.
+          value.length > 8 ? "text-headline-sm" : "text-display-sm",
+          "tabular-nums",
+          !alert && "text-on-surface",
+        )}
+      >
+        {value}
+      </span>
       {detail && <span className={cx("text-body-sm", !alert && "text-on-surface-variant")}>{detail}</span>}
     </>
   );

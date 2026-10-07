@@ -157,3 +157,12 @@ export function packagesLink(f: ReportUrlFilters, extra: Record<string, string |
     ...shopParams(f),
   })}`;
 }
+
+/** Tên file theo 02 §6.2 API-153 (`Content-Disposition` cùng mẫu — FE tự đặt vì `api.blob` không đọc header). */
+export const CSV_FILE: Record<ReportTab, string> = {
+  returns: "bao-cao-hang-hoan",
+  claims: "bao-cao-khieu-nai",
+  productivity: "bao-cao-nang-suat",
+};
+export const csvFileName = (tab: ReportTab, q: Pick<ReportQuery, "from" | "to">) =>
+  `${CSV_FILE[tab]}-${q.from}_${q.to}.csv`;

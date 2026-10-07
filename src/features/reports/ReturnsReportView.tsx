@@ -7,6 +7,7 @@ import { REPORT_COPY } from "./reportCopy";
 import { returnsLink, type ReportUrlFilters } from "./reportParams";
 import { fmtPct, num } from "./reportFormat";
 import { ReportTable } from "./ReportTable";
+import { SeriesChart } from "./SeriesChart";
 
 const R = REPORT_COPY.returns;
 
@@ -53,6 +54,13 @@ export function ReturnsReportView({ data, filters }: { data: ReturnsReport; filt
           to={returnsLink(filters, { tab: "EXPECTED", period: false })}
         />
       </div>
+
+      <SeriesChart
+        title={REPORT_COPY.chart.returns}
+        series={data.series}
+        granularity={data.series_granularity}
+        pick={(p) => p.return_cases}
+      />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <ReportTable

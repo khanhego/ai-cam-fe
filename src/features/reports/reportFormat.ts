@@ -25,3 +25,8 @@ export const fmtDay = (day: string) => {
 
 /** Số nguyên định dạng `1.000`. */
 export const num = (n: number) => fmtNumber(n);
+
+/** "(Không ghi tên)" (`operator_name = null`) luôn cuối bảng (02 §6.2 API-152); thứ tự còn lại giữ như server. */
+export function nullNameLast<T extends { operator_name: string | null }>(rows: T[]): T[] {
+  return [...rows.filter((r) => r.operator_name !== null), ...rows.filter((r) => r.operator_name === null)];
+}

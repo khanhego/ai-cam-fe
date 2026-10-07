@@ -498,8 +498,16 @@ function toCsv(tab: ReportTab, report: ReturnType<typeof buildReport>): string {
     lines.push("Theo shop", "Sàn,Shop,Hồ sơ,Thắng,Thua,Tiền thu hồi");
     for (const s of r.by_shop)
       lines.push(`${s.platform},${s.shop_name},${s.count},${s.won},${s.lost},${s.recovered_amount}`);
+    lines.push("", "Theo trạng thái", "Trạng thái,Số hồ sơ");
+    for (const s of r.by_status) lines.push(`${s.status},${s.count}`);
   } else {
     const r = report as ProductivityReport;
+    lines.push("Theo station", "Station,Kiện,TB giây,Lệch mã,Bỏ dở,Hủy,Đóng lại");
+    for (const o of r.by_station)
+      lines.push(
+        `${o.station_name},${o.packed},${o.avg_seconds ?? ""},${o.mismatch},${o.abandoned},${o.cancelled},${o.repacked}`,
+      );
+    lines.push("");
     lines.push("Theo người đóng gói", "Người đóng gói,Kiện,TB giây,Lệch mã,Bỏ dở,Hủy,Đóng lại");
     for (const o of r.by_operator)
       lines.push(

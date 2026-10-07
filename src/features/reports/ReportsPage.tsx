@@ -1,14 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 
 import { shouldRetryQuery } from "@/app/queryClient";
 import { isApiError } from "@/lib/api/errors";
 import { reportsApi, type ReportByTab, type ReportTab } from "@/lib/api/reports";
-import { fmtDateTime } from "@/shared/format";
+import type { Role } from "@/lib/api/session";
+import { fmtDateTime, vnDay } from "@/shared/format";
 import { Alert, Button, LinearProgress, PageHeader, Skeleton, Tabs } from "@/shared/ui";
 
 import { useAuth } from "../auth/useAuth";
+import { ClaimsReportView } from "./ClaimsReportView";
+import { ExportCsvButton } from "./ExportCsvButton";
+import { ProductivityReportView } from "./ProductivityReportView";
 import { REPORT_COPY } from "./reportCopy";
 import {
   DEFAULT_REPORT_TAB,
@@ -26,8 +30,13 @@ import { ReturnsReportView } from "./ReturnsReportView";
 
 const C = REPORT_COPY;
 
-/** Tab theo vai (01 §5.10): Năng suất chỉ ADMIN, SUPERVISOR — T-255. */
-const tabsFor = (): ReportTab[] => ["returns"];
+/** Tab theo vai (01 §5.10, 02b-admin §7): Năng suất chỉ ADMIN, SUPERVISOR (server vẫn chặn 403). */
+const canSeeProductivity = (role: Role | undefined) => role === "ADMIN" || role === "SUPERVISOR";
+const tabsFor = (role: Role | undefined): ReportTab[] =>
+  canSeeProductivity(role) ? ["returns", "claims", "productivity"] : ["returns", "claims"];
+
+/** `location.state` khi chuyển CSKH từ `tab=productivity` về tab Hàng hoàn (Alert không quyền). */
+type ReportsLocationState = { reportForbidden?: boolean } | null;
 
 /** `REPORT_TIMEOUT` (server đã chờ 15 giây) không tự thử lại — người dùng bấm "Thử lại" (02b-admin §8). */
 const retryReport = (n: number, e: unknown) =>
@@ -56,7 +65,8 @@ function LoadingSkeleton() {
 
 function ReportBody({ tab, data, filters }: { tab: ReportTab; data: unknown; filters: ReportUrlFilters }) {
   if (tab === "returns") return <ReturnsReportView data={data as ReportByTab["returns"]} filters={filters} />;
-  return null;
+  if (tab === "claims") return <ClaimsReportView data={data as ReportByTab["claims"]} filters={filters} />;
+  return <ProductivityReportView data={data as ReportByTab["productivity"]} filters={filters} />;
 }
 
 /**
@@ -67,9 +77,11 @@ export default function ReportsPage() {
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const me = useAuth((s) => s.me);
-  const tabs = tabsFor();
+  const tabs = tabsFor(me?.role);
   const raw = reportFiltersFromParams(params);
+  const denied = raw.tab === "productivity" && Boolean(me) && !canSeeProductivity(me?.role);
   const filters: ReportUrlFilters = tabs.includes(raw.tab) ? raw : { ...raw, tab: DEFAULT_REPORT_TAB };
+  const forbiddenAlert = (location.state as ReportsLocationState)?.reportForbidden === true;
   const periodErrors = validatePeriod(filters.from, filters.to);
   const valid = !hasErrors(periodErrors);
   const query = toReportQuery(filters);
@@ -84,8 +96,31 @@ export default function ReportsPage() {
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === filters.tab ? prev : undefined),
   });
 
+  // Bộ lọc Station (chỉ tab Năng suất): API-60 chỉ ADMIN → lấy từ API-32 như D3 (DEC-75), cùng query key.
+  const today = vnDay();
+  const daily = useQuery({
+    queryKey: ["daily", today],
+    queryFn: () => reportsApi.daily(today),
+    enabled: filters.tab === "productivity",
+  });
+  const stations =
+    filters.tab === "productivity"
+      ? (daily.data?.stations.map((s) => ({ id: s.id, name: s.name })) ?? [])
+      : undefined;
+
   const apply = (next: Partial<ReportUrlFilters>) =>
-    setParams(paramsFromReportFilters({ ...filters, ...next }), { state: location.state });
+    setParams(paramsFromReportFilters({ ...filters, ...next }));
+
+  if (denied) {
+    const next = new URLSearchParams(paramsFromReportFilters({ ...raw, tab: DEFAULT_REPORT_TAB }));
+    return (
+      <Navigate
+        to={{ pathname: location.pathname, search: `?${next}` }}
+        replace
+        state={{ reportForbidden: true } satisfies ReportsLocationState}
+      />
+    );
+  }
 
   const serverErrors: PeriodErrors | undefined =
     isApiError(report.error) && report.error.code === "VALIDATION_ERROR"
@@ -131,14 +166,22 @@ export default function ReportsPage() {
 
   return (
     <>
-      <PageHeader title={C.title} />
+      <PageHeader
+        title={C.title}
+        actions={<ExportCsvButton tab={filters.tab} query={query} disabled={!valid || !report.data} />}
+      />
+      {forbiddenAlert && (
+        <div className="mb-4">
+          <Alert kind="warning">{C.forbiddenProductivity}</Alert>
+        </div>
+      )}
       <Tabs
         label={C.tabsLabel}
         items={tabs.map((t) => [t, C.tab[t]])}
         value={filters.tab}
         onChange={(tab) => apply({ tab })}
       />
-      <ReportFilters filters={filters} onChange={apply} serverErrors={serverErrors} />
+      <ReportFilters filters={filters} onChange={apply} serverErrors={serverErrors} stations={stations} />
       {body}
     </>
   );

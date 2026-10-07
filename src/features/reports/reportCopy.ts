@@ -89,4 +89,91 @@ export const REPORT_COPY = {
       cases: "Hồ sơ hàng hoàn",
     },
   },
+
+  claims: {
+    cards: {
+      created: "Hồ sơ tạo trong kỳ",
+      winRate: "Tỷ lệ thắng",
+      recovered: "Giá trị thu hồi",
+      beforeDeadline: "Gửi trước hạn",
+      overdue: "Quá hạn chưa gửi",
+    },
+    detail: {
+      winRate: (n: number, d: number) => `${fmtNumber(n)} / ${fmtNumber(d)} có kết quả`,
+      beforeDeadline: (n: number, d: number) => `${fmtNumber(n)} / ${fmtNumber(d)} đã gửi`,
+      now: "Hiện tại",
+    },
+    emptyRate: {
+      winRate: "Chưa có hồ sơ có kết quả trong kỳ",
+      beforeDeadline: "Chưa có hồ sơ đã gửi trong kỳ",
+    },
+    formula: {
+      created: "Hồ sơ tạo trong kỳ = hồ sơ khiếu nại có giờ tạo trong kỳ (trừ hồ sơ giữ từ dữ liệu cũ).",
+      winRate: "Tỷ lệ thắng = Thắng ÷ (Thắng + Thua), theo giờ có kết quả trong kỳ.",
+      recovered: "Giá trị thu hồi = tổng số tiền thu hồi của hồ sơ Thắng, theo giờ có kết quả trong kỳ.",
+      beforeDeadline: 'Gửi trước hạn = hồ sơ chuyển "Đã gửi" trước hạn ÷ hồ sơ đã gửi trong kỳ.',
+      overdue: "Quá hạn chưa gửi = hồ sơ đã quá hạn mà chưa gửi ở thời điểm hiện tại (không theo kỳ).",
+    },
+    sections: {
+      byStatus: "Theo trạng thái",
+      byType: "Theo loại × kết quả",
+      byCounterparty: "Theo bên nhận",
+      byShop: "Theo sàn / shop",
+    },
+    col: {
+      status: "Trạng thái",
+      count: "Số hồ sơ",
+      type: "Loại",
+      won: "Thắng",
+      lost: "Thua",
+      pending: "Đang chờ",
+      counterparty: "Bên nhận",
+      recovered: "Thu hồi",
+      shop: "Sàn · Shop",
+    },
+  },
+
+  productivity: {
+    cards: {
+      packed: "Kiện đã đóng gói",
+      packAvg: "TB / kiện",
+      inspected: "Kiện hoàn đã kiểm",
+      returnAvg: "TB / kiện hoàn",
+    },
+    formula: {
+      packed:
+        "Kiện đã đóng gói = phiên đóng gói hoàn tất có giờ đóng trong kỳ (đóng gói lại vẫn tính, đếm riêng ở cột Đóng gói lại).",
+      packAvg:
+        "TB / kiện = trung bình (giờ đóng − giờ mở − thời gian chờ duyệt) của phiên đóng gói hoàn tất trong kỳ.",
+      inspected: "Kiện hoàn đã kiểm = phiên mở hoàn hoàn tất trong kỳ.",
+      returnAvg:
+        "TB / kiện hoàn = trung bình (giờ đóng − giờ mở − thời gian chờ duyệt) của phiên mở hoàn hoàn tất trong kỳ.",
+    },
+    sections: {
+      byStation: "Theo station",
+      byOperator: "Theo người đứng bàn",
+      returnByOperator: "Bàn hoàn theo người kiểm",
+    },
+    col: {
+      station: "Station",
+      operator: "Người đứng bàn",
+      inspector: "Người kiểm",
+      packed: "Số kiện",
+      avg: "TB",
+      mismatch: "Lệch mã",
+      abandoned: "Bỏ dở",
+      cancelled: "Hủy",
+      repacked: "Đóng gói lại",
+      inspected: "Số kiện",
+      issue: "Có vấn đề",
+    },
+  },
+
+  chart: {
+    returns: "Hồ sơ hàng hoàn theo thời gian",
+    claims: "Hồ sơ khiếu nại theo thời gian",
+    granularity: { day: "theo ngày", week: "theo tuần", month: "theo tháng" },
+    bar: (bucket: string, value: number) => `${bucket}: ${fmtNumber(value)}`,
+    total: (n: number) => `Tổng ${fmtNumber(n)}`,
+  },
 } as const;

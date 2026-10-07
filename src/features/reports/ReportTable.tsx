@@ -65,7 +65,7 @@ export function ReportTable<T>({
               {rows.map((row, ri) => {
                 const link = rowLink?.(row) ?? null;
                 return (
-                  <tr key={rowKey(row, ri)}>
+                  <tr key={rowKey(row, ri)} className="group">
                     {columns.map((c, i) => {
                       const content = c.cell(row);
                       if (i === 0)
@@ -73,7 +73,7 @@ export function ReportTable<T>({
                           <th
                             key={c.key}
                             scope="row"
-                            className="sticky left-0 z-[1] bg-surface-container-lowest px-3 pl-4 text-left font-normal"
+                            className="sticky left-0 z-[1] border-b border-outline-variant bg-surface-container-lowest px-3 py-2.5 pl-4 text-left align-top font-normal group-last:border-b-0"
                           >
                             {link ? (
                               <Link
