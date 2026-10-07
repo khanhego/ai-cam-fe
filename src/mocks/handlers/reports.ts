@@ -25,7 +25,7 @@ import {
   sessionReview,
   toReturnItem,
 } from "../returnsDb";
-import { SHOP } from "../shopsDb";
+import { mockParam, SHOP } from "../shopsDb";
 import { backupStatus } from "./backup";
 import { mockShops } from "./shops";
 import { stationSim } from "../stationSim";
@@ -36,10 +36,11 @@ import { mockStations } from "./stations";
 /** Mục "Cần xử lý" không suy ra được từ dữ liệu mock (ổ đĩa, đồng bộ) — test đổi được. */
 export const mockAttentionExtra: AttentionItem[] = [];
 /** item 03: `timeout` → API-150..153 trả 503 REPORT_TIMEOUT. */
-export const mockReportsState = { timeout: false };
+export const mockReportsState = { timeout: false, cancelRevertPending: 0 };
 export function resetMockReports() {
   mockAttentionExtra.splice(0, mockAttentionExtra.length, { kind: "DISK_USAGE", percent: 83 });
   mockReportsState.timeout = false;
+  mockReportsState.cancelRevertPending = 0;
 }
 resetMockReports();
 
@@ -126,6 +127,9 @@ export function dailyReport(date: string, role: Role = "ADMIN"): DailyReport {
           platform: shop.platform,
           code: shop.auth_status === "EXPIRED" ? "AUTH_EXPIRED" : (shop.last_error?.code ?? null),
         });
+    // G3 (02 §6.2 API-32 bổ sung): kiện hủy oan chờ `aicam fix-cancel-requests` (mock: `?cancelRevert=n`).
+    const cancelRevert = mockReportsState.cancelRevertPending || Number(mockParam("cancelRevert") ?? 0);
+    if (cancelRevert > 0) attention.push({ kind: "CANCEL_REVERT_PENDING", count: cancelRevert });
     const b = backupStatus();
     if (b.state === "ON") {
       if (b.db.consecutive_failures >= 2) attention.push({ kind: "BACKUP_STALE", reason: "DB_FAILED_TWICE" });

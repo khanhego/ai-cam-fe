@@ -97,7 +97,9 @@ export type Phase3AttentionItem =
   | { kind: "REFUND_ONLY_PENDING"; count: number; nearest_due_at: string | null }
   | { kind: "CLAIM_OVERDUE"; count: number }
   | { kind: "RETURN_SESSION_DROPPED"; count: number }
-  | { kind: "BACKUP_STALE"; reason: BackupStaleReason; hours?: number | null; count?: number | null };
+  | { kind: "BACKUP_STALE"; reason: BackupStaleReason; hours?: number | null; count?: number | null }
+  /** G3 (02 §6.2 API-32 bổ sung): kiện hủy oan chờ chạy `aicam fix-cancel-requests` — chỉ ADMIN (server lọc). */
+  | { kind: "CANCEL_REVERT_PENDING"; count: number };
 
 /** Mục D2 đang hiển thị (item 03 T-261: gồm `Phase3AttentionItem`). */
 export type AnyAttentionItem = AttentionItem | ReturnAttentionItem | Phase3AttentionItem;
@@ -107,6 +109,7 @@ export const PHASE3_ATTENTION_KINDS = [
   "CLAIM_OVERDUE",
   "RETURN_SESSION_DROPPED",
   "BACKUP_STALE",
+  "CANCEL_REVERT_PENDING",
 ] as const satisfies readonly Phase3AttentionItem["kind"][];
 
 export const ATTENTION_KINDS = [

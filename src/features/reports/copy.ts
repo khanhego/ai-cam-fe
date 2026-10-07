@@ -123,5 +123,8 @@ export function attentionText(item: AnyAttentionItem, missingDays = 7): string {
       return `${fmtNumber(item.count)} phiên mở hoàn bị hủy / bỏ dở trong 7 ngày`;
     case "BACKUP_STALE":
       return backupStaleText(item.reason, item.hours, item.count);
+    /** mới (G3) — chờ PO xác nhận chữ. */
+    case "CANCEL_REVERT_PENDING":
+      return `${fmtNumber(item.count)} kiện bị hủy oan chờ khôi phục — chạy lệnh aicam fix-cancel-requests trên máy chủ`;
   }
 }

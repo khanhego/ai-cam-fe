@@ -25,6 +25,7 @@ const ICON: Record<AnyAttentionItem["kind"], string> = {
   CLAIM_OVERDUE: "warning",
   RETURN_SESSION_DROPPED: "assignment_return",
   BACKUP_STALE: "cloud_off",
+  CANCEL_REVERT_PENDING: "settings_backup_restore",
 };
 
 /** Nút của từng dòng → màn lọc sẵn (01 §10.5 D2). */
@@ -65,6 +66,9 @@ function action(item: AnyAttentionItem, today: string): [string, string] | null 
     // D23 (T-259) — `canOpen` theo vai (chỉ ADMIN thấy mục này — DEC-452).
     case "BACKUP_STALE":
       return [COPY.view, "/admin/settings/backup"];
+    // Việc ở dòng lệnh máy chủ — không có màn để mở.
+    case "CANCEL_REVERT_PENDING":
+      return null;
   }
 }
 

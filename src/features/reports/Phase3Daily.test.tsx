@@ -2,12 +2,13 @@
  * Item 03 T-261 — D2 Tổng quan mở rộng (01 §10.5 D2, 02 §6.2 "API-32 mở rộng"; FR-09.01, 08.08, 08.10): thẻ "Phiên hoàn
  * hủy / bỏ dở (7 ngày)", 4 mục Cần xử lý mới, `SYNC_ERROR` có tên shop / sàn.
  */
-import { screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 
 import { login } from "@/lib/api/auth";
 import type { AnyAttentionItem } from "@/lib/api/reports";
+import { mockReportsState } from "@/mocks/handlers/reports";
 import { vnDay } from "@/shared/format";
 import { renderApp } from "@/test/render";
 import { server } from "@/test/server";
@@ -132,4 +133,26 @@ test("D2 (ADMIN): thẻ Phiên hoàn hủy / bỏ dở → D3 lọc sẵn; 4 m�
   await userEvent.click(kpi);
   expect(router.state.location.search).toContain("return_dropped=true");
   expect(await screen.findByText("Phiên hoàn hủy / bỏ dở (trừ quét nhầm)")).toBeInTheDocument();
+});
+
+test("D2 CANCEL_REVERT_PENDING (chỉ ADMIN): nhãn kiện hủy oan chờ aicam fix-cancel-requests, không có nút mở màn", async () => {
+  expect(attentionText({ kind: "CANCEL_REVERT_PENDING", count: 3 })).toBe(
+    "3 kiện bị hủy oan chờ khôi phục — chạy lệnh aicam fix-cancel-requests trên máy chủ",
+  );
+  mockReportsState.cancelRevertPending = 3;
+  await login("tst_admin", "matkhau123", "DASHBOARD");
+  renderApp("/admin");
+  const list = (await screen.findByRole("heading", { name: "Cần xử lý" })).closest("section")!;
+  const row = (
+    await within(list).findByText(
+      "3 kiện bị hủy oan chờ khôi phục — chạy lệnh aicam fix-cancel-requests trên máy chủ",
+    )
+  ).closest("li")!;
+  expect(within(row).queryByRole("link")).toBeNull();
+  cleanup();
+
+  await login("tst_sup", "matkhau123", "DASHBOARD");
+  renderApp("/admin");
+  const list2 = (await screen.findByRole("heading", { name: "Cần xử lý" })).closest("section")!;
+  expect(within(list2).queryByText(/hủy oan/)).toBeNull();
 });
