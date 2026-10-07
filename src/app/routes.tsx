@@ -96,8 +96,9 @@ export const routes: RouteObject[] = [
           </RequireRole>
         ),
         children: [
-          // D7 Kết nối sàn (T-253), D23 Sao lưu (T-259). D22 thêm route ở T-258.
+          // D7 Kết nối sàn (T-253), D22 Thông báo (T-258), D23 Sao lưu (T-259).
           { path: "platforms", Component: lazy(() => import("@/features/platforms/PlatformsPage")) },
+          { path: "notifications", Component: lazy(() => import("@/features/notify/NotificationsPage")) },
           { path: "backup", Component: lazy(() => import("@/features/backup/BackupPage")) },
           { path: "shopee", element: <LegacyShopeeRedirect /> },
           { path: "storage", Component: lazy(() => import("@/features/settings/StoragePage")) },

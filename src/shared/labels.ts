@@ -232,6 +232,13 @@ export const NOTIFY_MESSAGE_STATUS: Record<NotifyMessageStatus, [string, ChipTon
   DROPPED: ["Bị bỏ", "neutral"],
   SKIPPED: ["Trùng, bỏ qua", "neutral"],
 };
+/** Mức sự kiện thông báo (API-170 `events[].severity`; 01 §7.5: Cao / Trung bình / Thông tin). */
+export type NotifySeverityCode = "HIGH" | "MEDIUM" | "INFO";
+export const NOTIFY_SEVERITY: Record<NotifySeverityCode, [string, ChipTone]> = {
+  HIGH: ["Cao", "error"],
+  MEDIUM: ["Trung bình", "warning"],
+  INFO: ["Thông tin", "neutral"],
+};
 /** "Lỗi · thử lại {n}" (02b-admin §9) — `n` = số lần đã thử. */
 export const notifyMessageStatus = (status: NotifyMessageStatus, attempts = 0): string =>
   status === "RETRYING" && attempts > 0 ? `Lỗi · thử lại ${attempts}` : NOTIFY_MESSAGE_STATUS[status][0];

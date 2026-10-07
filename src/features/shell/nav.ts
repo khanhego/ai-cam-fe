@@ -30,7 +30,7 @@ export type Screen = Item02Screen | Item03Screen;
 /**
  * Màn item 02 đã có trang thật. Rỗng ở M6 (T-152): mục drawer + route khai báo sẵn, chỉ hiện khi màn xong —
  * D14 ở T-153, D15 ở T-156, D16 / D17 ở T-157 / T-158 (DEC-342). M8: D16 (T-157), D17 (T-158). M9: D14 (T-153), D15 (T-156) — đủ màn.
- * item 03 M14: D20 (T-254). M15: D23 (T-259). M16: D21 (T-257).
+ * item 03 M14: D20 (T-254). M15: D23 (T-259). M16: D21 (T-257). M17: D22 (T-258) — đủ màn.
  */
 export const READY_SCREENS: ReadonlySet<Screen> = new Set<Screen>([
   "D14",
@@ -39,6 +39,7 @@ export const READY_SCREENS: ReadonlySet<Screen> = new Set<Screen>([
   "D17",
   "D20",
   "D21",
+  "D22",
   "D23",
 ]);
 

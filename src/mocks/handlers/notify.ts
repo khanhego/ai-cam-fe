@@ -24,15 +24,20 @@ export const TIMEOUT_TARGET = "-1009999999999";
 /** Danh mục N01..N10 (01 §7.5) — FE đọc nhãn từ đây, không chép cứng. */
 export const NOTIFY_EVENTS: NotifyEvent[] = [
   { code: "N01", label: "Camera mất tín hiệu", severity: "HIGH", suggested_channel: "Kho" },
-  { code: "N02", label: "Ổ đĩa sắp đầy", severity: "HIGH", suggested_channel: "Kho" },
+  { code: "N02", label: "Lệch trạng thái mức Cao", severity: "HIGH", suggested_channel: "Kho" },
   { code: "N03", label: "Phiên mở hoàn bị hủy / bỏ dở", severity: "MEDIUM", suggested_channel: "Kho" },
-  { code: "N04", label: "Hàng hoàn quá 7 ngày chưa về", severity: "HIGH", suggested_channel: "CSKH" },
-  { code: "N05", label: "Hồ sơ khiếu nại sắp hết hạn", severity: "HIGH", suggested_channel: "CSKH" },
-  { code: "N06", label: "Shop hết hạn ủy quyền", severity: "HIGH", suggested_channel: "Quản lý" },
-  { code: "N07", label: "Dung lượng lưu trữ cao", severity: "MEDIUM", suggested_channel: "Quản lý" },
-  { code: "N08", label: "Sao lưu cloud trễ / lỗi", severity: "HIGH", suggested_channel: "Quản lý" },
-  { code: "N09", label: "Chỉ hoàn tiền sắp hết hạn phản hồi", severity: "MEDIUM", suggested_channel: "CSKH" },
-  { code: "N10", label: "Tổng kết cuối ngày", severity: "INFO", suggested_channel: "Quản lý" },
+  { code: "N04", label: "Chỉ hoàn tiền mới / sắp hạn", severity: "HIGH", suggested_channel: "CSKH" },
+  { code: "N05", label: "Hồ sơ khiếu nại sắp / quá hạn", severity: "HIGH", suggested_channel: "CSKH" },
+  {
+    code: "N06",
+    label: "Shop hết hạn ủy quyền / đồng bộ lỗi",
+    severity: "HIGH",
+    suggested_channel: "Quản trị",
+  },
+  { code: "N07", label: "Ổ lưu video sắp đầy", severity: "MEDIUM", suggested_channel: "Quản trị" },
+  { code: "N08", label: "Sao lưu cloud trễ / lỗi", severity: "HIGH", suggested_channel: "Quản trị" },
+  { code: "N09", label: "Yêu cầu duyệt chờ lâu", severity: "MEDIUM", suggested_channel: "Kho" },
+  { code: "N10", label: "Tóm tắt ngày", severity: "INFO", suggested_channel: "Chủ shop" },
 ];
 
 export const mockNotify = {
@@ -77,25 +82,42 @@ export function resetMockNotify() {
       created_at: iso(now - 5 * 86_400_000),
     },
   ];
-  const label = (c: string) => NOTIFY_EVENTS.find((e) => e.code === c)?.label ?? c;
-  mockNotify.messages = [
-    ["N04", "SENT", 2, 0, null],
-    ["N01", "SENT", 1, 0, null],
+  mockNotify.channels.push({
+    id: "ch-owner",
+    name: "Chủ shop",
+    type: "TELEGRAM",
+    target: "123456789",
+    events: ["N10"],
+    enabled: false,
+    last_status: "NEVER",
+    last_sent_at: null,
+    last_error: null,
+    created_at: iso(now - 3 * 86_400_000),
+  });
+  const event = (c: string) => NOTIFY_EVENTS.find((e) => e.code === c)!;
+  const PREFIX = { HIGH: "[CAO]", MEDIUM: "[TB]", INFO: "[TIN]" } as const;
+  // Kênh của tin = kênh đăng ký sự kiện đó (N04 / N05 → CSKH, còn lại → Kho).
+  const rows: [string, NotifyMessage["status"], number, number, string | null][] = [
+    ["N02", "SENT", 2, 1, null],
+    ["N01", "SENT", 1, 1, null],
     ["N05", "RETRYING", 1, 2, "Telegram không nhận Chat ID này. Kiểm tra bot đã vào nhóm."],
     ["N09", "HELD", 3, 0, null],
     ["N03", "SKIPPED", 1, 0, null],
-  ].map(([code, status, count, attempts, err], i) => {
-    const ch = mockNotify.channels[code === "N05" ? 1 : 0]!;
+    ["N04", "DROPPED", 1, 9, "Telegram không nhận Chat ID này. Kiểm tra bot đã vào nhóm."],
+  ];
+  mockNotify.messages = rows.map(([code, status, count, attempts, err], i) => {
+    const ch = mockNotify.channels.find((c) => c.events.includes(code as NotifyMessage["event_code"]))!;
+    const e = event(code);
     return {
       id: `msg-${i + 1}`,
       channel: { id: ch.id, name: ch.name },
-      event_code: code as NotifyMessage["event_code"],
-      event_label: label(code as string),
-      item_count: count as number,
-      text: `[CAO] ${label(code as string)} — ${count} mục`,
-      status: status as NotifyMessage["status"],
-      attempts: attempts as number,
-      last_error: err as string | null,
+      event_code: e.code,
+      event_label: e.label,
+      item_count: count,
+      text: `${PREFIX[e.severity]} ${e.label} — ${count} mục\nXem: https://x.local/admin`,
+      status,
+      attempts,
+      last_error: err,
       created_at: iso(now - (i + 1) * 3_600_000),
       sent_at: status === "SENT" ? iso(now - (i + 1) * 3_600_000 + 5000) : null,
       next_attempt_at: status === "RETRYING" ? iso(now + 5 * 60_000) : null,
@@ -218,8 +240,12 @@ export const notifyHandlers = [
       return apiError(409, "PROVIDER_NOT_CONFIGURED", "Chưa cấu hình bot Telegram trên máy chủ. Liên hệ IT.");
     const now = new Date().toISOString();
     if (channel.target === TIMEOUT_TARGET) {
-      Object.assign(channel, { last_status: "ERROR", last_error: { code: "NOTIFY_TIMEOUT", at: now } });
-      return apiError(504, "NOTIFY_TIMEOUT", "Không kết nối được Telegram từ máy chủ (mạng chặn?).");
+      const message = "Không kết nối được Telegram từ máy chủ (mạng chặn?).";
+      Object.assign(channel, {
+        last_status: "ERROR",
+        last_error: { code: "NOTIFY_TIMEOUT", message, at: now },
+      });
+      return apiError(504, "NOTIFY_TIMEOUT", message);
     }
     if (channel.target === FAIL_TARGET) {
       const message =
