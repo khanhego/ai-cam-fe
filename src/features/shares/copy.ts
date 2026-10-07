@@ -60,6 +60,10 @@ export const COPY = {
   expired: "Link đã hết hạn.",
   doneToast: (r: string) => `Link chia sẻ cho "${r}" đã sẵn sàng.`,
   failedToast: (r: string) => `Không tạo được link chia sẻ cho "${r}". Mở Link chia sẻ để xem lỗi.`,
+  /** mới (G3-FE-2) — link chạy nền bị thu hồi trước khi xong. */
+  revokedToast: (r: string) => `Link chia sẻ cho "${r}" đã bị thu hồi.`,
+  /** mới (G3-FE-2) */
+  expiredToast: (r: string) => `Link chia sẻ cho "${r}" đã hết hạn.`,
   duration: (s: number) => fmtDuration(s),
 };
 
