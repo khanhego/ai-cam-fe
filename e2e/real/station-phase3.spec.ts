@@ -11,7 +11,15 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { heading, hidScan, resetData, setStation01Kind, stationReady, startReturnShift } from "./helpers";
+import {
+  heading,
+  hidScan,
+  psql,
+  resetData,
+  setStation01Kind,
+  stationReady,
+  startReturnShift,
+} from "./helpers";
 
 test.skip(
   !process.env.E2E_M13_BE,
@@ -52,7 +60,11 @@ test("TC-03.85 (BE thật): đơn TikTok đang yêu cầu hủy → S4 vàng, kh
   await stationReady(page);
   await hidScan(page, "TTTST0000000050");
   await expect(heading(page, "ĐƠN ĐANG YÊU CẦU HỦY")).toBeVisible();
-  await expect(page.getByText(/Người mua đang xin hủy đơn này/)).toBeVisible();
+  // Thân S4 = `message` server "TTTST0000000050: người mua đang xin hủy đơn này. Chờ xử lý trên sàn, chưa đóng gói."
+  // (BE sửa theo 01 §10.4 — T-229, DEC-825).
+  await expect(
+    page.getByText("Người mua đang xin hủy đơn này. Chờ xử lý trên sàn, chưa đóng gói."),
+  ).toBeVisible();
   await expect(heading(page, "SẴN SÀNG")).toBeVisible({ timeout: 15_000 });
   await expect(heading(page, "ĐANG ĐÓNG GÓI")).toHaveCount(0);
 });
@@ -60,6 +72,9 @@ test("TC-03.85 (BE thật): đơn TikTok đang yêu cầu hủy → S4 vàng, kh
 test("TC-04.74 / 04.75 (BE thật): mã đơn trùng 2 shop → R3 chip từng dòng → Mở phiên TikTok → R2 chip TikTok", async ({
   page,
 }) => {
+  // TC-04.75 tiền điều kiện "đơn TikTok có yêu cầu trả": seed để kiện `TTTST0000000021` `NEW` (chưa gửi) → R3 hiện
+  // "KIỆN CHƯA GỬI ĐI", không có "Mở phiên" → đưa kiện TikTok sang "Đã bàn giao" trước (T-229, DEC-826).
+  psql("UPDATE package SET warehouse_status = 'HANDED_OVER' WHERE tracking_number = 'TTTST0000000021'");
   await stationReady(page);
   await startReturnShift(page);
   await hidScan(page, "2410DUP00001");

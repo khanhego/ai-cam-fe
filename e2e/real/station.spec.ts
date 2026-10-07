@@ -67,7 +67,8 @@ test("TC-03.08: đơn đã hủy trên sàn → cảnh báo, không mở phiên"
   await scan(page, "SPXTST0000009");
 
   await expect(page.getByText("ĐƠN ĐÃ HỦY")).toBeVisible();
-  await expect(page.getByText("SPXTST0000009 đã bị hủy trên Shopee. Không đóng gói.")).toBeVisible();
+  // Item 03 (02 §6.2 API-11): câu chữ `ORDER_CANCELLED` không còn "Shopee" — "… đã bị hủy trên sàn." (DEC-826).
+  await expect(page.getByText("SPXTST0000009 đã bị hủy trên sàn. Không đóng gói.")).toBeVisible();
 });
 
 test("TC-03.09: đơn đã đóng gói → cảnh báo kèm giờ và station", async ({ page }) => {

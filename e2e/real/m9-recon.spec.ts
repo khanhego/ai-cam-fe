@@ -78,7 +78,10 @@ test("M9 (BE thật): J-13 mock → D14 Đang về / Chỉ hoàn tiền → API-
   test.setTimeout(300_000);
   const admin = await token(request, "tst_admin");
   await connectMockShop(request, admin);
-  expect(job("tasks.sync_returns()")).toContain("'status': 'OK'");
+  // Item 03 (T-205): `sync_returns()` không shop = phân phối mỗi shop một task → chạy J-13 đồng bộ cho shop Shopee
+  // đầu `990001` (dữ liệu Phase 2) để có kết quả xác định (T-229, DEC-826).
+  const shopA = psql("SELECT id FROM shop WHERE platform = 'SHOPEE' AND platform_shop_id = '990001'");
+  expect(job(`tasks.sync_shop_returns('${shopA}')`)).toContain("'status': 'OK'");
 
   // D14 (CSKH): hồ sơ "Đang về" có mã chiều về; tab Chỉ hoàn tiền có yêu cầu 044 (TC-05.30, 05.31, 07.37).
   await loginAdmin(page, "tst_cskh");

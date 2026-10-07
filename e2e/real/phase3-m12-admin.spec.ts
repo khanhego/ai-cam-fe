@@ -153,7 +153,10 @@ test("FR-08.09 / L15 (BE thật): D17 KN-000001 bỏ bằng chứng cần lý do
   await dialog.getByRole("button", { name: "Bỏ bằng chứng" }).click();
   await expect(page.getByText("Bằng chứng đã bỏ (1)")).toBeVisible();
   await page.getByText("Bằng chứng đã bỏ (1)").click();
-  await expect(page.getByText("E2E: không liên quan khiếu nại thất lạc")).toBeVisible();
+  // Lý do hiện ở dòng "Bỏ bởi …" và ở ghi chú hệ thống "Cập nhật bằng chứng: bỏ 1. Lý do: …" (T-229, DEC-826).
+  await expect(
+    page.getByText(/^Bỏ bởi Lan lúc .*Lý do: E2E: không liên quan khiếu nại thất lạc/),
+  ).toBeVisible();
   await page.getByRole("button", { name: /^Thêm lại Phiên đóng gói/ }).click();
   await expect(page.getByText(/^Bằng chứng đã bỏ/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Bỏ Phiên đóng gói / }).first()).toBeVisible();

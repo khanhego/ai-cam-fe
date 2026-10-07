@@ -22,12 +22,30 @@ export function composeArgs(): string[] {
   ];
 }
 
+/** Một câu SQL trên Postgres của stack đang test (tiền điều kiện dữ liệu — chỉ stack dev / QA). */
+export function psql(sql: string): string {
+  return execFileSync(
+    "docker",
+    [...composeArgs(), "exec", "-T", "postgres", "psql", "-U", "aicam", "-d", "aicam", "-tA", "-c", sql],
+    { encoding: "utf8" },
+  ).trim();
+}
+
 /** Migrate lại + seed TST + dọn Redis (ai-cam-be/scripts/qa-reset.sh). */
 export function resetData() {
   // --mute-cam2: Cam 2 đọc góc khay trống → BR-06 không chặn ngẫu nhiên theo vòng phát của camera giả (QA G4).
-  execFileSync(resolve(process.cwd(), "../ai-cam-be/scripts/qa-reset.sh"), ["--mute-cam2"], {
-    stdio: "ignore",
-  });
+  try {
+    execFileSync(resolve(process.cwd(), "../ai-cam-be/scripts/qa-reset.sh"), ["--mute-cam2"], {
+      stdio: "pipe",
+      encoding: "utf8",
+    });
+  } catch (err) {
+    // Lỗi reset hiếm gặp (T-229): giữ stdout / stderr của qa-reset.sh trong báo lỗi để chẩn đoán.
+    const e = err as { stdout?: string; stderr?: string; message: string };
+    throw new Error(`${e.message}\n${(e.stdout ?? "").slice(-1500)}\n${(e.stderr ?? "").slice(-1500)}`, {
+      cause: err,
+    });
+  }
 }
 
 /** Máy quét HID: gõ liền (≤ 5 ms/phím) rồi Enter. */

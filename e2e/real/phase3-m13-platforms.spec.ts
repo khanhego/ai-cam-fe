@@ -38,11 +38,18 @@ test("AC-40 / UC-10 (BE thật): Kết nối TikTok Shop (mock) → 2 shop Đã 
   await expect(page.getByRole("heading", { level: 1, name: "Kết nối sàn" })).toBeVisible();
   await expect(group(page, "TikTok Shop").getByRole("region", { name: TT_A })).toBeVisible();
   await expect(group(page, "TikTok Shop").getByRole("region", { name: TT_B })).toBeVisible();
-  // SHOPEE_ENABLED=false trên stack dev → Alert trong nhóm Shopee, nút khóa sẵn (DEC-607 a).
-  await expect(
-    group(page, "Shopee").getByText("Chưa cấu hình Shopee Open Platform. Dùng Nhập đơn từ file."),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Kết nối Shopee" })).toBeDisabled();
+  // SHOPEE_ENABLED=false trên stack dev → Alert trong nhóm Shopee, nút khóa sẵn (DEC-607 a). Stack bật Shopee mock
+  // (`E2E_SHOPEE_ENABLED=1`, vd. stack QA `aicam-qa` — PRE-13) → không có Alert, nút dùng được (T-229, DEC-826).
+  const notConfigured = group(page, "Shopee").getByText(
+    "Chưa cấu hình Shopee Open Platform. Dùng Nhập đơn từ file.",
+  );
+  if (process.env.E2E_SHOPEE_ENABLED) {
+    await expect(notConfigured).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Kết nối Shopee" })).toBeEnabled();
+  } else {
+    await expect(notConfigured).toBeVisible();
+    await expect(page.getByRole("button", { name: "Kết nối Shopee" })).toBeDisabled();
+  }
 
   await page.getByRole("button", { name: "Kết nối TikTok Shop" }).click();
   await expect(
@@ -60,7 +67,7 @@ test("AC-40 / UC-10 (BE thật): Kết nối TikTok Shop (mock) → 2 shop Đã 
   const n = await rows.count();
   for (let i = 1; i < n; i++) {
     await expect(rows.nth(i).getByRole("img", { name: /^Sàn: TikTok Shop/ })).toBeVisible();
-    await expect(rows.nth(i)).toContainText(/TTTST\d+/);
+    await expect(rows.nth(i)).toContainText(/TTTSTB?\d+/); // TikTok A `TTTST…`, B `TTTSTB…` (DEC-826)
   }
   await expect(rows.filter({ hasText: "SPXTST0000001" })).toHaveCount(0);
 });
