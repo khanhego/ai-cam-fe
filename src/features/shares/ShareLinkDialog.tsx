@@ -28,6 +28,7 @@ import {
 } from "@/shared/ui";
 
 import { COPY } from "./copy";
+import { copyLink } from "./copyLink";
 import { sharePoll, useBackgroundShares } from "./shareProgress";
 
 export type ShareSourceRef = { type: "CLAIM"; claimId: string } | { type: "SESSION"; sessionId: string };
@@ -394,15 +395,12 @@ function ShareProgress({
     if (!s || status === "CREATING") addBackground(shareId, body.recipient);
     onClose();
   };
+  // G3-FE-3: một đường sao chép với D21 / D4 / D17 (`copyLink`: clipboard → execCommand → Toast lỗi); lỗi → chọn sẵn ô link.
   const copy = async () => {
     if (!s?.url) return;
-    try {
-      await navigator.clipboard.writeText(s.url);
-    } catch {
-      inputRef.current?.select();
-    }
-    setCopied(true);
-    toast(COPY.copied);
+    const ok = await copyLink(s.url);
+    if (!ok) inputRef.current?.select();
+    setCopied(ok);
   };
   const stepText =
     s?.step === "RENDERING" && s.step_index && s.step_total

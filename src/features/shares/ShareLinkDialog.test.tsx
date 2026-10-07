@@ -219,3 +219,19 @@ test("G3-FE-4: API-162 lỗi khi chưa có dữ liệu → chỉ Alert tải l�
   expect(within(d2).queryByText(/^Link tiếp tục được tạo khi đóng/)).toBeNull();
   expect(within(d2).getByRole("button", { name: "Thử lại" })).toBeInTheDocument();
 });
+
+test("G3-FE-3: Sao chép link lỗi (clipboard + execCommand) → Toast lỗi chung, ô link được chọn sẵn", async () => {
+  const { user, d2 } = await createFromClaim("CSKH sao chép lỗi");
+  await within(d2).findByText("Link đã sẵn sàng");
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+  const exec = vi.fn(() => false);
+  Object.defineProperty(document, "execCommand", { value: exec, configurable: true });
+  await user.click(within(d2).getByRole("button", { name: "Sao chép link" }));
+  expect(
+    await screen.findByText("Không sao chép được link. Mở Link chia sẻ trên trình duyệt khác rồi thử lại."),
+  ).toBeInTheDocument();
+  expect(exec).toHaveBeenCalledWith("copy");
+  const link = within(d2).getByLabelText("Link chia sẻ") as HTMLInputElement;
+  expect(document.activeElement === link || link.selectionEnd === link.value.length).toBe(true);
+  write.mockRestore();
+});
