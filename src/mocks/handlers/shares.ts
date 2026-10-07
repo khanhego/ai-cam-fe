@@ -3,7 +3,7 @@ import { http } from "msw";
 import { SHARE_LIST_STATUSES, type ShareListStatus } from "@/lib/api/shares";
 
 import { API, apiError, json } from "../http";
-import { findPackage, findSessionAnywhere, mockClaims } from "../returnsDb";
+import { findPackage, findSessionAnywhere, mockClaims, sessionReview } from "../returnsDb";
 import {
   canRevoke,
   createShare,
@@ -79,6 +79,18 @@ export const sharesHandlers = [
         session_id: bad.id,
         reason: bad.unavailable_reason,
       });
+    // 02 §6.2 API-160 bổ sung: nguồn phiên — phiên bị loại (BR-39) / quét nhầm chưa xác nhận → 409 SESSION_EXCLUDED.
+    if (!isClaim) {
+      const ses = findSessionAnywhere(ids[0]!)?.session;
+      const review = ses ? sessionReview(ses) : null;
+      if (review && (review.evidence_exclusion || review.review_needed))
+        return apiError(
+          409,
+          "SESSION_EXCLUDED",
+          "Phiên này đã bị loại khỏi bằng chứng (quét nhầm / hủy) — không tạo link được.",
+          { session_id: ses!.id },
+        );
+    }
     const claim = isClaim ? (mockClaims.find((c) => c.id === body.claim_id) ?? null) : null;
     const pkg = findPackage(opts.source.package_id) ?? findSessionAnywhere(ids[0]!)?.pkg;
     if (!pkg) return apiError(404, "NOT_FOUND", "Không tìm thấy kiện.");

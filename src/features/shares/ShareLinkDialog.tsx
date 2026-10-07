@@ -156,6 +156,8 @@ function ShareFormBody({
   const [recipientTouched, setRecipientTouched] = useState(false);
   const [expires, setExpires] = useState<ShareExpiresDays>(options.default_expires_days);
   const [cloudMissing, setCloudMissing] = useState(!options.storage_configured);
+  // API-160 409 SESSION_EXCLUDED: phiên bị loại / quét nhầm chưa xác nhận — báo rõ, không tự thử lại.
+  const [excludedError, setExcludedError] = useState<string | null>(null);
   const { limits } = options;
 
   // Phiên vừa mất clip (refetch sau 409) → bỏ khỏi lựa chọn.
@@ -192,13 +194,16 @@ function ShareFormBody({
         return refetch();
       }
       if (e.code === "CLOUD_NOT_CONFIGURED") return setCloudMissing(true);
+      if (e.code === "SESSION_EXCLUDED") return setExcludedError(e.message || COPY.sessionExcluded);
       toast(e.message);
       if (e.code === "NOT_FOUND") onClose();
     },
   });
   const fields =
     isApiError(create.error) && create.error.code === "VALIDATION_ERROR" ? create.error.fieldErrors : {};
-  const valid = !sessionError && !recipientError && !cloudMissing;
+  // Nguồn phiên chỉ có đúng phiên đó → không gửi lại được; nguồn hồ sơ: đổi lựa chọn phiên thì gửi lại.
+  const blocked = Boolean(excludedError) && source.type === "SESSION";
+  const valid = !sessionError && !recipientError && !cloudMissing && !blocked;
 
   const submit = () => {
     setRecipientTouched(true);
@@ -214,13 +219,15 @@ function ShareFormBody({
       expires_days: expires,
     });
   };
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
+    setExcludedError(null);
     setPicked((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
   const src = options.source;
   // G3-FE-5 (BR-39): phiên bị loại nhưng thêm tay vào bằng chứng → chip "Bị loại…" kèm lý do của D17 (API-132 trong cache).
   const claimId = source.type === "CLAIM" ? source.claimId : null;
@@ -260,6 +267,7 @@ function ShareFormBody({
         <ShopChip platform={src.platform} shop={src.shop_name ? { name: src.shop_name } : null} />
       </p>
       {cloudMissing && <Alert kind="warning">{COPY.cloudMissing}</Alert>}
+      {excludedError && <Alert kind="error">{excludedError}</Alert>}
       {options.primary_unavailable && (
         <Alert kind="warning">{COPY.primaryUnavailable(options.primary_unavailable_reason)}</Alert>
       )}

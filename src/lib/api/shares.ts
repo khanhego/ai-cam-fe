@@ -160,7 +160,8 @@ export const sharesApi = {
   options: (q: ShareOptionsQuery) => api.get<ShareOptions>("/shares/options", { query: q }),
   /**
    * API-160 → 202 `{id, status: CREATING}`. 422 `fields.session_ids` / `recipient` / `expires_days`; 409
-   * SESSION_CLIP_UNAVAILABLE (`details.session_id`, `reason`); 503 CLOUD_NOT_CONFIGURED.
+   * SESSION_CLIP_UNAVAILABLE (`details.session_id`, `reason`); 409 SESSION_EXCLUDED (nguồn phiên: phiên bị loại /
+   * quét nhầm chưa xác nhận — `details.session_id`; không thử lại); 503 CLOUD_NOT_CONFIGURED.
    */
   create: (body: CreateShareBody) => api.post<{ id: string; status: "CREATING" }>("/shares", body),
   list: (filters: ShareFilters) => api.get<ShareList>("/shares", { query: filters }),

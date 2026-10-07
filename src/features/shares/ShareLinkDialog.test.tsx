@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 
 import { login } from "@/lib/api/auth";
+import { sharesApi } from "@/lib/api/shares";
 import { apiError } from "@/mocks/http";
 import { findPackage, findSessionAnywhere, mockClaims, P3_CLAIM_ID } from "@/mocks/returnsDb";
 import { mockCloud, mockShares, toShare } from "@/mocks/sharesDb";
@@ -288,4 +289,45 @@ test("G3-EV-4: lý do khác (Clip lỗi) → Alert kèm nhãn lý do; Cam 1 READ
   cam1.status = "READY";
   const again = await openFromClaim();
   expect(within(again.dialog).queryByText(/^Phiên chính (thiếu tệp|chưa dùng được) Cam 1/)).toBeNull();
+});
+
+test("API-160 409 SESSION_EXCLUDED (nguồn phiên) → Alert lỗi rõ, nút Tạo link khóa, không tự gửi lại", async () => {
+  let calls = 0;
+  server.use(
+    http.post("/api/v1/shares", () => {
+      calls += 1;
+      return apiError(409, "SESSION_EXCLUDED", "Phiên đã bị đánh dấu quét nhầm — không tạo link được.", {
+        session_id: "x",
+      });
+    }),
+  );
+  const user = userEvent.setup();
+  renderApp("/admin/packages/pkg-SPXTSTB000000001");
+  await user.click(await screen.findByRole("button", { name: "Tạo link chia sẻ" }));
+  const dialog = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  await within(dialog).findByText("Kiện SPXTSTB000000001");
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "CSKH Shopee");
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+  const alert = await within(dialog).findByRole("alert");
+  expect(alert).toHaveTextContent("Phiên đã bị đánh dấu quét nhầm — không tạo link được.");
+  expect(within(alert).queryByRole("button", { name: "Thử lại" })).toBeNull();
+  expect(within(dialog).getByRole("button", { name: "Tạo link" })).toBeDisabled();
+  await new Promise((r) => setTimeout(r, 50));
+  expect(calls).toBe(1);
+});
+
+test("MSW API-160: nguồn phiên bị loại (quét nhầm) → 409 SESSION_EXCLUDED", async () => {
+  const err = await sharesApi
+    .create({
+      source_type: "SESSION",
+      claim_id: null,
+      session_id: "ses-p3-m",
+      session_ids: ["ses-p3-m"],
+      layout: "SIDE_BY_SIDE",
+      include_snapshots: false,
+      recipient: "CSKH Shopee",
+      expires_days: 7,
+    })
+    .catch((e: unknown) => e);
+  expect(err).toMatchObject({ status: 409, code: "SESSION_EXCLUDED" });
 });

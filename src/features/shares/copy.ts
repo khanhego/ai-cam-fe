@@ -32,6 +32,8 @@ export const COPY = {
     !reason || reason === "CLIP_MISSING"
       ? "Phiên chính thiếu tệp Cam 1 — khôi phục từ sao lưu hoặc chọn phiên khác."
       : `Phiên chính chưa dùng được Cam 1 (${COPY.unavailable[reason](at)}) — chọn phiên khác.`,
+  /** mới (API-160 409 SESSION_EXCLUDED — dùng khi server không có `message`). */
+  sessionExcluded: "Phiên này đã bị loại khỏi bằng chứng (quét nhầm / hủy) — không tạo link được.",
   layout: "Góc quay",
   snapshots: (n: number) => `Kèm ảnh (${n})`,
   recipient: "Gửi cho *",
