@@ -32,7 +32,8 @@ export const COPY = {
     merged: (n: number, list: string, rest: number) =>
       `Kiện gộp ${n} đơn: ${list}${rest > 0 ? ` và ${rest} đơn khác` : ""} — kiểm đủ hàng của ${n > 2 ? "tất cả" : "cả hai"}`,
     itemOrder: (sn: string) => `(đơn …${sn.slice(-4)})`,
-    cancelRequested: "⚠ Người mua đang xin hủy đơn này. Đóng gói xong để riêng, chưa bàn giao.",
+    /** 01 §10.4 S2 "⚠ Người mua…": dấu ⚠ là icon của Alert vàng, không lặp trong chữ. */
+    cancelRequested: "Người mua đang xin hủy đơn này. Đóng gói xong để riêng, chưa bàn giao.",
   },
   tray: {
     MATCH: "Cam 2 khớp mã trên khay",

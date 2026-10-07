@@ -110,7 +110,7 @@ test("BR-21 làm rõ: đơn chuyển yêu cầu hủy khi đang đóng → banne
   });
 
   const banner = await screen.findByText(
-    "⚠ Người mua đang xin hủy đơn này. Đóng gói xong để riêng, chưa bàn giao.",
+    "Người mua đang xin hủy đơn này. Đóng gói xong để riêng, chưa bàn giao.",
   );
   expect(banner.closest("[role=alert]")).not.toBeNull();
   expect(play.mock.calls.filter(([k]) => k === "warn")).toHaveLength(1);
