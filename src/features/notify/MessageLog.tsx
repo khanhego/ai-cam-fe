@@ -39,7 +39,7 @@ function Content({ m }: { m: NotifyMessage }) {
     <details>
       <summary className="cursor-pointer text-on-surface">{LOG.event(m.event_label, m.item_count)}</summary>
       <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-body-sm text-on-surface-variant">
-        {m.text}
+        {m.text ?? ""}
       </pre>
     </details>
   );

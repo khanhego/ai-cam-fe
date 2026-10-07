@@ -8,7 +8,7 @@ import { fmtDateTime } from "@/shared/format";
 import { PLATFORM_LABEL, PLATFORMS, type Platform } from "@/shared/labels";
 import { Alert, Button, Dialog, EmptyState, PageHeader, Skeleton, toast } from "@/shared/ui";
 
-import { COPY, shopName } from "./copy";
+import { COPY, isInAppUrl, shopName } from "./copy";
 import { ShopCard } from "./ShopCard";
 
 /** Sau "Đồng bộ ngay": làm mới 5 giây × 6 lần (02b-admin §4 item 01). */
@@ -171,8 +171,8 @@ export default function PlatformsPage() {
     mutationFn: (platform: Platform) => shopsApi.authUrl(platform),
     onMutate: () => setResultAlert(null),
     onSuccess: ({ url }) => {
-      // Đường dẫn cùng app (mock trả thẳng URL callback) → router; URL sàn → rời trang sang trang ủy quyền.
-      if (url.startsWith("/")) {
+      // Đường dẫn cùng app → router; URL sàn / callback API của adapter mock BE → rời trang (DEC-803).
+      if (isInAppUrl(url)) {
         navigate(url, { replace: true });
         invalidate();
       } else window.location.assign(url);

@@ -55,13 +55,21 @@ export type Share = {
 };
 
 /**
- * `shares[]` ở API-31 / API-132: ≤ 3 link mới nhất (trừ `FAILED`). `revoke_pending` chưa có trong contract (01 EX-S7 cần
- * "Đang thu hồi — chờ Internet" cả ở D4 / D17) — FE đọc nếu có (DEC-702, *Phản hồi* Architect).
+ * `shares[]` ở API-31 / API-132: ≤ 3 link mới nhất (trừ `FAILED`). M16 (02 §6.2 API-31 — BE DEC-666 / 678, FE DEC-702)
+ * thêm `revoke_pending` (EX-S7 "Đang thu hồi — chờ Internet" ở D4 / D17) và `created_at` (T-262 — DEC-800).
  */
 export type ShareBrief = Pick<
   Share,
-  "id" | "status" | "recipient" | "expires_at" | "session_count" | "url" | "can_revoke"
-> & { revoke_pending?: boolean };
+  | "id"
+  | "status"
+  | "recipient"
+  | "expires_at"
+  | "session_count"
+  | "url"
+  | "can_revoke"
+  | "revoke_pending"
+  | "created_at"
+>;
 
 /** Tab D21: `ACTIVE` gồm `CREATING`; `ALL` gồm `FAILED`. */
 export type ShareListStatus = "ACTIVE" | "REVOKED" | "EXPIRED" | "ALL";
@@ -108,6 +116,13 @@ export type ShareOptionSession = {
   cameras: ("CAM1" | "CAM2")[];
   /** v0.3: phiên "Cần soát" — không chọn sẵn, chip. */
   review_needed?: boolean;
+  /**
+   * M16 (02 §6.2 API-164 — BE DEC-667): phiên bị loại theo BR-39 nhưng có trong bằng chứng do thêm tay → server không
+   * chọn sẵn (`default_selected = false`); FE vẫn cho chọn tay (T-262 — DEC-800).
+   */
+  excluded: boolean;
+  /** M16 (BE DEC-667): ảnh `READY` của phiên trong bằng chứng — link chỉ kèm ảnh của phiên được chọn (DEC-801). */
+  snapshot_count: number;
 };
 
 export type ShareOptions = {

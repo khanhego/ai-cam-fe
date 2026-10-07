@@ -16,9 +16,9 @@ const when = (iso: string) => (vnDay(iso) === vnDay() ? fmtHourMinute(iso) : fmt
 function lastError(ch: NotifyChannel): { message: string; at: string | null } {
   const e = ch.last_error;
   if (!e) return { message: "", at: null };
-  if (typeof e === "string") return { message: e, at: null };
-  const message = e.message || (e.code === "NOTIFY_TIMEOUT" ? COPY.timeout[ch.type] : (e.code ?? ""));
-  return { message, at: e.at ?? null };
+  // 02 §6.2 v0.5: object `{code, message, at, provider_code}` (DEC-763 / BE DEC-730); `message` rỗng → chữ theo mã.
+  const message = e.message || (e.code === "NOTIFY_TIMEOUT" ? COPY.timeout[ch.type] : e.code);
+  return { message, at: e.at };
 }
 
 /** Trạng thái kênh (01 §10.5 D22): "Gửi được 10:02" · "Lỗi 09:30: …" · "Tắt" · "Chưa gửi". */

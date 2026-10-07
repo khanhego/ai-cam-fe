@@ -289,11 +289,28 @@ export function sharesFor(
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   return {
     shares: list.slice(0, 3).map((s) => {
-      const { id, status, recipient, expires_at, session_count, url, can_revoke, revoke_pending } = toShare(
-        s,
-        user,
-      );
-      return { id, status, recipient, expires_at, session_count, url, can_revoke, revoke_pending };
+      const {
+        id,
+        status,
+        recipient,
+        expires_at,
+        session_count,
+        url,
+        can_revoke,
+        revoke_pending,
+        created_at,
+      } = toShare(s, user);
+      return {
+        id,
+        status,
+        recipient,
+        expires_at,
+        session_count,
+        url,
+        can_revoke,
+        revoke_pending,
+        created_at,
+      };
     }),
     shares_active_count: list.filter((s) => s.status === "ACTIVE" || s.status === "CREATING").length,
   };
@@ -336,7 +353,10 @@ const UNAVAILABLE: Record<string, ShareOptionSession["unavailable_reason"]> = {
   MISSING: "CLIP_MISSING",
 };
 
-function optionOf(s: MockSession): Omit<ShareOptionSession, "primary" | "default_selected" | "prior_return"> {
+function optionOf(
+  s: MockSession,
+  inEvidence?: Set<string>,
+): Omit<ShareOptionSession, "primary" | "default_selected" | "prior_return" | "excluded"> {
   const cam1 = s.clips.find((c) => c.camera_role === "CAM1");
   const selectable = cam1?.status === "READY";
   return {
@@ -354,6 +374,10 @@ function optionOf(s: MockSession): Omit<ShareOptionSession, "primary" | "default
     unavailable_at: !selectable && cam1?.status === "DELETED" ? cam1.deleted_at : null,
     cameras: s.clips.filter((c) => c.status === "READY").map((c) => c.camera_role),
     review_needed: false,
+    // M16 (02 §6.2 API-164 — BE DEC-667): ảnh `READY` của phiên trong bằng chứng (nguồn SESSION: mọi ảnh của phiên).
+    snapshot_count: (s.snapshots ?? []).filter(
+      (x) => x.status !== "MISSING" && x.status !== "DELETED" && (!inEvidence || inEvidence.has(x.id)),
+    ).length,
   };
 }
 
@@ -385,9 +409,14 @@ export function shareOptions(q: {
   const evOf = (id: string) =>
     detail?.evidence.find((e) => e.kind === "SESSION" && e.session.id === id) as
       Extract<ClaimEvidence, { kind: "SESSION" }> | undefined;
+  const snapIds = claim
+    ? new Set(claim.evidence.filter((e) => e.kind === "SNAPSHOT").map((e) => e.ref_id))
+    : undefined;
   const opts = sessions.map((s) => ({
-    ...optionOf(s),
+    ...optionOf(s, snapIds),
     review_needed: claim ? Boolean(evOf(s.id)?.session.review_needed) : false,
+    // BR-39: phiên bị loại nhưng có trong bằng chứng do thêm tay (M16 — BE DEC-667) → không chọn sẵn.
+    excluded: claim ? Boolean(evOf(s.id)?.session.evidence_exclusion) : false,
   }));
   const returns = opts
     .filter((o) => o.type === "RETURN" && o.selectable && !o.review_needed)
@@ -411,7 +440,7 @@ export function shareOptions(q: {
     storage_configured: mockCloud.configured,
     source: { ...sourceOf(claim, pkg), platform: shop?.platform ?? null, shop_name: shop?.name ?? null },
     sessions: ordered.map((o) => {
-      const selected = o.selectable && !o.review_needed && (claim ? picked < 4 : true);
+      const selected = o.selectable && !o.review_needed && !o.excluded && (claim ? picked < 4 : true);
       if (selected) picked += 1;
       return {
         ...o,

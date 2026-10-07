@@ -166,6 +166,12 @@ describe("shares (API-160..164)", () => {
     });
     expect(o.sessions.filter((s) => s.primary)).toHaveLength(1);
     expect(o.sessions.filter((s) => s.default_selected).length).toBeLessThanOrEqual(4);
+    // M16 (02 §6.2 API-164 — BE DEC-667; T-262): mỗi phiên có `excluded` + `snapshot_count`; phiên bị loại không chọn sẵn.
+    for (const s of o.sessions) {
+      expect(typeof s.excluded).toBe("boolean");
+      expect(typeof s.snapshot_count).toBe("number");
+      if (s.excluded) expect(s.default_selected).toBe(false);
+    }
   });
 
   test("TC (FR-07.05): tạo link → 202 CREATING → ACTIVE sau 3 lần đọc, có url; thu hồi → REVOKED + revoke_pending", async () => {
@@ -263,6 +269,8 @@ describe("shares (API-160..164)", () => {
     const detail = await claimsApi.get(claim.id);
     expect(detail.shares_active_count).toBe(2);
     expect(detail.shares[0]).toMatchObject({ id: "share-1", status: "ACTIVE", revoke_pending: false });
+    // M16 (02 §6.2 API-31 — BE DEC-666; T-262): item có `created_at`, mới nhất trước.
+    expect(detail.shares[0]!.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     const pkg = await packagesApi.get(claim.package_id);
     expect(pkg.shares_active_count).toBeGreaterThanOrEqual(1);
   });
@@ -275,6 +283,16 @@ describe("notify (API-170..176)", () => {
     expect(r.providers).toEqual({ TELEGRAM: { configured: true }, ZALO_OA: { configured: false } });
     expect(r.quiet_hours).toEqual({ enabled: true, start: "22:00", end: "07:00" });
     expect(r.events).toHaveLength(10);
+    expect(r.events.every((e) => e.label.length > 0)).toBe(true);
+    // 02 §6.2 v0.5 (FE DEC-763 / BE DEC-730; T-262): `last_error` là object hoặc null, không bao giờ là chuỗi.
+    const cskh = r.items.find((c) => c.name === "CSKH")!;
+    expect(cskh.last_error).toEqual({
+      code: "NOTIFY_SEND_FAILED",
+      message: "Telegram không nhận Chat ID này. Kiểm tra bot đã vào nhóm.",
+      at: expect.any(String),
+      provider_code: "400",
+    });
+    expect(r.items.filter((c) => c.name !== "CSKH").every((c) => c.last_error === null)).toBe(true);
     await as("tst_sup");
     expect((await fail(notifyApi.channels())).status).toBe(403);
   });

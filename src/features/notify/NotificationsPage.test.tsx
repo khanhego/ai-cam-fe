@@ -40,7 +40,10 @@ test("UC-18: kênh + trạng thái, Alert Zalo OA chưa cấu hình, giờ yên 
   ).toBeInTheDocument();
   expect(kho.getByText(/^Gửi được \d{2}:\d{2}$/)).toBeInTheDocument();
   expect(
-    row(t, "CSKH").getByText("Lỗi: Telegram không nhận Chat ID này. Kiểm tra bot đã vào nhóm."),
+    // 02 §6.2 v0.5: `last_error.at` (hôm qua) → "Lỗi dd/mm HH:mm: …" (T-262).
+    row(t, "CSKH").getByText(
+      /^Lỗi \d{2}\/\d{2} \d{2}:\d{2}: Telegram không nhận Chat ID này\. Kiểm tra bot đã vào nhóm\.$/,
+    ),
   ).toBeInTheDocument();
   expect(row(t, "Chủ shop").getByText("Tắt")).toBeInTheDocument();
 

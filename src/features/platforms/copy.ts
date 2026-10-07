@@ -83,3 +83,10 @@ export const COPY = {
 };
 
 export const shopName = (shop: Shop) => shop.name ?? COPY.unnamed(shop.platform);
+
+/**
+ * URL API-71 điều hướng trong app (router) hay rời trang: MSW trả thẳng URL kết quả D7 (`/admin/settings/platforms?…`)
+ * → router; URL sàn (tuyệt đối) hoặc callback API của adapter mock BE (`/api/v1/shops/{sàn}/callback?…`, tương đối —
+ * server đổi code rồi 302 về D7) → trình duyệt phải gọi server (DEC-803).
+ */
+export const isInAppUrl = (url: string) => url.startsWith("/") && !url.startsWith("/api/");

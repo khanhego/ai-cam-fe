@@ -17,6 +17,18 @@ export type NotifyEvent = {
 
 export type QuietHours = { enabled: boolean; start: string; end: string };
 
+/**
+ * `items[].last_error` (02 §6.2 v0.5 — FE DEC-763 / BE DEC-730): `null` hoặc object, không bao giờ là chuỗi.
+ * `message` tiếng Việt như 502 / 504 của API-174; `provider_code` = mã của nhà cung cấp (có thể null).
+ */
+export type NotifyChannelError = {
+  code: "NOTIFY_SEND_FAILED" | "NOTIFY_TIMEOUT" | (string & {});
+  message: string;
+  /** BE (`ChannelError.at`) cho phép null. */
+  at: string | null;
+  provider_code: string | null;
+};
+
 export type NotifyChannel = {
   id: string;
   name: string;
@@ -27,7 +39,7 @@ export type NotifyChannel = {
   enabled: boolean;
   last_status: "OK" | "ERROR" | "NEVER";
   last_sent_at: string | null;
-  last_error: { code?: string; message?: string; at?: string } | string | null;
+  last_error: NotifyChannelError | null;
   created_at: string;
 };
 
@@ -52,7 +64,8 @@ export type NotifyMessage = {
   event_code: NotifyEventCode;
   event_label: string;
   item_count: number;
-  text: string;
+  /** BE `MessageOut.text` cho phép null (tin tóm tắt chưa dựng) — DEC-802. */
+  text: string | null;
   status: NotifyMessageStatus;
   attempts: number;
   last_error: string | null;

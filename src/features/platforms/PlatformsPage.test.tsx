@@ -5,6 +5,8 @@ import { login } from "@/lib/api/auth";
 import { mockShopee, mockShops, mockTiktok } from "@/mocks/handlers/shops";
 import { renderApp } from "@/test/render";
 
+import { isInAppUrl } from "./copy";
+
 /**
  * D7 Kết nối sàn (T-253; 01 §10.5 D7 item 03, 02b-admin §13). Dữ liệu mock (DEC-549): Shopee "TST Shop A" (140 đơn),
  * "TST B" (cảnh báo EX-T2), "TST Shop cũ" đã ngắt; TikTok "TST TikTok A (mock)" (58 đơn), "TST TikTok B (mock)" hết hạn.
@@ -268,4 +270,11 @@ test("TC-P.08 (UI): Supervisor không vào được D7, menu không có", async 
   const nav = screen.getByRole("navigation", { name: "Điều hướng chính" });
   expect(within(nav).queryByRole("link", { name: /Kết nối sàn/ })).not.toBeInTheDocument();
   expect(within(nav).queryByRole("link", { name: /Lưu trữ video/ })).not.toBeInTheDocument();
+});
+
+test("DEC-803: URL API-71 — kết quả D7 (MSW) đi router; callback API của adapter mock BE / URL sàn rời trang", () => {
+  expect(isInAppUrl("/admin/settings/platforms?platform=tiktok&result=connected&count=2")).toBe(true);
+  expect(isInAppUrl("/api/v1/shops/tiktok/callback?code=MOCK&state=abc")).toBe(false);
+  expect(isInAppUrl("/api/v1/shops/shopee/callback?state=abc&code=x&shop_id=1")).toBe(false);
+  expect(isInAppUrl("https://services.tiktokshop.com/open/authorize?service_id=1&state=abc")).toBe(false);
 });

@@ -78,6 +78,8 @@ export function resetMockNotify() {
       last_error: {
         code: "NOTIFY_SEND_FAILED",
         message: "Telegram không nhận Chat ID này. Kiểm tra bot đã vào nhóm.",
+        at: iso(now - 26 * 3_600_000),
+        provider_code: "400",
       },
       created_at: iso(now - 5 * 86_400_000),
     },
@@ -243,7 +245,7 @@ export const notifyHandlers = [
       const message = "Không kết nối được Telegram từ máy chủ (mạng chặn?).";
       Object.assign(channel, {
         last_status: "ERROR",
-        last_error: { code: "NOTIFY_TIMEOUT", message, at: now },
+        last_error: { code: "NOTIFY_TIMEOUT", message, at: now, provider_code: null },
       });
       return apiError(504, "NOTIFY_TIMEOUT", message);
     }
@@ -254,7 +256,7 @@ export const notifyHandlers = [
           : "Người nhận chưa quan tâm OA của shop.";
       Object.assign(channel, {
         last_status: "ERROR",
-        last_error: { code: "NOTIFY_SEND_FAILED", message, at: now },
+        last_error: { code: "NOTIFY_SEND_FAILED", message, at: now, provider_code: "400" },
       });
       return apiError(502, "NOTIFY_SEND_FAILED", message, { provider_code: "400" });
     }

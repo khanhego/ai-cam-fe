@@ -166,6 +166,11 @@ function ShareFormBody({
         : total > limits.max_total_seconds
           ? COPY.maxDuration
           : undefined;
+  // M16 (02 §6.2 API-164 — BE DEC-667): link chỉ kèm ảnh của phiên được chọn → số ảnh theo lựa chọn (DEC-801).
+  const photoCount = Math.min(
+    limits.max_snapshots,
+    selected.reduce((n, s) => n + s.snapshot_count, 0),
+  );
   const r = recipient.trim();
   const recipientError =
     r.length < RECIPIENT_MIN || r.length > RECIPIENT_MAX ? COPY.recipientRule : undefined;
@@ -201,7 +206,7 @@ function ShareFormBody({
       session_id: source.type === "SESSION" ? source.sessionId : null,
       session_ids: selected.map((s) => s.id),
       layout,
-      include_snapshots: options.snapshot_count > 0 && withPhotos,
+      include_snapshots: photoCount > 0 && withPhotos,
       recipient: r,
       expires_days: expires,
     });
@@ -303,8 +308,13 @@ function ShareFormBody({
 
       {options.snapshot_count > 0 && (
         <label className="mb-4 flex items-center gap-2 text-body-md text-on-surface">
-          <input type="checkbox" checked={withPhotos} onChange={(e) => setWithPhotos(e.target.checked)} />
-          {COPY.snapshots(options.snapshot_count)}
+          <input
+            type="checkbox"
+            checked={photoCount > 0 && withPhotos}
+            disabled={photoCount === 0}
+            onChange={(e) => setWithPhotos(e.target.checked)}
+          />
+          {COPY.snapshots(photoCount)}
         </label>
       )}
 
