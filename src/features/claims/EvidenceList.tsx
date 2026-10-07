@@ -74,9 +74,17 @@ function SessionRow({
   const deleted = s.clips.find((c) => c.status === "DELETED");
   const cam2Ok = s.type === "PACK" && s.status === "COMPLETED" && !s.flags.includes("CAM2_UNVERIFIED");
   const statusLabel = SESSION_STATUS[s.status as SessionStatus]?.[0];
+  // G3-FE-7: ✔ xanh chỉ cho bằng chứng dùng được — phiên bị loại (BR-39) / chỉ còn clip "Thiếu tệp" → icon trung tính.
+  const onlyMissing = s.clips.length > 0 && s.clips.every((c) => c.status === "MISSING");
+  const [rowIcon, rowTone] =
+    s.type === "RETURN" && s.evidence_exclusion
+      ? ["do_not_disturb_on", "text-on-surface-variant"]
+      : onlyMissing
+        ? ["videocam_off", "text-on-surface-variant"]
+        : ["check_circle", "text-success"];
   return (
     <li className="flex flex-wrap items-center gap-2 py-2">
-      <Icon name="check_circle" size={20} className="text-success" />
+      <Icon name={rowIcon} size={20} className={rowTone} />
       <span className="text-body-md text-on-surface">
         {label} · {s.station_name}
         {s.operator_name ? ` · ${s.operator_name}` : ""} ·{" "}
