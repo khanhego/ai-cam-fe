@@ -29,7 +29,7 @@ import {
 } from "../returnsDb";
 import { dashboardEvent } from "../ws";
 import { reconSummary } from "./packages";
-import { sharesOfClaim } from "../sharesDb";
+import { affectedShares, sharesOfClaim } from "../sharesDb";
 import { DASHBOARD_ROLES, requireRole } from "./session";
 
 /** API-132 + `shares[]` theo người xem (item 03 — `can_revoke` phụ thuộc vai). */
@@ -456,8 +456,12 @@ export const claimsHandlers = [
       }
       bump(c, `Xác nhận phiên hoàn thật: ${note}`);
     }
-    // `affected_shares` (v0.4, DEC-531) — FE T-266; mock trả rỗng tới đó.
-    return json({ ...claimOut(c, user), affected_shares: [] });
+    // `affected_shares` (v0.4, DEC-531): link `CREATING` / `ACTIVE` chứa phiên (mọi nguồn) — chỉ khi `MARK_WRONG_SCAN`,
+    // không tự thu hồi.
+    return json({
+      ...claimOut(c, user),
+      affected_shares: body.action === "MARK_WRONG_SCAN" ? affectedShares(s.id, user) : [],
+    });
   }),
 
   http.post(`${API}/claims/:id/notes`, async ({ request, params }) => {

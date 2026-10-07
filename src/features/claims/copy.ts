@@ -161,6 +161,9 @@ export const COPY = {
     reviewAlert: (n: number) =>
       `Kiện có ${n} phiên mở hoàn do quản lý hủy trước khi hệ thống ghi lý do — đã đưa vào bằng chứng nhưng chưa làm phiên chính. Xem video rồi chọn.`,
     confirmReturn: "Là phiên hoàn thật",
+    confirmReturnAt: (at: string) => `Là phiên hoàn thật (${at})`,
+    /** v0.5 (DEC-529): chip phiên đã gỡ lý do hủy / đã xác nhận "Cần soát" (`session.return_confirmed`). */
+    returnConfirmed: "Đã xác nhận phiên hoàn thật",
     wrongScanShort: "Quét nhầm",
     reviewActionsFor: (at: string) => `Phiên ${at}`,
   },
@@ -169,6 +172,11 @@ export const COPY = {
     markTitle: "Đánh dấu phiên quét nhầm?",
     unmarkTitle: "Bỏ đánh dấu quét nhầm?",
     confirmTitle: "Xác nhận là phiên hoàn thật?",
+    /** v0.5 (DEC-529): gỡ lý do hủy "Quét nhầm" / "Không phải hàng hoàn" — ADMIN / SUPERVISOR. */
+    overrideTitle: "Gỡ lý do hủy, xác nhận là phiên hoàn thật?",
+    overrideText:
+      "Phiên sẽ vào bằng chứng của hồ sơ này và có thể thành phiên chính. Lý do hủy cũ vẫn lưu trong nhật ký.",
+    overridden: "Đã xác nhận phiên hoàn thật.",
     reason: "Lý do*",
     reasonRequired: "Chọn lý do.",
     note: "Ghi chú*",
@@ -185,6 +193,20 @@ export const COPY = {
     marked: "Đã đánh dấu phiên quét nhầm.",
     unmarked: "Đã bỏ đánh dấu.",
     confirmed: "Đã xác nhận.",
+  },
+  /** `AffectedSharesDialog` (01 §10.5 D17 v0.5 — DEC-531): phiên vừa đánh dấu quét nhầm còn trong link chia sẻ. */
+  affected: {
+    title: (n: number) => `Phiên này đang có trong ${n} link chia sẻ còn hiệu lực`,
+    text: "Người nhận vẫn xem được video phiên này tới khi thu hồi hoặc hết hạn.",
+    expires: (at: string) => `hết hạn ${at}`,
+    revoke: "Thu hồi link",
+    revokeFor: (r: string) => `Thu hồi link gửi ${r}`,
+    askAdmin: "Nhờ Admin / Supervisor thu hồi",
+    /** mới (DEC-721) — dòng đã thu hồi trong dialog. */
+    revoked: "Đã thu hồi",
+    /** mới (DEC-721) — người tạo link. */
+    createdBy: (who: string) => `Tạo bởi ${who}`,
+    close: "Đóng",
   },
   pack: {
     open: "Xuất gói bằng chứng",

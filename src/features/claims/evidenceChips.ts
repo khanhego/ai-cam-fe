@@ -35,10 +35,12 @@ export function sessionChips(ev: SessionEvidence): EvidenceChip[] {
     if (r) out.push({ label: r, tone: "warning" });
   } else if (s.review_needed) out.push({ label: REVIEW_NEEDED_LABEL, tone: "warning" });
   else if (ev.prior_return) out.push({ label: COPY.evidence.prior(s.status), tone: "info" });
-  else if (s.status === "CANCELLED") {
+  else if (s.status === "CANCELLED" && !s.return_confirmed) {
     const r = reason();
     if (r) out.push({ label: r, tone: "neutral" });
   }
+  // T-266 (v0.5 — DEC-529): đã gỡ lý do hủy / đã xác nhận "Cần soát".
+  if (s.return_confirmed) out.push({ label: COPY.evidence.returnConfirmed, tone: "success" });
   return out;
 }
 
@@ -48,7 +50,9 @@ export const hasStatusChip = (ev: SessionEvidence) =>
   (Boolean(ev.session.evidence_exclusion) ||
     ev.session.review_needed ||
     ev.prior_return ||
-    (ev.session.status === "CANCELLED" && Boolean(ev.session.cancel_cause ?? ev.session.cancel_reason)));
+    (ev.session.status === "CANCELLED" &&
+      !ev.session.return_confirmed &&
+      Boolean(ev.session.cancel_cause ?? ev.session.cancel_reason)));
 
 /** Tên một dòng bằng chứng ("Phiên mở hoàn 06/10 08:51", "Ảnh 06/10 10:16"). */
 export const evidenceLabel = (ev: Pick<RemovedEvidence, "kind"> & Partial<RemovedEvidence>): string => {

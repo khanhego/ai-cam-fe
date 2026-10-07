@@ -27,10 +27,10 @@ test("D21 mặc định tab Đang hoạt động có số; cột; hạn ≤ 24 g
   await as("tst_cskh");
   renderApp("/admin/shares");
   const t = await table();
-  expect(screen.getByRole("tab", { name: "Đang hoạt động 2" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tab", { name: "Đang hoạt động 4" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("tab", { name: "Đã thu hồi 1" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Hết hạn 1" })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Tất cả 4" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Tất cả 6" })).toBeInTheDocument();
   for (const h of ["Tạo lúc", "Người tạo", "Gửi cho", "Nguồn", "Phiên", "Hết hạn", "Trạng thái"])
     expect(t.getByRole("columnheader", { name: h })).toBeInTheDocument();
   // Không hiện chuỗi URL trong bảng (DEC-489).
@@ -86,7 +86,7 @@ test("Thu hồi: Dialog xác nhận → Hủy không gọi API; xác nhận → 
   expect(await screen.findByText("Đã thu hồi link.")).toBeInTheDocument();
   expect(mockShares.find((s) => s.id === "share-1")!.status).toBe("REVOKED");
   await waitFor(() => expect(screen.queryByText("CSKH Shopee – phiếu 98765")).toBeNull());
-  expect(screen.getByRole("tab", { name: "Đang hoạt động 1" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Đang hoạt động 3" })).toBeInTheDocument();
 });
 
 test("EX-S7: kho mất Internet → tab Đã thu hồi chip 'Đang thu hồi — chờ Internet' + ⓘ", async () => {
@@ -142,7 +142,7 @@ test("Tìm + Của tôi ghi URL; không khớp → empty có Bỏ lọc", async 
   await table();
   await user.click(screen.getByRole("button", { name: "Của tôi" }));
   await waitFor(() => expect(router.state.location.search).toBe("?mine=true"));
-  await waitFor(() => expect(screen.getByRole("tab", { name: "Đang hoạt động 1" })).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole("tab", { name: "Đang hoạt động 2" })).toBeInTheDocument());
   await user.type(screen.getByLabelText("Tìm mã kiện / mã hồ sơ / gửi cho"), "không-có");
   await user.click(screen.getByRole("button", { name: "Tìm" }));
   expect(await screen.findByText("Không có link nào khớp bộ lọc.")).toBeInTheDocument();

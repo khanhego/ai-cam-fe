@@ -12,13 +12,14 @@ const R = COPY.review;
 const NOTE_MIN = 5;
 const NOTE_MAX = 500;
 
-export type ReviewMode = "MARK" | "UNMARK" | "REVIEW";
+export type ReviewMode = "MARK" | "UNMARK" | "REVIEW" | "OVERRIDE";
 
 /**
  * Dialog API-189 (01 §10.5 D17 v0.4; 02b-admin §3 `WrongScanDialog` / `ConfirmReturnDialog` v0.3): MARK = "Đánh dấu phiên
  * quét nhầm?" (radio lý do không chọn sẵn + ghi chú + ngày giữ video), UNMARK = "Bỏ đánh dấu quét nhầm?", REVIEW = "Xác nhận
  * là phiên hoàn thật?" (phiên "Cần soát"). Ghi chú 5–500 mọi chế độ; lỗi server `fields.reason_code` / `fields.note` dưới ô.
- * Chế độ OVERRIDE (gỡ lý do hủy, ADMIN / SUPERVISOR) thuộc T-266.
+ * T-266 (v0.4 — DEC-529): OVERRIDE = "Gỡ lý do hủy, xác nhận là phiên hoàn thật?" (phiên bị loại theo lý do hủy — ADMIN /
+ * SUPERVISOR; cùng `CONFIRM_RETURN`, 403 → Toast `message` ở `useReviewSession`).
  */
 export function ReviewSessionDialog({
   mode,
@@ -47,12 +48,18 @@ export function ReviewSessionDialog({
   const noteErr = text.length < NOTE_MIN || text.length > NOTE_MAX ? R.noteRule : undefined;
   const reasonErr = mode === "MARK" && !reason ? R.reasonRequired : undefined;
   const fields = isApiError(error) && error.code === "VALIDATION_ERROR" ? error.fieldErrors : {};
-  const title = mode === "MARK" ? R.markTitle : mode === "UNMARK" ? R.unmarkTitle : R.confirmTitle;
+  const title = {
+    MARK: R.markTitle,
+    UNMARK: R.unmarkTitle,
+    REVIEW: R.confirmTitle,
+    OVERRIDE: R.overrideTitle,
+  }[mode];
   const submit = () => {
     setTouched(true);
     if (noteErr || reasonErr) return;
     onSubmit({
       sessionId,
+      ...(mode === "OVERRIDE" ? { override: true } : {}),
       action:
         mode === "MARK" ? "MARK_WRONG_SCAN" : mode === "UNMARK" ? "UNMARK_WRONG_SCAN" : "CONFIRM_RETURN",
       ...(mode === "MARK" ? { reason_code: reason } : {}),
@@ -110,7 +117,9 @@ export function ReviewSessionDialog({
           ? R.markText(keepUntil ? fmtDate(keepUntil) : "—")
           : mode === "UNMARK"
             ? R.unmarkText
-            : R.confirmText}
+            : mode === "OVERRIDE"
+              ? R.overrideText
+              : R.confirmText}
       </p>
     </Dialog>
   );

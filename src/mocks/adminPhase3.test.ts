@@ -222,15 +222,39 @@ describe("shares (API-160..164)", () => {
   test("API-161: counts theo trạng thái; CSKH không thu hồi được link người khác", async () => {
     await as("tst_cskh");
     const r = await sharesApi.list({ status: "ALL" });
-    expect(r.counts).toMatchObject({ ACTIVE: 2, REVOKED: 1, EXPIRED: 1, ALL: 4 });
+    // T-266: + 2 link của KN-000141 (affected_shares).
+    expect(r.counts).toMatchObject({ ACTIVE: 4, REVOKED: 1, EXPIRED: 1, ALL: 6 });
     expect(r.items.every((s) => !("items" in s) || s.items === undefined)).toBe(true);
     await as("tst_sup");
     // T-257: `share-4` do Supervisor tạo (CSKH không thu hồi được).
-    expect((await sharesApi.list({ mine: true })).total).toBe(1);
+    expect((await sharesApi.list({ mine: true })).total).toBe(2);
     await as("tst_cskh");
     const other = (await sharesApi.list({})).items.find((s) => s.id === "share-4")!;
     expect(other.can_revoke).toBe(false);
     expect((await fail(sharesApi.revoke("share-4"))).status).toBe(403);
+  });
+
+  test("API-189 (T-266): MARK_WRONG_SCAN → affected_shares (can_revoke theo người xem); action khác → []", async () => {
+    await as("tst_cskh");
+    const c = await claimsApi.get("cl-000141");
+    const res = await claimsApi.reviewReturnSession("cl-000141", "ses-p3-a", {
+      version: c.version,
+      action: "MARK_WRONG_SCAN",
+      reason_code: "WRONG_SCAN",
+      note: "Kiện khác",
+    });
+    expect(res.affected_shares.map((s) => [s.id, s.can_revoke])).toEqual([
+      ["share-p3-1", true],
+      ["share-p3-2", false],
+    ]);
+    // Không tự thu hồi (DEC-531).
+    expect((await sharesApi.get("share-p3-1")).status).toBe("ACTIVE");
+    const un = await claimsApi.reviewReturnSession("cl-000141", "ses-p3-a", {
+      version: res.version,
+      action: "UNMARK_WRONG_SCAN",
+      note: "Nhầm thao tác",
+    });
+    expect(un.affected_shares).toEqual([]);
   });
 
   test("API-31 / API-132: shares[] + shares_active_count", async () => {

@@ -48,7 +48,26 @@ test("TC-08.50: menu ⋮ → Đánh dấu quét nhầm phiên chính → lý do 
   await user.type(within(dialog).getByLabelText(/^Ghi chú/), "Video là kiện khác");
   await user.click(within(dialog).getByRole("button", { name: "Đánh dấu" }));
 
-  expect(await screen.findByText("Đã đánh dấu phiên quét nhầm.")).toBeInTheDocument();
+  // T-266 (DEC-531): phiên đang có trong 2 link còn hiệu lực → AffectedSharesDialog thay Toast; CSKH chỉ thu hồi link mình tạo.
+  const affected = await screen.findByRole("dialog", {
+    name: "Phiên này đang có trong 2 link chia sẻ còn hiệu lực",
+  });
+  expect(screen.queryByText("Đã đánh dấu phiên quét nhầm.")).toBeNull();
+  expect(
+    within(affected).getByText("Người nhận vẫn xem được video phiên này tới khi thu hồi hoặc hết hạn."),
+  ).toBeInTheDocument();
+  const other = within(affected).getByText("ĐVVC SPX – khiếu nại 7788").closest("li")!;
+  expect(within(other).getByText("Nhờ Admin / Supervisor thu hồi")).toBeInTheDocument();
+  expect(within(other).queryByRole("button")).toBeNull();
+  const own = within(affected).getByText("CSKH Shopee – phiếu 55001").closest("li")!;
+  expect(within(own).getByText(/hết hạn \d{2}\/\d{2} \d{2}:\d{2}/)).toBeInTheDocument();
+  await user.click(within(own).getByRole("button", { name: "Thu hồi link gửi CSKH Shopee – phiếu 55001" }));
+  const confirm = await screen.findByRole("dialog", { name: "Thu hồi link?" });
+  await user.click(within(confirm).getByRole("button", { name: "Thu hồi link" }));
+  expect(await screen.findByText("Đã thu hồi link.")).toBeInTheDocument();
+  expect(await within(own).findByText("Đã thu hồi")).toBeInTheDocument();
+  expect(within(own).queryByRole("button")).toBeNull();
+  await user.click(within(affected).getByRole("button", { name: "Đóng" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   const removed = screen.getByText(/^Bằng chứng đã bỏ \(\d\)$/).closest("details")!;
   expect(within(removed).getByText(a)).toBeInTheDocument();
@@ -260,5 +279,56 @@ describe("D13 Hủy phiên mở hoàn?", () => {
     await user.click(within(dialog).getByRole("button", { name: "Hủy phiên" }));
     expect(await within(dialog).findByText("Chọn lý do hủy.")).toBeInTheDocument();
     expect(within(dialog).getByText("Nhập ghi chú (5–500 ký tự).")).toBeInTheDocument();
+  });
+});
+
+// ───────────── T-266 (01 §10.5 D17 v0.5, BR-39 v0.5 — DEC-529): gỡ lý do hủy ─────────────
+
+test("TC-08.66 (quyền): CSKH không thấy [Là phiên hoàn thật] trên phiên bị loại theo lý do hủy", async () => {
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  await screen.findByRole("heading", { name: "Bằng chứng" });
+  expect(await screen.findByRole("button", { name: /^Bỏ đánh dấu phiên/ })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: `Là phiên hoàn thật (${yesterdayAt("09:00")})` })).toBeNull();
+});
+
+test("TC-08.66: OVERRIDE (ADMIN): Dialog chữ 01 v0.5 → Toast 'Đã xác nhận phiên hoàn thật.' + chip; 403 → Toast message", async () => {
+  await login("tst_admin", "matkhau123", "DASHBOARD");
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  await screen.findByRole("heading", { name: "Bằng chứng" });
+  const c = yesterdayAt("09:00");
+  const open = await screen.findByRole("button", { name: `Là phiên hoàn thật (${c})` });
+
+  // 403 (vai đổi giữa chừng) → Toast message, đóng dialog.
+  server.use(
+    http.post("/api/v1/claims/:id/return-sessions/:sid/review", () =>
+      apiError(403, "FORBIDDEN", "Chỉ Admin / Supervisor gỡ lý do hủy của phiên."),
+    ),
+  );
+  await user.click(open);
+  let dialog = await screen.findByRole("dialog", { name: "Gỡ lý do hủy, xác nhận là phiên hoàn thật?" });
+  await user.type(within(dialog).getByLabelText(/^Ghi chú/), "Xem video: kiện hoàn thật");
+  await user.click(within(dialog).getByRole("button", { name: "Xác nhận" }));
+  expect(await screen.findByText("Chỉ Admin / Supervisor gỡ lý do hủy của phiên.")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  server.resetHandlers();
+
+  await user.click(await screen.findByRole("button", { name: `Là phiên hoàn thật (${c})` }));
+  dialog = await screen.findByRole("dialog", { name: "Gỡ lý do hủy, xác nhận là phiên hoàn thật?" });
+  expect(
+    within(dialog).getByText(
+      "Phiên sẽ vào bằng chứng của hồ sơ này và có thể thành phiên chính. Lý do hủy cũ vẫn lưu trong nhật ký.",
+    ),
+  ).toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "Xác nhận" }));
+  expect(within(dialog).getByText("Nhập ghi chú (5–500 ký tự).")).toBeInTheDocument();
+  await user.type(within(dialog).getByLabelText(/^Ghi chú/), "Xem video: kiện hoàn thật");
+  await user.click(within(dialog).getByRole("button", { name: "Xác nhận" }));
+  expect(await screen.findByText("Đã xác nhận phiên hoàn thật.")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(within(rowOf(`Phiên mở hoàn ${c}`)).getByText("Đã xác nhận phiên hoàn thật")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: `Là phiên hoàn thật (${c})` })).toBeNull();
+  expect(findSessionAnywhere("ses-p3-c")!.session.review?.return_confirmed).toMatchObject({
+    note: "Xem video: kiện hoàn thật",
   });
 });

@@ -26,7 +26,7 @@ test("UC-17 (T-257): CSKH — D21 tab có số, sao chép, thu hồi link mình 
   await login(page, "tst_cskh");
   await page.getByRole("link", { name: "Link chia sẻ" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Link chia sẻ" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Đang hoạt động 2" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Đang hoạt động 4" })).toHaveAttribute("aria-selected", "true");
   const table = page.getByRole("table", { name: "Danh sách link chia sẻ" });
   const mine = table.getByRole("row").filter({ hasText: "CSKH Shopee – phiếu 98765" });
   const other = table.getByRole("row").filter({ hasText: "Bưu cục Thủ Đức – khiếu nại 5521" });
@@ -43,7 +43,7 @@ test("UC-17 (T-257): CSKH — D21 tab có số, sao chép, thu hồi link mình 
   await shot(page, "d21-revoke-dialog");
   await dialog.getByRole("button", { name: "Thu hồi link" }).click();
   await expect(page.getByText("Đã thu hồi link.")).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Đang hoạt động 1" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Đang hoạt động 3" })).toBeVisible();
   await page.getByRole("tab", { name: /^Đã thu hồi/ }).click();
   await expect(table.getByRole("row").filter({ hasText: "CSKH Shopee – phiếu 98765" })).toContainText(
     /Đã thu hồi — Lan|Đang thu hồi — chờ Internet/,
@@ -77,4 +77,56 @@ test("EX-S7 + D17 (T-257): Supervisor thu hồi khi kho mất Internet; khối L
   await block.getByRole("link", { name: "Xem tất cả" }).click();
   await expect(page.getByText(`Nguồn: ${code}`)).toBeVisible();
   await expect(page.getByRole("tab", { name: /^Tất cả/ })).toHaveAttribute("aria-selected", "true");
+});
+
+async function go(page: Page, path: string) {
+  await page.evaluate((p) => {
+    history.pushState({}, "", p);
+    dispatchEvent(new PopStateEvent("popstate"));
+  }, path);
+}
+
+test("T-266: Admin đánh dấu quét nhầm phiên đang có trong link → AffectedSharesDialog → thu hồi; gỡ lý do hủy (OVERRIDE)", async ({
+  page,
+}) => {
+  await login(page, "tst_admin");
+  await go(page, "/admin/claims/cl-000141");
+  await expect(page.getByRole("heading", { name: "Bằng chứng" })).toBeVisible();
+  await page.getByRole("button", { name: /^Thao tác Phiên mở hoàn .* 08:51$/ }).click();
+  await page.getByRole("menuitem", { name: "Đánh dấu quét nhầm" }).click();
+  const mark = page.getByRole("dialog", { name: "Đánh dấu phiên quét nhầm?" });
+  await mark.getByRole("radio", { name: "Quét nhầm kiện khác" }).check();
+  await mark.getByLabel(/^Ghi chú/).fill("Video là kiện khác");
+  await mark.getByRole("button", { name: "Đánh dấu" }).click();
+
+  const affected = page.getByRole("dialog", { name: "Phiên này đang có trong 2 link chia sẻ còn hiệu lực" });
+  await expect(affected).toBeVisible();
+  await shot(page, "d17-affected-shares");
+  await affected.getByRole("button", { name: "Thu hồi link gửi ĐVVC SPX – khiếu nại 7788" }).click();
+  await page
+    .getByRole("dialog", { name: "Thu hồi link?" })
+    .getByRole("button", { name: "Thu hồi link" })
+    .click();
+  await expect(page.getByText("Đã thu hồi link.")).toBeVisible();
+  await expect(affected.getByRole("listitem").filter({ hasText: "ĐVVC SPX" })).toContainText("Đã thu hồi");
+  await affected.getByRole("button", { name: "Đóng" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await page.getByRole("button", { name: /^Là phiên hoàn thật \(.* 09:00\)$/ }).click();
+  const override = page.getByRole("dialog", { name: "Gỡ lý do hủy, xác nhận là phiên hoàn thật?" });
+  await override.getByLabel(/^Ghi chú/).fill("Xem video: kiện hoàn thật");
+  await shot(page, "d17-override");
+  await override.getByRole("button", { name: "Xác nhận" }).click();
+  await expect(page.getByText("Đã xác nhận phiên hoàn thật.")).toBeVisible();
+  await expect(page.getByText("Đã xác nhận phiên hoàn thật", { exact: true })).toBeVisible();
+});
+
+test("T-265: D4 clip Thiếu tệp — khối xám, không Xuất", async ({ page }) => {
+  await login(page, "tst_admin");
+  await go(page, "/admin/packages/pkg-0000062");
+  const clip = page.getByRole("region", { name: "Clip" });
+  await expect(clip.getByText("Thiếu tệp clip trên máy chủ — không phát được.")).toBeVisible();
+  await expect(clip.getByRole("button", { name: "Xuất clip" })).toHaveCount(0);
+  await expect(clip.getByRole("img", { name: "Ảnh 1: Thiếu tệp ảnh" })).toBeVisible();
+  await shot(page, "d4-missing");
 });

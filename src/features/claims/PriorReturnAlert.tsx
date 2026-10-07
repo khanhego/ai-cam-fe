@@ -10,7 +10,8 @@ const E = COPY.evidence;
  * Alert đầu khối Bằng chứng D17 (01 §10.5 D17, BR-39; 02b-admin §3): (1) phiên mở hoàn trước đã đưa vào bằng chứng
  * ("là phiên chính" theo `primary` server); (2) phiên bị loại vì quét nhầm — không vào bằng chứng, nút "Thêm vào bằng
  * chứng" cho phiên chưa có (`in_evidence = false`), "Bỏ đánh dấu" cho phiên `MARKED`; (3) T-264: Alert vàng "Cần soát" với
- * [Là phiên hoàn thật] [Quét nhầm] (API-189).
+ * [Là phiên hoàn thật] [Quét nhầm] (API-189); (4) T-266 (v0.5 — DEC-529): phiên bị loại theo lý do hủy (`STATION_CANCEL` /
+ * `SUPERVISOR_CANCEL`) có [Là phiên hoàn thật] chỉ với ADMIN / SUPERVISOR (`canOverride`) → chế độ `OVERRIDE`.
  */
 export function PriorReturnAlert({
   claim,
@@ -18,13 +19,16 @@ export function PriorReturnAlert({
   busy,
   onAdd,
   onReview,
+  canOverride = false,
 }: {
   claim: ClaimDetail;
   editable: boolean;
   busy: boolean;
   onAdd: (sessionId: string) => void;
-  /** T-264 (API-189): bỏ đánh dấu / xác nhận "Cần soát" / đánh dấu quét nhầm. */
-  onReview: (mode: "MARK" | "UNMARK" | "REVIEW", sessionId: string, startedAt: string) => void;
+  /** T-264 (API-189): bỏ đánh dấu / xác nhận "Cần soát" / đánh dấu quét nhầm; T-266: gỡ lý do hủy. */
+  onReview: (mode: "MARK" | "UNMARK" | "REVIEW" | "OVERRIDE", sessionId: string, startedAt: string) => void;
+  /** ADMIN / SUPERVISOR — server vẫn 403 với CSKH. */
+  canOverride?: boolean;
 }) {
   const byStart = <T extends { started_at: string }>(a: T, b: T) => a.started_at.localeCompare(b.started_at);
   const prior = [...claim.prior_return_sessions].sort(byStart);
@@ -79,6 +83,26 @@ export function PriorReturnAlert({
                     {excluded.length > 1 ? E.unmarkAt(fmtShort(x.started_at)) : E.unmark}
                   </Button>
                 ))}
+              {canOverride &&
+                excluded
+                  .filter(
+                    (x) =>
+                      x.evidence_exclusion === "STATION_CANCEL" ||
+                      x.evidence_exclusion === "SUPERVISOR_CANCEL",
+                  )
+                  .map((x) => (
+                    <Button
+                      key={`o-${x.session_id}`}
+                      variant="text"
+                      size="sm"
+                      icon="verified"
+                      disabled={busy}
+                      aria-label={E.confirmReturnAt(fmtShort(x.started_at))}
+                      onClick={() => onReview("OVERRIDE", x.session_id, x.started_at)}
+                    >
+                      {excluded.length > 1 ? E.confirmReturnAt(fmtShort(x.started_at)) : E.confirmReturn}
+                    </Button>
+                  ))}
             </div>
           )}
         </Alert>

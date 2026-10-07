@@ -1,8 +1,15 @@
-import type { ClaimEvidence } from "@/lib/api/claims";
+import type { AffectedShare, ClaimEvidence } from "@/lib/api/claims";
 import type { Role } from "@/lib/api/session";
 import type { Share, ShareBrief, ShareListStatus, ShareOptionSession, ShareOptions } from "@/lib/api/shares";
 
-import { findPackage, findSessionAnywhere, mockClaims, toClaimDetail, type MockClaim } from "./returnsDb";
+import {
+  findPackage,
+  findSessionAnywhere,
+  mockClaims,
+  P3_CLAIM_ID,
+  toClaimDetail,
+  type MockClaim,
+} from "./returnsDb";
 import type { MockPackage, MockSession } from "./packagesDb";
 import { mockFlag, mockParam } from "./shopsDb";
 import { shopOfPackage } from "./packagesDb";
@@ -130,6 +137,67 @@ export function resetMockShares() {
       created_by: { id: "u-cskh", display_name: "Lan" },
     },
   );
+  seedP3Shares(now);
+}
+
+/**
+ * T-266 (DEC-722): 2 link đang hoạt động của KN-000141 chứa phiên A (bỏ dở 08:51 — "Đánh dấu quét nhầm" được) → API-189
+ * trả `affected_shares` (1 link CSKH Lan tạo, 1 link Supervisor tạo — CSKH không thu hồi được).
+ */
+function seedP3Shares(now: number) {
+  const claim = mockClaims.find((c) => c.id === P3_CLAIM_ID);
+  const pkg = claim ? findPackage(claim.package_id) : undefined;
+  if (!claim || !pkg) return;
+  const sessions = claim.evidence.filter((e) => e.kind === "SESSION").map((e) => e.ref_id);
+  const prior = sessions.find((id) => findSessionAnywhere(id)?.session.status === "ABANDONED");
+  if (!prior) return;
+  const expires = iso(now + 6 * DAY);
+  const share = (
+    id: string,
+    recipient: string,
+    ids: string[],
+    by: { id: string; display_name: string },
+    ago: number,
+  ): MockShare => ({
+    id,
+    status: "ACTIVE",
+    progress: 100,
+    step: null,
+    step_index: null,
+    step_total: null,
+    url: signedUrl(id, expires),
+    recipient,
+    source: sourceOf(claim, pkg),
+    session_ids: ids,
+    session_count: ids.length,
+    layout: "SIDE_BY_SIDE",
+    include_snapshots: true,
+    expires_at: expires,
+    created_at: iso(now - ago),
+    created_by: by,
+    revoked_at: null,
+    revoked_by: null,
+    revoke_pending: false,
+    error: null,
+    ticks: 0,
+    fail: false,
+  });
+  mockShares.push(
+    share(
+      "share-p3-1",
+      "CSKH Shopee – phiếu 55001",
+      sessions.slice(0, 4),
+      { id: "u-cskh", display_name: "Lan" },
+      3_600_000,
+    ),
+    share(
+      "share-p3-2",
+      "ĐVVC SPX – khiếu nại 7788",
+      [prior],
+      { id: "u-sup", display_name: "Nguyễn B" },
+      7_200_000,
+    ),
+  );
 }
 
 /** Hết hạn tính lúc đọc (J-25 của BE). */
@@ -237,6 +305,21 @@ export const sharesOfPackage = (pkg: MockPackage, user: { id: string; role: Role
 };
 export const sharesOfClaim = (claimId: string, user: { id: string; role: Role }) =>
   sharesFor((s) => s.source.claim_id === claimId, user);
+
+/** API-189 `affected_shares` (02 §6.2 v0.4 — DEC-531). */
+export function affectedShares(sessionId: string, user: { id: string; role: Role }): AffectedShare[] {
+  return mockShares
+    .map((s) => refreshShare(s))
+    .filter((s) => (s.status === "ACTIVE" || s.status === "CREATING") && s.session_ids.includes(sessionId))
+    .map((s) => ({
+      id: s.id,
+      recipient: s.recipient,
+      status: s.status as "ACTIVE" | "CREATING",
+      expires_at: s.expires_at,
+      created_by: s.created_by,
+      can_revoke: canRevoke(s, user),
+    }));
+}
 
 export function inListStatus(s: MockShare, status: ShareListStatus) {
   if (status === "ALL") return true;

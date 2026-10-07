@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { claimsApi, type ClaimDetail, type ClaimEvidence } from "@/lib/api/claims";
+import { claimsApi, type AffectedShare, type ClaimDetail, type ClaimEvidence } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
 import { fmtDate, fmtDuration, fmtShort } from "@/shared/format";
 import { MEDIA_MISSING_LABEL, SESSION_FLAG, SESSION_STATUS, type SessionStatus } from "@/shared/labels";
@@ -12,6 +12,8 @@ import { Alert, Button, EmptyState, Icon, IconButton, StatusChip } from "@/share
 
 import { COPY } from "./copy";
 import { evidenceLabel, hasStatusChip, sessionChips, type SessionEvidence } from "./evidenceChips";
+import { useAuth } from "../auth/useAuth";
+import { AffectedSharesDialog } from "./AffectedSharesDialog";
 import { PriorReturnAlert } from "./PriorReturnAlert";
 import { RemoveEvidenceDialog } from "./RemoveEvidenceDialog";
 import { RemovedEvidenceList } from "./RemovedEvidenceList";
@@ -189,7 +191,12 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
     startedAt: string;
     keepUntil: string | null;
   } | null>(null);
-  const review = useReviewSession(claim.id, () => setReviewing(null));
+  const me = useAuth((s) => s.me);
+  const [affected, setAffected] = useState<AffectedShare[]>([]);
+  const review = useReviewSession(claim.id, (_vars, shares) => {
+    setReviewing(null);
+    setAffected(shares);
+  });
   const openReview = (mode: ReviewMode, sessionId: string, startedAt: string) =>
     setReviewing({
       mode,
@@ -238,6 +245,7 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
       <PriorReturnAlert
         claim={claim}
         editable={editable}
+        canOverride={me?.role === "ADMIN" || me?.role === "SUPERVISOR"}
         busy={save.isPending || review.isPending}
         onAdd={add}
         onReview={openReview}
@@ -336,6 +344,7 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
         busy={save.isPending}
         onRestore={restore}
       />
+      {affected.length > 0 && <AffectedSharesDialog shares={affected} onClose={() => setAffected([])} />}
       {reviewing && (
         <ReviewSessionDialog
           key={`${reviewing.mode}-${reviewing.sessionId}`}
