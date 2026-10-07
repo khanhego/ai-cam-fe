@@ -137,9 +137,10 @@ const THRESHOLDS_FORM = {
   claim_due_soon_hours: "48",
   return_warn_minutes: "20",
   return_abandon_minutes: "45",
+  refund_only_default_hours: "48",
 };
 
-test("rules: validateSettings (10 ô, sàn clip, phiên hoàn) + isReduction + fmtBytes", () => {
+test("rules: validateSettings (11 ô, sàn clip, phiên hoàn) + isReduction + fmtBytes", () => {
   const ok = validateSettings({
     retention_raw_days: "30",
     retention_clip_days: "30",

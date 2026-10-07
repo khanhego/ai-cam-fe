@@ -62,7 +62,7 @@ function action(item: AnyAttentionItem, today: string): [string, string] | null 
       return [COPY.view, "/admin/claims?status=NEW&due=overdue"];
     case "RETURN_SESSION_DROPPED":
       return [COPY.view, droppedPath(today)];
-    // D23 chưa có trong menu tới T-259 → `canOpen` ẩn nút (DEC-547).
+    // D23 (T-259) — `canOpen` theo vai (chỉ ADMIN thấy mục này — DEC-452).
     case "BACKUP_STALE":
       return [COPY.view, "/admin/settings/backup"];
   }

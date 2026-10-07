@@ -1,10 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 import { settingsApi, type ComponentStatus } from "@/lib/api/settings";
 import { fmtDateTime } from "@/shared/format";
 import { CAMERA_ROLE } from "@/shared/labels";
 import { Alert, Button, LinearProgress, Skeleton, StatusChip } from "@/shared/ui";
 
+import { useAuth } from "../auth/useAuth";
+
+import { backupHealth, type BackupHealth } from "./backupHealth";
 import { COPY } from "./copy";
 import { fmtBytes } from "./rules";
 
@@ -28,6 +32,22 @@ function Service({ label, status }: { label: string; status: ComponentStatus }) 
         </StatusChip>
       )}
     </li>
+  );
+}
+
+function BackupRow({ backup }: { backup: BackupHealth }) {
+  const isAdmin = useAuth((st) => st.me?.role === "ADMIN");
+  const v = backupHealth(backup);
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-2 py-2">
+      <span className="flex-1 text-body-md text-on-surface">{v.text ?? H.backupNoRun}</span>
+      <StatusChip tone={v.tone}>{v.chip}</StatusChip>
+      {isAdmin && (
+        <Link to="/admin/settings/backup" className="md-link text-label-lg">
+          {H.backupOpen}
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -114,6 +134,13 @@ export function HealthPanel() {
                 );
               })}
             </ul>
+          )}
+
+          {d.backup && (
+            <>
+              <h3 className="text-title-sm text-on-surface">{H.backup}</h3>
+              <BackupRow backup={d.backup} />
+            </>
           )}
 
           <h3 className="text-title-sm text-on-surface">{H.sync}</h3>

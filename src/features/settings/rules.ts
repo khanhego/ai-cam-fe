@@ -1,6 +1,5 @@
 import {
   THRESHOLD_KEYS,
-  type Phase3Settings,
   type SettingsInput,
   type SettingsPutBody,
   type ThresholdSettings,
@@ -8,8 +7,8 @@ import {
 
 import { COPY } from "./copy";
 
-/** Ô của form D8: 4 trường Phase 1 + 6 ngưỡng item 02 (02 §6.2 API-80). */
-export type SettingsKey = keyof SettingsInput | keyof ThresholdSettings;
+/** Ô số của form D8: 4 trường Phase 1 + 6 ngưỡng item 02 + hạn Chỉ hoàn tiền item 03 (02 §6.2 API-80). */
+export type SettingsKey = keyof SettingsInput | keyof ThresholdSettings | "refund_only_default_hours";
 export type SettingsForm = Record<SettingsKey, string>;
 export const PHASE1_KEYS = [
   "retention_raw_days",
@@ -17,7 +16,13 @@ export const PHASE1_KEYS = [
   "session_warn_minutes",
   "session_abandon_minutes",
 ] as const satisfies readonly (keyof SettingsInput)[];
-export const SETTINGS_KEYS = [...PHASE1_KEYS, ...THRESHOLD_KEYS] as const satisfies readonly SettingsKey[];
+/** item 03 (DEC-485): cạnh 6 ngưỡng item 02. */
+export const PHASE3_NUMBER_KEYS = ["refund_only_default_hours"] as const satisfies readonly SettingsKey[];
+export const SETTINGS_KEYS = [
+  ...PHASE1_KEYS,
+  ...THRESHOLD_KEYS,
+  ...PHASE3_NUMBER_KEYS,
+] as const satisfies readonly SettingsKey[];
 
 /** Giới hạn trên mỗi ô (02 §6.2 API-80; BE `SettingsIn`). */
 export const MAX: Record<SettingsKey, number> = {
@@ -31,6 +36,7 @@ export const MAX: Record<SettingsKey, number> = {
   claim_due_soon_hours: 168,
   return_warn_minutes: 1440,
   return_abandon_minutes: 1440,
+  refund_only_default_hours: 168,
 };
 
 const toInt = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : NaN);
@@ -45,7 +51,7 @@ export function validateSettings(
   minClipDays?: number,
 ): {
   errors: Partial<Record<SettingsKey, string>>;
-  value: Required<Omit<SettingsPutBody, "confirm_reduction" | keyof Phase3Settings>> | null;
+  value: Required<Omit<SettingsPutBody, "confirm_reduction" | "packer_name_required">> | null;
 } {
   const n = Object.fromEntries(SETTINGS_KEYS.map((k) => [k, toInt(form[k])])) as Record<SettingsKey, number>;
   const errors: Partial<Record<SettingsKey, string>> = {};

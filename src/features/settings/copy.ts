@@ -17,6 +17,8 @@ export const COPY = {
     claim_due_soon_hours: "Báo sắp hết hạn trước (giờ)",
     return_warn_minutes: "Phiên hoàn: cảnh báo sau (phút)",
     return_abandon_minutes: "Phiên hoàn: tự đóng sau (phút)",
+    // item 03 (01 §10.5 D8, DEC-485).
+    refund_only_default_hours: "Hạn mặc định Chỉ hoàn tiền (giờ)",
   },
   hint: {
     retention_raw_days: "Video ghi liên tục của camera. 1–365 ngày.",
@@ -29,7 +31,15 @@ export const COPY = {
     claim_due_soon_hours: "Hồ sơ còn ít hơn số giờ này tới hạn → tô đỏ, báo sắp hết hạn. 1–168 giờ.",
     return_warn_minutes: "Station nhận hoàn cảnh báo khi phiên mở lâu hơn. 1–1440 phút.",
     return_abandon_minutes: "Phiên hoàn tự đóng sau thời gian này. 1–1440 phút.",
+    // 01 §10.5 D8: "Dùng khi sàn không trả hạn phản hồi (BR-40)." — bỏ mã BR, thêm khoảng như ô khác (DEC-637).
+    refund_only_default_hours: "Dùng khi sàn không trả hạn phản hồi. 1–168 giờ.",
   },
+  /** item 03 (01 §10.5 D8 mục "Station", FR-03.16). */
+  stationTitle: "Station",
+  packerRequired: "Bắt buộc tên người đóng gói",
+  /** mới */
+  packerRequiredHint:
+    "Bàn đóng gói phải nhập tên người đóng gói trước khi quét kiện. Tên hiện ở chi tiết đơn và báo cáo năng suất.",
   /** 01 §10.5 D8: "Tối thiểu 60 ngày (cấu hình máy chủ)". */
   minClip: (min: number) => `Tối thiểu ${min} ngày (cấu hình máy chủ).`,
   belowMin: (min: number) => `Số ngày giữ clip không được thấp hơn ${min}.`,
@@ -83,5 +93,14 @@ export const COPY = {
     lastSuccess: (at: string) => `Thành công gần nhất ${at}`,
     syncError: "Có lỗi đồng bộ — xem Kết nối sàn.",
     refresh: "Tự làm mới mỗi 30 giây",
+    // item 03 (01 §10.5 D8): dòng "Sao lưu cloud".
+    backup: "Sao lưu cloud",
+    backupLine: (at: string, pending: string) => `DB ${at} · ${pending} tệp chờ`,
+    backupLate: "Trễ",
+    backupNotConfigured: "Chưa cấu hình",
+    /** mới */
+    backupNoRun: "Chưa có lần sao lưu DB thành công",
+    /** mới */
+    backupOpen: "Mở Sao lưu",
   },
 };

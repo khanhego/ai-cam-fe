@@ -99,7 +99,7 @@ describe("attentionText item 03", () => {
   });
 });
 
-test("D2 (ADMIN): thẻ Phiên hoàn hủy / bỏ dở → D3 lọc sẵn; 4 mục mới + SYNC_ERROR; BACKUP_STALE chưa có link (D23 chưa mở)", async () => {
+test("D2 (ADMIN): thẻ Phiên hoàn hủy / bỏ dở → D3 lọc sẵn; 4 mục mới + SYNC_ERROR; BACKUP_STALE → D23 (T-259)", async () => {
   mockDaily();
   await login("tst_admin", "matkhau123", "DASHBOARD");
   const router = renderApp("/admin");
@@ -121,7 +121,10 @@ test("D2 (ADMIN): thẻ Phiên hoàn hủy / bỏ dở → D3 lọc sẵn; 4 m�
   expect(
     within(row("3 phiên mở hoàn bị hủy / bỏ dở trong 7 ngày")).getByRole("link", { name: "Xem" }),
   ).toHaveAttribute("href", droppedPath(vnDay()));
-  expect(within(row("Sao lưu cloud trễ 27 giờ")).queryByRole("link")).toBeNull();
+  expect(within(row("Sao lưu cloud trễ 27 giờ")).getByRole("link", { name: "Xem" })).toHaveAttribute(
+    "href",
+    "/admin/settings/backup",
+  );
   expect(
     within(row("Shop Áo Đẹp Outlet (TikTok) hết hạn ủy quyền")).getByRole("link", { name: "Xem" }),
   ).toHaveAttribute("href", "/admin/settings/platforms");
