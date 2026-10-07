@@ -433,6 +433,8 @@ export function shareOptions(q: {
   );
   let picked = 0;
   const shop = shopOfPackage(pkg);
+  // G3-EV-4 (02 §6.2 API-164 bổ sung): Cam 1 phiên chính không READY.
+  const primaryOpt = opts.find((o) => o.id === primaryId);
   const snapshotCount = claim
     ? claim.evidence.filter((e) => e.kind === "SNAPSHOT").length
     : sessions.reduce((n, s) => n + (s.snapshots ?? []).filter((x) => x.status !== "MISSING").length, 0);
@@ -453,6 +455,8 @@ export function shareOptions(q: {
     review_pending_count: detail ? detail.review_sessions.length : 0,
     limits: { max_sessions: 4, max_total_seconds: 1800, max_snapshots: 20 },
     default_expires_days: 7,
+    primary_unavailable: Boolean(primaryOpt && !primaryOpt.selectable),
+    primary_unavailable_reason: primaryOpt && !primaryOpt.selectable ? primaryOpt.unavailable_reason : null,
   };
 }
 

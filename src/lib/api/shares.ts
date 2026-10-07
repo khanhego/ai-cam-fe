@@ -134,6 +134,9 @@ export type ShareOptions = {
   review_pending_count: number;
   limits: { max_sessions: number; max_total_seconds: number; max_snapshots: number };
   default_expires_days: 1 | 3 | 7;
+  /** G3-EV-4 (02 §6.2 API-164 bổ sung): Cam 1 của phiên chính không `READY` → Alert ở dialog. Thiếu → `false`. */
+  primary_unavailable?: boolean;
+  primary_unavailable_reason?: ShareUnavailableReason | null;
 };
 
 export type ShareExpiresDays = 1 | 3 | 7;

@@ -8,6 +8,7 @@ import type {
 import type { PackageDetail, Protection } from "@/lib/api/packages";
 import type { ReconAlert, ReconRule, ReconSeverity } from "@/lib/api/recon";
 import type { ReturnDetail, ReturnListItem } from "@/lib/api/returns";
+import type { ShareUnavailableReason } from "@/lib/api/shares";
 import type { StationItem } from "@/lib/api/station";
 import type { ReturnStatusGroup, SessionStatus, WarehouseStatus } from "@/shared/labels";
 import type {
@@ -1419,6 +1420,19 @@ export function removalKeepUntil(e: MockEvidenceRef): string {
 
 const EXCLUDING = ["WRONG_SCAN", "NOT_A_RETURN"];
 
+const CLIP_UNAVAILABLE: Record<string, ShareUnavailableReason> = {
+  PENDING: "CLIP_PENDING",
+  FAILED: "CLIP_FAILED",
+  DELETED: "CLIP_DELETED",
+  MISSING: "CLIP_MISSING",
+};
+/** Lý do Cam 1 của phiên chưa dùng được (như `unavailable_reason` API-164); `READY` → `null`. */
+export function cam1Unavailable(s: MockSession): ShareUnavailableReason | null {
+  const cam1 = s.clips.find((c) => c.camera_role === "CAM1");
+  if (cam1?.status === "READY") return null;
+  return CLIP_UNAVAILABLE[cam1?.status ?? "PENDING"] ?? "CLIP_PENDING";
+}
+
 /** item 03 (BR-39 v0.4, 02 §5.1 SESSION v0.3): trường chỉ đọc của phiên trong bằng chứng — mock chưa có API-189 (T-264). */
 export function sessionReview(s: MockSession) {
   const review = s.review ?? {};
@@ -1625,7 +1639,15 @@ export function toClaimDetail(c: MockClaim): ClaimDetail {
     // `shares[]` theo người xem — handler claims ghép (`sharesOfClaim`).
     shares: [],
     shares_active_count: 0,
+    // G3-EV-4 (02 §6.2 API-132 bổ sung): Cam 1 phiên chính không READY.
+    ...primaryAvailability(primaryCache),
   };
+}
+
+function primaryAvailability(primaryId: string | null) {
+  const s = primaryId ? findSessionAnywhere(primaryId)?.session : undefined;
+  const reason = s ? cam1Unavailable(s) : null;
+  return { primary_unavailable: Boolean(reason), primary_unavailable_reason: reason };
 }
 
 /** Phần item 02 của API-31 (02 §6.2 "API-31 thêm"). */

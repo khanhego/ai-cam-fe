@@ -3,7 +3,7 @@ import type { ReturnKind, Snapshot } from "@/shared/returns/types";
 
 import { api } from "./client";
 import type { CancelReason, ReturnSessionReview, ShopRef } from "./packages";
-import type { ShareBrief } from "./shares";
+import type { ShareBrief, ShareUnavailableReason } from "./shares";
 import type { SessionFlag } from "./station";
 import type { Page } from "./stations";
 
@@ -161,6 +161,12 @@ export type ClaimDetail = {
   removed_evidence: RemovedEvidence[];
   shares: ShareBrief[];
   shares_active_count: number;
+  /**
+   * G3-EV-4 (02 §6.2 API-132 bổ sung): Cam 1 của phiên chính không `READY` → D17 hiện Alert. Server cũ chưa trả → coi
+   * như `false`.
+   */
+  primary_unavailable?: boolean;
+  primary_unavailable_reason?: ShareUnavailableReason | null;
 };
 
 /** item 03 (v0.3 / v0.4): API-189 — đánh dấu / bỏ đánh dấu quét nhầm, xác nhận phiên hoàn thật. */

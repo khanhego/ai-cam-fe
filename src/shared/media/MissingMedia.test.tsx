@@ -84,7 +84,10 @@ test("D17: dòng bằng chứng chip 'Thiếu tệp', player khối xám; ShareL
   const grey = boxes.find((b) => b.closest("label")!.textContent!.includes("Clip thiếu tệp"))!;
   expect(grey).toBeDisabled();
   expect(grey).not.toBeChecked();
-  expect(within(dialog).queryByText(/khôi phục/)).toBeNull();
+  // G3-EV-4: phiên chính của KN-000142 là phiên thiếu tệp → Alert (API-164 `primary_unavailable`).
+  expect(
+    within(dialog).getByText("Phiên chính thiếu tệp Cam 1 — khôi phục từ sao lưu hoặc chọn phiên khác."),
+  ).toBeInTheDocument();
   const ok = boxes.find((b) => b !== grey)!;
   expect(ok).toBeChecked();
 });

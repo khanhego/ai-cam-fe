@@ -9,7 +9,7 @@ import { http, HttpResponse } from "msw";
 
 import { login } from "@/lib/api/auth";
 import { apiError } from "@/mocks/http";
-import { findPackage, mockClaims, P3_CLAIM_ID } from "@/mocks/returnsDb";
+import { findPackage, findSessionAnywhere, mockClaims, P3_CLAIM_ID } from "@/mocks/returnsDb";
 import { mockCloud, mockShares, toShare } from "@/mocks/sharesDb";
 import { renderApp } from "@/test/render";
 import { server } from "@/test/server";
@@ -262,4 +262,30 @@ test("G3-FE-8: D4 — phiên không có clip READY (thiếu tệp / đang xử l
   renderApp("/admin/packages/pkg-SPXTSTB000000001");
   await screen.findByRole("heading", { name: /Clip/ });
   expect(screen.queryByRole("button", { name: "Tạo link chia sẻ" })).toBeNull();
+});
+
+test("G3-EV-4: Cam 1 phiên chính thiếu tệp → Alert ở D17 (API-132) và ShareLinkDialog (API-164)", async () => {
+  const cam1 = findSessionAnywhere("ses-p3-a")!.session.clips.find((c) => c.camera_role === "CAM1")!;
+  cam1.status = "MISSING";
+  const text = "Phiên chính thiếu tệp Cam 1 — khôi phục từ sao lưu hoặc chọn phiên khác.";
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  const section = (await screen.findByRole("heading", { name: "Bằng chứng" })).closest("section")!;
+  expect(await within(section).findByText(text)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Tạo link chia sẻ" }));
+  const dialog = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  expect(await within(dialog).findByText(text)).toBeInTheDocument();
+});
+
+test("G3-EV-4: lý do khác (Clip lỗi) → Alert kèm nhãn lý do; Cam 1 READY → không Alert", async () => {
+  const cam1 = findSessionAnywhere("ses-p3-a")!.session.clips.find((c) => c.camera_role === "CAM1")!;
+  cam1.status = "FAILED";
+  const { dialog } = await openFromClaim();
+  expect(
+    within(dialog).getByText("Phiên chính chưa dùng được Cam 1 (Clip lỗi) — chọn phiên khác."),
+  ).toBeInTheDocument();
+  cleanup();
+  cam1.status = "READY";
+  const again = await openFromClaim();
+  expect(within(again.dialog).queryByText(/^Phiên chính (thiếu tệp|chưa dùng được) Cam 1/)).toBeNull();
 });

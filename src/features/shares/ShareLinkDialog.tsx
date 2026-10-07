@@ -260,6 +260,9 @@ function ShareFormBody({
         <ShopChip platform={src.platform} shop={src.shop_name ? { name: src.shop_name } : null} />
       </p>
       {cloudMissing && <Alert kind="warning">{COPY.cloudMissing}</Alert>}
+      {options.primary_unavailable && (
+        <Alert kind="warning">{COPY.primaryUnavailable(options.primary_unavailable_reason)}</Alert>
+      )}
       {options.review_pending_count > 0 && (
         <Alert kind="warning">{COPY.reviewPending(options.review_pending_count)}</Alert>
       )}

@@ -1,3 +1,4 @@
+import type { ShareUnavailableReason } from "@/lib/api/shares";
 import { fmtDate, fmtDuration, fmtShort } from "@/shared/format";
 
 /** Chữ ShareLinkDialog — nguyên văn 01 §10.5 "ShareLinkDialog" (DEC-17). */
@@ -23,6 +24,14 @@ export const COPY = {
       at ? `Clip đã bị xóa ngày ${fmtShort(at).slice(0, 5)}` : "Clip đã bị xóa",
     CLIP_MISSING: () => "Clip thiếu tệp",
   },
+  /**
+   * mới (G3-EV-4) — Cam 1 phiên chính không `READY` (API-132 / API-164 `primary_unavailable`); D17 + ShareLinkDialog.
+   * `CLIP_MISSING` (hoặc không rõ lý do) → chữ chính; lý do khác → kèm nhãn lý do như hàng xám của dialog.
+   */
+  primaryUnavailable: (reason: ShareUnavailableReason | null | undefined, at: string | null = null) =>
+    !reason || reason === "CLIP_MISSING"
+      ? "Phiên chính thiếu tệp Cam 1 — khôi phục từ sao lưu hoặc chọn phiên khác."
+      : `Phiên chính chưa dùng được Cam 1 (${COPY.unavailable[reason](at)}) — chọn phiên khác.`,
   layout: "Góc quay",
   snapshots: (n: number) => `Kèm ảnh (${n})`,
   recipient: "Gửi cho *",

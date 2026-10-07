@@ -10,6 +10,7 @@ import { SnapshotStrip } from "@/shared/media/SnapshotStrip";
 import { SESSION_TYPE } from "@/shared/returns/labels";
 import { Alert, Button, EmptyState, Icon, IconButton, StatusChip, useMenuButton } from "@/shared/ui";
 
+import { COPY as SHARE_COPY } from "../shares/copy";
 import { COPY } from "./copy";
 import { evidenceLabel, hasStatusChip, sessionChips, type SessionEvidence } from "./evidenceChips";
 import { useAuth } from "../auth/useAuth";
@@ -267,6 +268,10 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
         onAdd={add}
         onReview={openReview}
       />
+      {/* G3-EV-4: Cam 1 phiên chính không READY (API-132 `primary_unavailable`). */}
+      {claim.primary_unavailable && (
+        <Alert kind="warning">{SHARE_COPY.primaryUnavailable(claim.primary_unavailable_reason)}</Alert>
+      )}
       {claim.missing.length > 0 && (
         <ul className="flex flex-wrap gap-2">
           {claim.missing.map((m) => (
