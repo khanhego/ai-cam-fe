@@ -130,3 +130,45 @@ test("T-265: D4 clip Thiếu tệp — khối xám, không Xuất", async ({ pag
   await expect(clip.getByRole("img", { name: "Ảnh 1: Thiếu tệp ảnh" })).toBeVisible();
   await shot(page, "d4-missing");
 });
+
+test("UC-16 đủ vòng (T-262): D4 Tạo link chia sẻ theo phiên → tiến độ → sẵn sàng → sao chép → D21 thu hồi đúng link", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await login(page, "tst_cskh");
+  await page.evaluate(() => {
+    history.pushState({}, "", "/admin/packages/pkg-SPXTSTB000000001");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await page.getByRole("button", { name: "Tạo link chia sẻ" }).click();
+  const dialog = page.getByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  await expect(dialog.getByText("Kiện SPXTSTB000000001")).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: /^Đóng gói/ })).toBeChecked();
+  await dialog.getByLabel(/^Gửi cho/).fill("ĐVVC SPX – phiếu E2E 0001");
+  await dialog.getByRole("radio", { name: "3 ngày" }).check();
+  await dialog.getByRole("button", { name: "Tạo link" }).click();
+  await expect(dialog.getByRole("progressbar", { name: "Tiến độ tạo link" })).toBeVisible();
+  await expect(dialog.getByText("Link đã sẵn sàng")).toBeVisible({ timeout: 20_000 });
+  await expect(dialog.getByText("Gửi cho: ĐVVC SPX – phiếu E2E 0001")).toBeVisible();
+  await shot(page, "share-d4-ready");
+  await dialog.getByRole("button", { name: "Sao chép link" }).click();
+  await expect(page.getByRole("status").getByText("Đã sao chép link.")).toBeVisible();
+  const url = await page.evaluate(() => navigator.clipboard.readText());
+  expect(url).toMatch(/^https:\/\//);
+  await dialog.getByRole("button", { name: "Đóng" }).click();
+
+  await page.getByRole("link", { name: "Link chia sẻ" }).click();
+  const table = page.getByRole("table", { name: "Danh sách link chia sẻ" });
+  const row = table.getByRole("row").filter({ hasText: "ĐVVC SPX – phiếu E2E 0001" });
+  await expect(row).toContainText("SPXTSTB000000001");
+  await row.getByRole("button", { name: /^Thu hồi/ }).click();
+  await page
+    .getByRole("dialog", { name: "Thu hồi link?" })
+    .getByRole("button", { name: "Thu hồi link" })
+    .click();
+  await expect(page.getByText("Đã thu hồi link.")).toBeVisible();
+  await expect(row).toHaveCount(0);
+  await page.getByRole("tab", { name: /^Đã thu hồi/ }).click();
+  await expect(table.getByRole("row").filter({ hasText: "ĐVVC SPX – phiếu E2E 0001" })).toBeVisible();
+});
