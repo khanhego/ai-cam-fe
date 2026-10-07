@@ -7,6 +7,7 @@ import {
   findSessionAnywhere,
   mockClaims,
   P3_CLAIM_ID,
+  sessionReview,
   toClaimDetail,
   type MockClaim,
 } from "./returnsDb";
@@ -414,9 +415,12 @@ export function shareOptions(q: {
     : undefined;
   const opts = sessions.map((s) => ({
     ...optionOf(s, snapIds),
-    review_needed: claim ? Boolean(evOf(s.id)?.session.review_needed) : false,
-    // BR-39: phiên bị loại nhưng có trong bằng chứng do thêm tay (M16 — BE DEC-667) → không chọn sẵn.
-    excluded: claim ? Boolean(evOf(s.id)?.session.evidence_exclusion) : false,
+    review_needed: claim ? Boolean(evOf(s.id)?.session.review_needed) : sessionReview(s).review_needed,
+    // BR-39: phiên bị loại nhưng có trong bằng chứng do thêm tay (M16 — BE DEC-667) → không chọn sẵn. G3V-2 (BE DEC-933):
+    // nguồn phiên cũng vậy — phiên bị loại / "Cần soát" không chọn sẵn (API-160 sẽ 409 SESSION_EXCLUDED).
+    excluded: claim
+      ? Boolean(evOf(s.id)?.session.evidence_exclusion)
+      : Boolean(sessionReview(s).evidence_exclusion),
   }));
   const returns = opts
     .filter((o) => o.type === "RETURN" && o.selectable && !o.review_needed)

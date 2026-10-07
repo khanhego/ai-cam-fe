@@ -331,3 +331,31 @@ test("MSW API-160: nguồn phiên bị loại (quét nhầm) → 409 SESSION_EXC
     .catch((e: unknown) => e);
   expect(err).toMatchObject({ status: 409, code: "SESSION_EXCLUDED" });
 });
+
+test("G3V-2: MSW API-164 nguồn phiên — phiên bị loại / Cần soát → default_selected false; phiên thường → true", async () => {
+  const row = async (id: string) => (await sharesApi.options({ session_id: id })).sessions[0]!;
+  for (const id of ["ses-p3-c", "ses-p3-r", "ses-p3-m"]) expect((await row(id)).default_selected).toBe(false);
+  expect(await row("ses-p3-r")).toMatchObject({ review_needed: true, selectable: true });
+  expect(await row("ses-p3-m")).toMatchObject({ excluded: true, selectable: true });
+  expect((await row("ses-p3-a")).default_selected).toBe(true);
+});
+
+test("G3V-2: D4 — phiên bị loại / Cần soát → 'Tạo link chia sẻ' khóa + chữ ngắn; phiên thường → bấm được", async () => {
+  const later = (id: string) => (findSessionAnywhere(id)!.session.started_at = "2099-01-01T00:00:00Z");
+  later("ses-p3-m");
+  renderApp("/admin/packages/pkg-0000060");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Tạo link chia sẻ" })).toBeDisabled());
+  const btn = screen.getByRole("button", { name: "Tạo link chia sẻ" });
+  expect(btn).toHaveAccessibleDescription("Bị loại / cần soát — chưa gửi link được");
+  expect(btn).toHaveAttribute(
+    "title",
+    "Phiên mở hoàn bị loại khỏi bằng chứng (quét nhầm / cần soát) — xác nhận ở hồ sơ khiếu nại trước khi gửi link.",
+  );
+  cleanup();
+  findSessionAnywhere("ses-p3-a")!.session.started_at = "2099-02-01T00:00:00Z";
+  renderApp("/admin/packages/pkg-0000060");
+  const ok = await screen.findByRole("button", { name: "Tạo link chia sẻ" });
+  await new Promise((r) => setTimeout(r, 50));
+  expect(ok).toBeEnabled();
+  expect(screen.queryByText("Bị loại / cần soát — chưa gửi link được")).toBeNull();
+});

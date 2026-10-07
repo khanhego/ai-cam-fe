@@ -30,7 +30,7 @@ import { ReturnCaseSection } from "../returns/ReturnCaseSection";
 import { screenReady } from "../shell/nav";
 import { COPY as CLAIM_COPY } from "../claims/copy";
 import { COPY as RETURN_COPY } from "../returns/copy";
-import { COPY as SHARE_COPY } from "../shares/copy";
+import { SessionShareButton } from "../shares/SessionShareButton";
 import { ShareLinkDialog } from "../shares/ShareLinkDialog";
 import { SharesBlock } from "../shares/SharesBlock";
 import { COPY } from "./copy";
@@ -339,10 +339,13 @@ export default function PackageDetailPage() {
                   )}
                   {/* item 03 (01 §10.5 D4): mỗi phiên có clip → "Tạo link chia sẻ" (ShareLinkDialog với phiên đó).
                       G3-FE-8: chỉ khi có clip READY (clip Đang xử lý / lỗi / đã xóa / thiếu tệp không dựng được link). */}
+                  {/* G3V-2 (DEC-934): phiên bị loại / Cần soát → nút khóa + chữ ngắn (SessionShareButton). */}
                   {session.clips.some((c) => c.status === "READY") && hasPermission(me, "shares.create") && (
-                    <Button variant="tonal" icon="link" onClick={() => setSharing(session.id)}>
-                      {SHARE_COPY.open}
-                    </Button>
+                    <SessionShareButton
+                      key={session.id}
+                      session={session}
+                      onOpen={() => setSharing(session.id)}
+                    />
                   )}
                 </>
               }

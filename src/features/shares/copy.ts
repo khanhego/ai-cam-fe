@@ -34,6 +34,11 @@ export const COPY = {
       : `Phiên chính chưa dùng được Cam 1 (${COPY.unavailable[reason](at)}) — chọn phiên khác.`,
   /** mới (API-160 409 SESSION_EXCLUDED — dùng khi server không có `message`). */
   sessionExcluded: "Phiên này đã bị loại khỏi bằng chứng (quét nhầm / hủy) — không tạo link được.",
+  /** mới (G3V-2) — D4: tooltip nút "Tạo link chia sẻ" khi phiên bị loại / Cần soát chưa xác nhận. */
+  heldBack:
+    "Phiên mở hoàn bị loại khỏi bằng chứng (quét nhầm / cần soát) — xác nhận ở hồ sơ khiếu nại trước khi gửi link.",
+  /** mới (G3V-2) — D4: chữ ngắn cạnh nút bị khóa. */
+  heldBackShort: "Bị loại / cần soát — chưa gửi link được",
   layout: "Góc quay",
   snapshots: (n: number) => `Kèm ảnh (${n})`,
   recipient: "Gửi cho *",
