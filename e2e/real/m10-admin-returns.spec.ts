@@ -93,21 +93,23 @@ test("TC-07.37 / 07.30 / 07.32 (seed): D14 tab có số → D3 tra mã chiều v
 }) => {
   await loginAdmin(page, "tst_cskh");
   await page.getByRole("link", { name: /Hàng hoàn/ }).click();
-  await expect(page.getByRole("tab", { name: "Đang về 3" })).toHaveAttribute("aria-selected", "true");
+  // item 03 (T-262): seed Phase 3 (`seed_phase3.py` — yêu cầu trả TikTok / Shopee B) cộng thêm hồ sơ → số tab theo dữ liệu, chỉ
+  // kiểm có số; dòng seed Phase 2 vẫn phải có.
+  await expect(page.getByRole("tab", { name: /^Đang về \d+$/ })).toHaveAttribute("aria-selected", "true");
   const table = page.getByRole("table", { name: "Danh sách hồ sơ hàng hoàn" });
   await expect(table.getByRole("row").filter({ hasText: "Chiều về SPXRTTST000047" })).toContainText(
     "(2 kiện)",
   );
   await expect(table.getByRole("row").filter({ hasText: "Chiều về SPXRTTST000048" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Quá hạn 1" }).click();
+  await page.getByRole("tab", { name: /^Quá hạn \d+$/ }).click();
   await expect(table.getByRole("row").filter({ hasText: "SPXTST0000049" })).toContainText("8 ngày");
-  await page.getByRole("tab", { name: "Chỉ hoàn tiền 1" }).click();
+  await page.getByRole("tab", { name: /^Chỉ hoàn tiền \d+$/ }).click();
   const refund = table.getByRole("row").filter({ hasText: "2410TST00053" });
   await expect(refund).toContainText("Thiếu hàng");
   // CSKH có claims.manage → nút tạo hồ sơ ở tab Chỉ hoàn tiền; không có returns.link → không "Gắn đơn".
   await expect(refund.getByRole("button", { name: "Tạo hồ sơ khiếu nại" })).toBeVisible();
-  await page.getByRole("tab", { name: "Chưa xác định 1" }).click();
+  await page.getByRole("tab", { name: /^Chưa xác định \d+$/ }).click();
   const tam = table.getByRole("row").filter({ hasText: /TAM-\d{6}/ });
   await expect(tam).toBeVisible();
   await expect(tam.getByRole("button", { name: "Gắn đơn" })).toHaveCount(0);

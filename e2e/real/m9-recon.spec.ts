@@ -60,7 +60,8 @@ async function connectMockShop(request: APIRequestContext, admin: Record<string,
   });
   // item 03 (02 §6.2 API-72, T-207): callback về D7 mới; BE cũ (trước T-207) còn trả đường `/shopee`.
   expect(cb.headers().location).toMatch(
-    /^\/admin\/settings\/(platforms\?platform=shopee&result=connected&count=1|shopee\?result=connected)$/,
+    // T-262: Shopee mock nhiều shop (`MOCK_SHOPEE_SHOP_IDS`) — một lần ủy quyền có thể trả > 1 shop.
+    /^\/admin\/settings\/(platforms\?platform=shopee&result=connected&count=\d+|shopee\?result=connected)$/,
   );
 }
 
