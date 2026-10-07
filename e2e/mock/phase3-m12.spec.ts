@@ -46,7 +46,10 @@ test("D17 (T-260 / T-264): đánh dấu quét nhầm phiên chính, bỏ bằng 
   await mark.getByRole("radio", { name: "Quét nhầm kiện khác" }).check();
   await mark.getByLabel(/^Ghi chú/).fill("Video là kiện bên cạnh");
   await mark.getByRole("button", { name: "Đánh dấu" }).click();
-  await expect(page.getByText("Đã đánh dấu phiên quét nhầm.")).toBeVisible();
+  // T-266 (DEC-531): phiên đang có trong 2 link còn hiệu lực → AffectedSharesDialog thay Toast.
+  const affected = page.getByRole("dialog", { name: "Phiên này đang có trong 2 link chia sẻ còn hiệu lực" });
+  await expect(affected).toBeVisible();
+  await affected.getByRole("button", { name: "Đóng" }).click();
   await expect(page.getByText("Bằng chứng đã bỏ (1)")).toBeVisible();
 
   await page.getByRole("button", { name: /^Bỏ Phiên đóng gói / }).click();
