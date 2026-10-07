@@ -44,6 +44,8 @@ export const routes: RouteObject[] = [
       { path: "recon", Component: lazy(() => import("@/features/reconciliation/ReconPage")) },
       { path: "claims", Component: lazy(() => import("@/features/claims/ClaimsPage")) },
       { path: "claims/:id", Component: lazy(() => import("@/features/claims/ClaimDetailPage")) },
+      // item 03: D20 Báo cáo (T-254; tab Năng suất kiểm vai trong trang — 02b-admin §2).
+      { path: "reports", Component: lazy(() => import("@/features/reports/ReportsPage")) },
       {
         path: "approvals",
         element: (

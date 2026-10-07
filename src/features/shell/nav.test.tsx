@@ -111,7 +111,9 @@ test("item 03 (FR-10.02): mục mới theo vai, thứ tự 01 §10.3; ẩn tới
   expect(labels("CSKH", all)).not.toContain("Sao lưu");
   expect(labels("SUPERVISOR", all)).not.toContain("Thông báo");
   // Màn chưa xây (mặc định M11) → không có mục; "Kết nối sàn" có ngay (đổi tên D7).
-  expect(labels("ADMIN")).not.toContain("Báo cáo");
+  expect(labels("ADMIN")).not.toContain("Link chia sẻ");
+  // M14 (T-254): D20 đã có màn.
+  expect(labels("CSKH")).toContain("Báo cáo");
   expect(labels("ADMIN")).toContain("Kết nối sàn");
   const icons = Object.fromEntries(navFor("ADMIN", all).map((i) => [i.label, i.icon]));
   expect(icons).toMatchObject({
