@@ -58,7 +58,10 @@ async function connectMockShop(request: APIRequestContext, admin: Record<string,
     headers: { Cookie: `aicam_shopee_state=${state}` },
     maxRedirects: 0,
   });
-  expect(cb.headers().location).toBe("/admin/settings/shopee?result=connected");
+  // item 03 (02 §6.2 API-72, T-207): callback về D7 mới; BE cũ (trước T-207) còn trả đường `/shopee`.
+  expect(cb.headers().location).toMatch(
+    /^\/admin\/settings\/(platforms\?platform=shopee&result=connected&count=1|shopee\?result=connected)$/,
+  );
 }
 
 test.skip(

@@ -92,8 +92,8 @@ export const routes: RouteObject[] = [
           </RequireRole>
         ),
         children: [
-          // D7 Kết nối sàn (T-253 thay `ShopeePage` bằng `PlatformsPage`). D22 / D23 thêm route ở T-258 / T-259.
-          { path: "platforms", Component: lazy(() => import("@/features/platforms/ShopeePage")) },
+          // D7 Kết nối sàn (T-253). D22 / D23 thêm route ở T-258 / T-259.
+          { path: "platforms", Component: lazy(() => import("@/features/platforms/PlatformsPage")) },
           { path: "shopee", element: <LegacyShopeeRedirect /> },
           { path: "storage", Component: lazy(() => import("@/features/settings/StoragePage")) },
           { path: "users", Component: lazy(() => import("@/features/users/UsersPage")) },

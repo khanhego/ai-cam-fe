@@ -1,4 +1,4 @@
-/** D7 Kết nối Shopee + D8 Lưu trữ video trên MSW (02b-admin §12). */
+/** D7 Kết nối sàn + D8 Lưu trữ video trên MSW (02b-admin §12). */
 import { expect, test } from "@playwright/test";
 
 test("TC-02.09 / TC-05.01 (UI, mock): D8 chặn clip < video thô, lưu được; D7 hiện shop + đồng bộ ngay", async ({

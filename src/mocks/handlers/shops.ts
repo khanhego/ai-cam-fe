@@ -79,15 +79,6 @@ export function resetMockShops() {
 }
 resetMockShops();
 
-/** Bộ dữ liệu một shop Shopee của Phase 1–2 (test D7 cũ — tới khi T-253 thay `ShopeePage`). */
-export function seedLegacySingleShop() {
-  mockShops.splice(
-    0,
-    mockShops.length,
-    shopOf({ id: "shop-1", platform: "SHOPEE", name: "Shop TST" }, { today_synced_orders: 140 }),
-  );
-}
-
 /** `platforms[]` của API-70 (02 §6.2): `configured` = cờ bật **và** đủ khóa ứng dụng. */
 export function platformConfigs(): PlatformConfig[] {
   return [
