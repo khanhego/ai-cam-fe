@@ -337,8 +337,9 @@ export default function PackageDetailPage() {
                       {C.export}
                     </Button>
                   )}
-                  {/* item 03 (01 §10.5 D4): mỗi phiên có clip → "Tạo link chia sẻ" (ShareLinkDialog với phiên đó). */}
-                  {session.clips.length > 0 && hasPermission(me, "shares.create") && (
+                  {/* item 03 (01 §10.5 D4): mỗi phiên có clip → "Tạo link chia sẻ" (ShareLinkDialog với phiên đó).
+                      G3-FE-8: chỉ khi có clip READY (clip Đang xử lý / lỗi / đã xóa / thiếu tệp không dựng được link). */}
+                  {session.clips.some((c) => c.status === "READY") && hasPermission(me, "shares.create") && (
                     <Button variant="tonal" icon="link" onClick={() => setSharing(session.id)}>
                       {SHARE_COPY.open}
                     </Button>

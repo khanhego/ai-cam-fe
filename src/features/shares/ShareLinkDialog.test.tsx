@@ -9,7 +9,7 @@ import { http, HttpResponse } from "msw";
 
 import { login } from "@/lib/api/auth";
 import { apiError } from "@/mocks/http";
-import { mockClaims, P3_CLAIM_ID } from "@/mocks/returnsDb";
+import { findPackage, mockClaims, P3_CLAIM_ID } from "@/mocks/returnsDb";
 import { mockCloud, mockShares, toShare } from "@/mocks/sharesDb";
 import { renderApp } from "@/test/render";
 import { server } from "@/test/server";
@@ -254,4 +254,12 @@ test("G3-FE-5: phiên bị loại (BR-39) thêm tay → chip 'Bị loại khỏi
     expect(box).not.toBeChecked();
     expect(box).toBeEnabled();
   }
+});
+
+test("G3-FE-8: D4 — phiên không có clip READY (thiếu tệp / đang xử lý) → không có 'Tạo link chia sẻ'", async () => {
+  const pkg = findPackage("pkg-SPXTSTB000000001")!;
+  for (const s of pkg.sessions) s.clips.forEach((c, i) => (c.status = i === 0 ? "MISSING" : "PENDING"));
+  renderApp("/admin/packages/pkg-SPXTSTB000000001");
+  await screen.findByRole("heading", { name: /Clip/ });
+  expect(screen.queryByRole("button", { name: "Tạo link chia sẻ" })).toBeNull();
 });
