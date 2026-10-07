@@ -8,7 +8,7 @@ import { MEDIA_MISSING_LABEL, SESSION_FLAG, SESSION_STATUS, type SessionStatus }
 import { ClipPlayer } from "@/shared/media/ClipPlayer";
 import { SnapshotStrip } from "@/shared/media/SnapshotStrip";
 import { SESSION_TYPE } from "@/shared/returns/labels";
-import { Alert, Button, EmptyState, Icon, IconButton, StatusChip } from "@/shared/ui";
+import { Alert, Button, EmptyState, Icon, IconButton, StatusChip, useMenuButton } from "@/shared/ui";
 
 import { COPY } from "./copy";
 import { evidenceLabel, hasStatusChip, sessionChips, type SessionEvidence } from "./evidenceChips";
@@ -65,7 +65,9 @@ function SessionRow({
   onRemove: () => void;
   onMarkWrongScan: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  // G3-FE-6: menu ⋮ theo mẫu menu button chung (Esc / bấm ra ngoài đóng, focus vào mục — DEC-904).
+  const { open, setOpen, menuRef, triggerRef, wrapRef, onMenuKeyDown, onTriggerKeyDown } =
+    useMenuButton<HTMLSpanElement>();
   const s = ev.session;
   const label = sessionLabel(s);
   const duration = s.ended_at != null ? (Date.parse(s.ended_at) - Date.parse(s.started_at)) / 1000 : null;
@@ -128,28 +130,35 @@ function SessionRow({
           </Button>
         )}
         {editable && canMarkWrongScan(ev) && (
-          <span className="relative">
+          <span ref={wrapRef} className="relative">
             <IconButton
+              ref={triggerRef}
               icon="more_vert"
               label={E.rowMenu(label)}
               aria-haspopup="menu"
-              aria-expanded={menuOpen}
+              aria-expanded={open}
+              aria-controls={open ? `ev-menu-${ev.id}` : undefined}
               disabled={busy}
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={() => setOpen((v) => !v)}
+              onKeyDown={onTriggerKeyDown}
             />
-            {menuOpen && (
+            {open && (
               <ul
+                id={`ev-menu-${ev.id}`}
+                ref={menuRef}
                 role="menu"
                 aria-label={E.rowMenu(label)}
+                onKeyDown={onMenuKeyDown}
                 className="absolute right-0 z-10 mt-1 min-w-48 rounded-md bg-surface-container py-1 shadow-elevation-2"
               >
                 <li role="none">
                   <button
                     type="button"
                     role="menuitem"
+                    tabIndex={-1}
                     className="state-layer w-full px-4 py-2 text-left text-body-md text-on-surface"
                     onClick={() => {
-                      setMenuOpen(false);
+                      setOpen(false);
                       onMarkWrongScan();
                     }}
                   >

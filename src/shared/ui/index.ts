@@ -6,6 +6,7 @@ export { Skeleton } from "./Skeleton";
 export { Toaster } from "./Toast";
 export { toast, TOAST_MS, useToastStore } from "./toastStore";
 export { TrackingNumber } from "./TrackingNumber";
+export { useMenuButton } from "./useMenuButton";
 export {
   Alert,
   AuthCard,

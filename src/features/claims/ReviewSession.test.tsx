@@ -332,3 +332,21 @@ test("TC-08.66: OVERRIDE (ADMIN): Dialog chữ 01 v0.5 → Toast 'Đã xác nh�
     note: "Xem video: kiện hoàn thật",
   });
 });
+
+test("G3-FE-6: menu ⋮ — mở thì focus mục đầu; Esc đóng + trả focus nút; bấm ra ngoài đóng", async () => {
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  await screen.findByRole("heading", { name: "Bằng chứng" });
+  const trigger = screen.getByRole("button", { name: `Thao tác Phiên mở hoàn ${yesterdayAt("08:51")}` });
+  await user.click(trigger);
+  const item = screen.getByRole("menuitem", { name: "Đánh dấu quét nhầm" });
+  await waitFor(() => expect(item).toHaveFocus());
+  expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(trigger).toHaveFocus();
+  await user.click(trigger);
+  expect(screen.getByRole("menu")).toBeInTheDocument();
+  await user.click(screen.getByRole("heading", { name: "Bằng chứng" }));
+  expect(screen.queryByRole("menu")).toBeNull();
+});

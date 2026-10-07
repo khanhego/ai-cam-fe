@@ -108,6 +108,7 @@ export function IconButton({
   icon: string;
   label: string;
   variant?: "standard" | "tonal" | "filled" | "danger";
+  ref?: Ref<HTMLButtonElement>;
 }) {
   const tone = {
     standard: "text-on-surface-variant",
