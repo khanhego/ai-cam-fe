@@ -7,6 +7,7 @@ import type { ClaimType } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
 import { packagesApi, type PackageDetail, type PackageSession } from "@/lib/api/packages";
 import { settingsApi } from "@/lib/api/settings";
+import { ShopChip } from "@/shared/filters/ShopChip";
 import { fmtDuration, fmtShort } from "@/shared/format";
 import { platformStatus, SESSION_STATUS, SOURCE, WAREHOUSE_STATUS } from "@/shared/labels";
 import { RECON_SEVERITY, RECON_STATUS, reconRuleLabel, SESSION_TYPE } from "@/shared/returns/labels";
@@ -23,12 +24,13 @@ import { ReturnCaseSection } from "../returns/ReturnCaseSection";
 import { screenReady } from "../shell/nav";
 import { COPY as CLAIM_COPY } from "../claims/copy";
 import { COPY as RETURN_COPY } from "../returns/copy";
+import { COPY as SHARE_COPY } from "../shares/copy";
+import { ShareLinkDialog } from "../shares/ShareLinkDialog";
 import { COPY } from "./copy";
 import { ExportDialog } from "./ExportDialog";
 import { exportLayouts } from "./exportLayouts";
 import { SessionPanel } from "./SessionPanel";
 import { timelineText } from "./timeline";
-import { ShopChip } from "@/shared/filters/ShopChip";
 
 const C = COPY.detail;
 const hasPending = (p: PackageDetail | undefined) =>
@@ -108,6 +110,7 @@ export default function PackageDetailPage() {
   });
   const [picked, setPicked] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [sharing, setSharing] = useState<string | null>(null);
   const [creatingClaim, setCreatingClaim] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [linking, setLinking] = useState<string | null>(null);
@@ -317,11 +320,19 @@ export default function PackageDetailPage() {
               canRebuild={me.role === "ADMIN" || me.role === "SUPERVISOR"}
               onSnapshotExpired={onSnapshotExpired}
               actions={
-                exportLayouts(session).length > 0 && (
-                  <Button icon="ios_share" onClick={() => setExporting(true)}>
-                    {C.export}
-                  </Button>
-                )
+                <>
+                  {exportLayouts(session).length > 0 && (
+                    <Button icon="ios_share" onClick={() => setExporting(true)}>
+                      {C.export}
+                    </Button>
+                  )}
+                  {/* item 03 (01 §10.5 D4): mỗi phiên có clip → "Tạo link chia sẻ" (ShareLinkDialog với phiên đó). */}
+                  {session.clips.length > 0 && hasPermission(me, "shares.create") && (
+                    <Button variant="tonal" icon="link" onClick={() => setSharing(session.id)}>
+                      {SHARE_COPY.open}
+                    </Button>
+                  )}
+                </>
               }
             />
           ) : (
@@ -341,6 +352,9 @@ export default function PackageDetailPage() {
       </div>
 
       {exporting && session && <ExportDialog session={session} onClose={() => setExporting(false)} />}
+      {sharing && (
+        <ShareLinkDialog source={{ type: "SESSION", sessionId: sharing }} onClose={() => setSharing(null)} />
+      )}
       {adjusting && (
         <Dialog open title={RECON_COPY.adjust.title} onClose={() => setAdjusting(false)}>
           <AdjustStatusForm

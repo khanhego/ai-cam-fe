@@ -1,7 +1,8 @@
+import type { ClaimEvidence } from "@/lib/api/claims";
 import type { Role } from "@/lib/api/session";
 import type { Share, ShareBrief, ShareListStatus, ShareOptionSession, ShareOptions } from "@/lib/api/shares";
 
-import { findPackage, findSessionAnywhere, mockClaims, type MockClaim } from "./returnsDb";
+import { findPackage, findSessionAnywhere, mockClaims, toClaimDetail, type MockClaim } from "./returnsDb";
 import type { MockPackage, MockSession } from "./packagesDb";
 import { mockFlag, mockParam } from "./shopsDb";
 import { shopOfPackage } from "./packagesDb";
@@ -267,11 +268,24 @@ export function shareOptions(q: {
     sessions = [found.session];
   }
   if (!pkg) return null;
-  const opts = sessions.map(optionOf);
+  // item 03 (T-256): nguồn CLAIM lấy phiên chính / phiên trước / "Cần soát" theo API-132 của hồ sơ (một luật với D17).
+  const detail = claim ? toClaimDetail(claim) : null;
+  const evOf = (id: string) =>
+    detail?.evidence.find((e) => e.kind === "SESSION" && e.session.id === id) as
+      Extract<ClaimEvidence, { kind: "SESSION" }> | undefined;
+  const opts = sessions.map((s) => ({
+    ...optionOf(s),
+    review_needed: claim ? Boolean(evOf(s.id)?.session.review_needed) : false,
+  }));
   const returns = opts
-    .filter((o) => o.type === "RETURN" && o.selectable)
+    .filter((o) => o.type === "RETURN" && o.selectable && !o.review_needed)
     .sort((a, b) => a.started_at.localeCompare(b.started_at));
-  const primaryId = returns[0]?.id ?? opts.find((o) => o.type === "PACK")?.id ?? null;
+  const primaryId = detail
+    ? ((
+        detail.evidence.find((e) => e.kind === "SESSION" && e.primary) as
+          { session?: { id: string } } | undefined
+      )?.session?.id ?? null)
+    : (returns[0]?.id ?? opts.find((o) => o.type === "PACK")?.id ?? null);
   const ordered = [...opts].sort(
     (a, b) =>
       Number(b.id === primaryId) - Number(a.id === primaryId) || a.started_at.localeCompare(b.started_at),
@@ -287,10 +301,15 @@ export function shareOptions(q: {
     sessions: ordered.map((o) => {
       const selected = o.selectable && !o.review_needed && (claim ? picked < 4 : true);
       if (selected) picked += 1;
-      return { ...o, primary: o.id === primaryId, prior_return: false, default_selected: selected };
+      return {
+        ...o,
+        primary: o.id === primaryId,
+        prior_return: Boolean(evOf(o.id)?.prior_return),
+        default_selected: selected,
+      };
     }),
     snapshot_count: Math.min(20, snapshotCount),
-    review_pending_count: 0,
+    review_pending_count: detail ? detail.review_sessions.length : 0,
     limits: { max_sessions: 4, max_total_seconds: 1800, max_snapshots: 20 },
     default_expires_days: 7,
   };

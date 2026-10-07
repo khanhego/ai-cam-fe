@@ -10,6 +10,7 @@ import { playApprovalChime } from "../approvals/chime";
 import { canApprove, navFor, type NavItem } from "./nav";
 import { NavBadge } from "./NavBadge";
 import { currentTheme, setTheme } from "./theme";
+import { ShareCompletionWatcher } from "../shares/ShareCompletionWatcher";
 import { useDashboardSocket } from "./useDashboardSocket";
 
 function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
@@ -118,6 +119,8 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-surface text-on-surface">
+      {/* Link chia sẻ đang tạo khi đóng dialog → Toast khi xong (DEC-487). */}
+      <ShareCompletionWatcher />
       <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-outline-variant bg-surface px-2 sm:px-4">
         <IconButton icon="menu" label="Mở menu" className="lg:hidden" onClick={() => setDrawerOpen(true)} />
         <span className="flex items-center gap-2 text-title-lg text-primary">
