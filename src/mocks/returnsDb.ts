@@ -458,6 +458,26 @@ export function resetMockReturns() {
       reported_at: iso(now - 18 * 3600_000),
       expected_since: null,
     }),
+    // item 03 T-236 (02a §5.1 #15, BR-29 / EX-R20): mã chiều về `RTTST-DUP-1` có ở 2 hồ sơ mở của 2 shop (đơn
+    // `2410DUP00001` Shopee "TST B" + TikTok "TST TikTok A") → bàn hoàn `RETURN_MULTIPLE_ORDERS`, R3 2 dòng.
+    caseSeed(62, [p("SPXTSTB000000021")], {
+      kind: "BUYER_RETURN",
+      status: "EXPECTED",
+      platform_return_sn: "2410RTDUP062",
+      platform_status: "ACCEPTED",
+      return_tracking_number: "RTTST-DUP-1",
+      reason: "CHANGE_MIND",
+      reason_label: "Đổi ý",
+    }),
+    caseSeed(63, [p("TTTST0000000021")], {
+      kind: "BUYER_RETURN",
+      status: "EXPECTED",
+      platform_return_sn: "TTRT000000063",
+      platform_status: "RETURN_OR_REFUND_REQUEST_PENDING",
+      return_tracking_number: "RTTST-DUP-1",
+      reason: "WRONG_ITEM",
+      reason_label: "Giao sai hàng",
+    }),
   );
   // Phiên RETURN đã đóng của hồ sơ đã nhận + hồ sơ khiếu nại tự tạo.
   const received: [string, string, number, string][] = [

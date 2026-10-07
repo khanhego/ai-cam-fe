@@ -564,6 +564,13 @@ function applyResult(result: ScanResult) {
       alertTimer = setTimeout(() => set({ alert: null, lookup: { query } }), MULTIPLE_TO_LOOKUP_MS);
       return;
     }
+    case "RETURN_MULTIPLE_ORDERS": {
+      // item 03 (BR-29, EX-R20; DEC-510): mã có ở ≥ 2 đơn khác shop → R4 vàng 1,5 giây rồi mở R3 với `data.code`.
+      set({ alert, lookup: null });
+      const query = String(alert.data.code ?? get().lastCode ?? "");
+      alertTimer = setTimeout(() => set({ alert: null, lookup: { query } }), MULTIPLE_TO_LOOKUP_MS);
+      return;
+    }
     case "RETURN_NOT_FOUND":
       // Có 2 nút hành động → không tự đóng (01 §10.4 R4).
       set({ alert, lookup: null });

@@ -7,7 +7,7 @@ import { isApiError, type ApiError } from "@/lib/api/errors";
 import { stationApi, type ReturnMultipleOrdersData } from "@/lib/api/station";
 
 import { stationJobs } from "./handlers/station";
-import { DUP_ORDER_SN, SELF_CANCEL_MS, stationSim } from "./stationSim";
+import { DUP_ORDER_SN, DUP_RETURN_CODE, SELF_CANCEL_MS, stationSim } from "./stationSim";
 
 let seq = 0;
 const scan = (code: string) => stationApi.scan(code, `p3-scan-${++seq}`);
@@ -143,6 +143,22 @@ describe("chế độ nhận hàng hoàn", () => {
       { platform: "TIKTOK", shop_name: "TST TikTok A (mock)", platform_order_sn: DUP_ORDER_SN },
     ]);
     expect(r.state.session).toBeNull();
+  });
+
+  test("T-236 (02a §5.1 #15): mã chiều về RTTST-DUP-1 ở 2 hồ sơ mở khác shop → RETURN_MULTIPLE_ORDERS; API-104 2 dòng có shop", async () => {
+    await stationApi.setOperator("Lan QA");
+    const r = await scan(DUP_RETURN_CODE);
+    expect(r.alert).toMatchObject({ code: "RETURN_MULTIPLE_ORDERS", data: { code: DUP_RETURN_CODE } });
+    expect((r.alert!.data as ReturnMultipleOrdersData).orders).toEqual([
+      { platform: "SHOPEE", shop_name: "TST B", platform_order_sn: DUP_ORDER_SN },
+      { platform: "TIKTOK", shop_name: "TST TikTok A (mock)", platform_order_sn: DUP_ORDER_SN },
+    ]);
+    expect(r.state.session).toBeNull();
+    const res = await stationApi.returnLookup(DUP_RETURN_CODE);
+    expect(res.items.map((i) => [i.tracking_number, i.platform, i.shop_name]).sort()).toEqual([
+      ["SPXTSTB000000021", "SHOPEE", "TST B"],
+      ["TTTST0000000021", "TIKTOK", "TST TikTok A (mock)"],
+    ]);
   });
 
   test("API-104: item có platform + shop_name", async () => {

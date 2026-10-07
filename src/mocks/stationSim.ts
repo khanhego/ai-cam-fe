@@ -2,6 +2,7 @@ import { ACTIONS_BY_TYPE, type ApprovalAction, type ApprovalContext } from "@/li
 import type {
   CancelReason,
   ClosedSession,
+  MatchedOrder,
   OpenReturnSessionBody,
   RecentSession,
   ReturnLookup,
@@ -90,6 +91,29 @@ const DUP_ORDERS = [
   { platform: SHOP.B.platform, shop_name: SHOP.B.name, platform_order_sn: DUP_ORDER_SN },
   { platform: SHOP.TT_A.platform, shop_name: SHOP.TT_A.name, platform_order_sn: DUP_ORDER_SN },
 ];
+
+/** Mã chiều về có ở 2 hồ sơ mở của 2 shop (02a §5.1 #15, 02b-station v0.3 — T-236). */
+export const DUP_RETURN_CODE = "RTTST-DUP-1";
+
+/**
+ * item 03 (BR-29, EX-R20): mã quét ở bàn hoàn khớp ≥ 2 đơn của các shop khác nhau → `RETURN_MULTIPLE_ORDERS` (FE mở R3
+ * với `data.code`). Mã đơn `2410DUP00001`, hoặc mã chiều về có ở ≥ 2 hồ sơ mở khác shop (như BE `resolve_code` §5.1 #15).
+ */
+function ambiguousOrders(code: string): MatchedOrder[] | null {
+  if (code === DUP_ORDER_SN) return DUP_ORDERS;
+  const cases = mockReturnCases.filter(
+    (c) => isCaseOpen(c) && c.return_tracking_number?.toUpperCase() === code,
+  );
+  if (cases.length < 2) return null;
+  const orders = cases.flatMap((c) => {
+    const p = findPackage(c.package_ids[0] ?? "");
+    const shop = p ? shopOfPackage(p) : null;
+    return p?.order && shop
+      ? [{ platform: shop.platform, shop_name: shop.name, platform_order_sn: p.order.platform_order_sn }]
+      : [];
+  });
+  return new Set(orders.map((o) => `${o.platform}:${o.shop_name}`)).size >= 2 ? orders : null;
+}
 
 /** Trường mặc định của phiên PACK (02 §6.2 API-10: phiên PACK có `return_case`, `inspection`… = null). */
 const PACK_FIELDS = {
@@ -691,8 +715,9 @@ export class StationSim {
         tracking_number: pkg.tracking_number,
         order: pkg.order
           ? {
-              platform: SHOP.A.platform,
-              shop_name: SHOP.A.name,
+              // Shop của đơn (dữ liệu Phase 1 / 2 thuộc "TST Shop A"; Phase 3 theo `shop` của kiện — T-236).
+              platform: (shopOfPackage(pkg) ?? SHOP.A).platform,
+              shop_name: (shopOfPackage(pkg) ?? SHOP.A).name,
               platform_order_sn: pkg.order.platform_order_sn,
               buyer_note: pkg.order.buyer_note,
               merged_orders: [],
@@ -768,12 +793,13 @@ export class StationSim {
       return this.alert("OPERATOR_REQUIRED", "Nhập tên người kiểm trước khi nhận hàng hoàn.", {
         mode: "RETURN",
       });
-    // item 03 (BR-29, EX-R20): mã đơn sàn khớp ≥ 2 đơn khác shop → không mở phiên, FE mở R3 với `data.code`.
-    if (code === DUP_ORDER_SN)
+    // item 03 (BR-29, EX-R20): mã đơn sàn / mã chiều về khớp ≥ 2 đơn khác shop → không mở phiên, FE mở R3 với `data.code`.
+    const dup = ambiguousOrders(code);
+    if (dup)
       return this.alert(
         "RETURN_MULTIPLE_ORDERS",
-        `Mã ${code} có ở ${DUP_ORDERS.length} đơn của các shop khác nhau. Chọn đúng đơn.`,
-        { code, orders: DUP_ORDERS },
+        `Mã ${code} có ở ${dup.length} đơn của các shop khác nhau. Chọn đúng đơn.`,
+        { code, orders: dup },
       );
     const found = resolveReturnCode(code);
     if (found.kind === "NOT_FOUND")
