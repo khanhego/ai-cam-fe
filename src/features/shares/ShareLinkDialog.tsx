@@ -381,7 +381,8 @@ function ShareProgress({
     onError: (e) => toast(isApiError(e) ? e.message : COPY.loadError),
   });
   const s = share.data;
-  const status = s?.status ?? "CREATING";
+  // G3-FE-4: lỗi API-162 khi chưa có dữ liệu → chỉ Alert tải lỗi (không hiện khối "Đang tạo").
+  const status = s?.status ?? (share.isError ? null : "CREATING");
   // Xong / lỗi → làm mới khối Link chia sẻ ở D4 / D17 và D21.
   const settled = s && status !== "CREATING" ? shareId : null;
   useEffect(() => {
@@ -389,7 +390,8 @@ function ShareProgress({
       for (const k of [["shares"], ["claim"], ["package"]]) void qc.invalidateQueries({ queryKey: k });
   }, [settled, qc]);
   const close = () => {
-    if (status === "CREATING") addBackground(shareId, body.recipient);
+    // Link đã tạo (202) — chưa đọc được trạng thái cũng theo dõi nền (Watcher bỏ khi API-162 trả 4xx — G3-FE-2).
+    if (!s || status === "CREATING") addBackground(shareId, body.recipient);
     onClose();
   };
   const copy = async () => {
@@ -447,7 +449,7 @@ function ShareProgress({
           <p>{COPY.sentTo(s.recipient)}</p>
         </div>
       )}
-      {(status === "FAILED" || (status !== "CREATING" && status !== "ACTIVE")) && (
+      {status === "FAILED" && (
         <Alert
           kind="error"
           action={
@@ -458,6 +460,10 @@ function ShareProgress({
         >
           {s?.error?.code === "UPLOAD_FAILED" ? COPY.uploadFailed : COPY.renderFailed}
         </Alert>
+      )}
+      {/* G3-FE-1: link bị thu hồi / hết hạn (vd. thu hồi ở D21 khi dialog còn mở) — không phải lỗi dựng, không "Thử lại". */}
+      {(status === "REVOKED" || status === "EXPIRED") && (
+        <Alert kind="warning">{status === "REVOKED" ? COPY.revoked : COPY.expired}</Alert>
       )}
       {share.isError && !s && (
         <Alert

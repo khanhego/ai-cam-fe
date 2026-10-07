@@ -3,14 +3,14 @@
  * validate, tạo → tiến độ (poll API-162) → link + sao chép; lỗi tải lên + Thử lại; chạy nền + Toast; kho chưa cấu hình;
  * 409 SESSION_CLIP_UNAVAILABLE; nguồn phiên ở D4; Alert "Cần soát" / "Chưa chọn video mở hộp", chip "Cần soát".
  */
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http } from "msw";
+import { http, HttpResponse } from "msw";
 
 import { login } from "@/lib/api/auth";
 import { apiError } from "@/mocks/http";
 import { P3_CLAIM_ID } from "@/mocks/returnsDb";
-import { mockCloud, mockShares } from "@/mocks/sharesDb";
+import { mockCloud, mockShares, toShare } from "@/mocks/sharesDb";
 import { renderApp } from "@/test/render";
 import { server } from "@/test/server";
 
@@ -176,4 +176,46 @@ test("API-164 404 → Toast, đóng dialog", async () => {
   await user.click(await screen.findByRole("button", { name: "Tạo link chia sẻ" }));
   expect(await screen.findByText("Không tìm thấy hồ sơ / phiên.")).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+async function createFromClaim(recipient: string) {
+  const { user, dialog } = await openFromClaim();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), recipient);
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+  return { user, d2: await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" }) };
+}
+
+test("G3-FE-1: API-162 trả REVOKED / EXPIRED → báo thu hồi / hết hạn, không có nút Thử lại", async () => {
+  for (const [status, text] of [
+    ["REVOKED", "Link đã bị thu hồi."],
+    ["EXPIRED", "Link đã hết hạn."],
+  ] as const) {
+    server.use(
+      http.get("/api/v1/shares/:id", ({ params }) => {
+        const s = mockShares.find((x) => x.id === params.id);
+        if (!s) return; // `/shares/options` → handler gốc.
+        s.status = status;
+        return HttpResponse.json(toShare(s, { id: "u", role: "ADMIN" }, true));
+      }),
+    );
+    const { d2 } = await createFromClaim(`CSKH ${status}`);
+    expect(await within(d2).findByText(text)).toBeInTheDocument();
+    expect(within(d2).queryByRole("button", { name: "Thử lại" })).toBeNull();
+    expect(within(d2).queryByRole("progressbar")).toBeNull();
+    expect(within(d2).queryByText(/Không dựng được video|Không tải được lên kho/)).toBeNull();
+    cleanup();
+  }
+});
+
+test("G3-FE-4: API-162 lỗi khi chưa có dữ liệu → chỉ Alert tải lỗi + Thử lại, không hiện khối Đang tạo", async () => {
+  server.use(
+    http.get("/api/v1/shares/:id", ({ params }) =>
+      params.id === "options" ? undefined : apiError(404, "NOT_FOUND", "Không tìm thấy link."),
+    ),
+  );
+  const { d2 } = await createFromClaim("CSKH lỗi đọc");
+  expect(await within(d2).findByText("Không tải được danh sách phiên.")).toBeInTheDocument();
+  expect(within(d2).queryByRole("progressbar")).toBeNull();
+  expect(within(d2).queryByText(/^Link tiếp tục được tạo khi đóng/)).toBeNull();
+  expect(within(d2).getByRole("button", { name: "Thử lại" })).toBeInTheDocument();
 });

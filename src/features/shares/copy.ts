@@ -54,6 +54,10 @@ export const COPY = {
   sentTo: (r: string) => `Gửi cho: ${r}`,
   uploadFailed: "Không tải được lên kho lưu cloud. Kiểm tra Internet rồi bấm Thử lại.",
   renderFailed: "Không dựng được video. Bấm Thử lại; nếu vẫn lỗi, báo Admin kèm mã hồ sơ.",
+  /** mới (G3-FE-1) — link thu hồi / hết hạn khi dialog đang mở. */
+  revoked: "Link đã bị thu hồi.",
+  /** mới (G3-FE-1) */
+  expired: "Link đã hết hạn.",
   doneToast: (r: string) => `Link chia sẻ cho "${r}" đã sẵn sàng.`,
   failedToast: (r: string) => `Không tạo được link chia sẻ cho "${r}". Mở Link chia sẻ để xem lỗi.`,
   duration: (s: number) => fmtDuration(s),
