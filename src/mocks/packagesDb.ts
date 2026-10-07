@@ -107,6 +107,8 @@ type SessionSeed = {
   durationS?: number;
   flags?: SessionFlag[];
   clips?: ClipStatus | null;
+  /** item 03 T-265: trạng thái riêng Cam 2 (mặc định = `clips`). */
+  cam2?: ClipStatus;
   held?: boolean;
   /** item 03: người đóng gói (FR-03.16). */
   operator?: string;
@@ -372,6 +374,17 @@ function phase3Seeds(): PackageSeed[] {
     },
     // item 03 T-260 / T-264 (04 TC-08.40..08.52): kiện có phiên mở hoàn trước / quét nhầm / Cần soát (returnsDb).
     { n: "0000060", status: "RETURN_RECEIVED_ISSUE", platform: "TO_RETURN", sessions: [packed(3, 40)] },
+    // item 03 T-265 (EX-K8 / K9, FR-02.16): phiên hiệu lực cả 2 clip "Thiếu tệp" (+ ảnh lúc đóng gói thiếu tệp), phiên cũ
+    // Cam 1 còn / Cam 2 thiếu tệp → hồ sơ KN-000142 (returnsDb `seedMissingClaim`).
+    {
+      n: "0000062",
+      status: "HANDED_OVER",
+      platform: "SHIPPED",
+      sessions: [
+        { ...packed(4, 50), status: "SUPERSEDED", cam2: "MISSING" },
+        { ...packed(4, 60), clips: "MISSING" },
+      ],
+    },
     // TC-05.93 (EX-P14, BR-32): mã có ở 2 shop → kiện chưa xác minh, cờ AMBIGUOUS_SHOP, dòng thời gian liệt kê shop.
     {
       n: "",
@@ -442,16 +455,18 @@ function buildSession(pkgId: string, idx: number, s: SessionSeed): MockSession {
     for (const role of ["CAM1", "CAM2"] as const) {
       clipSeq += 1;
       const retention = ended ? ended + RETENTION_CLIP_DAYS * DAY : null;
+      const status = role === "CAM2" && s.cam2 ? s.cam2 : s.clips;
       clips.push({
         id: `clip-${id.slice(4)}-${role === "CAM1" ? 1 : 2}`,
         session_id: id,
         camera_role: role,
-        status: s.clips,
-        sha256: s.clips === "READY" || s.clips === "DELETED" ? hex(clipSeq) : null,
-        duration_s: s.clips === "PENDING" || s.clips === "FAILED" ? null : duration + 10,
+        status,
+        // `MISSING` (item 03): DB còn mã băm, máy chủ không có tệp.
+        sha256: status === "READY" || status === "DELETED" || status === "MISSING" ? hex(clipSeq) : null,
+        duration_s: status === "PENDING" || status === "FAILED" ? null : duration + 10,
         held: Boolean(s.held),
         retention_until: s.held ? null : retention ? iso(retention) : null,
-        deleted_at: s.clips === "DELETED" && retention ? iso(retention) : null,
+        deleted_at: status === "DELETED" && retention ? iso(retention) : null,
         flags: [],
       });
     }

@@ -20,6 +20,7 @@ function createErrorText(err: unknown): string {
   const state = clipStateError(err);
   if (state?.kind === "pending") return C.notReady;
   if (state?.kind === "failed") return C.clipFailed;
+  // item 03: API-43 409 `details.status = MISSING` → `message` server ("Thiếu tệp clip trên máy chủ — …").
   if (state?.kind === "deleted")
     return state.deletedAt ? C.deletedOn(state.deletedAt, state.days) : C.deleted;
   return isApiError(err) ? err.message : C.generic;

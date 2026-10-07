@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { claimsApi, type ClaimDetail, type ClaimEvidence } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
 import { fmtDate, fmtDuration, fmtShort } from "@/shared/format";
-import { SESSION_FLAG, SESSION_STATUS, type SessionStatus } from "@/shared/labels";
+import { MEDIA_MISSING_LABEL, SESSION_FLAG, SESSION_STATUS, type SessionStatus } from "@/shared/labels";
 import { ClipPlayer } from "@/shared/media/ClipPlayer";
 import { SnapshotStrip } from "@/shared/media/SnapshotStrip";
 import { SESSION_TYPE } from "@/shared/returns/labels";
@@ -98,6 +98,10 @@ function SessionRow({
       ))}
       {ev.auto && <StatusChip tone="info">{E.auto}</StatusChip>}
       {s.clips.length === 0 && <span className="text-body-sm text-on-surface-variant">{E.noClip}</span>}
+      {/* item 03 (02b-admin §9): clip thiếu tệp trên máy chủ → chip xám; player hiện `MissingMediaBlock`. */}
+      {s.clips.some((c) => c.status === "MISSING") && (
+        <StatusChip icon="videocam_off">{MEDIA_MISSING_LABEL}</StatusChip>
+      )}
       {deleted?.deleted_at && (
         <span className="text-body-sm text-error">{E.clipDeleted(fmtDate(deleted.deleted_at))}</span>
       )}

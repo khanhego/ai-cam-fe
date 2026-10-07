@@ -144,7 +144,7 @@ export type PackageSession = {
   /** Ảnh chụp tay (F2) của phiên; ảnh đã xóa / thiếu tệp (item 03 `MISSING`) → `url = null`. */
   snapshots: (Omit<Snapshot, "url"> & { url: string | null; protection: Protection | null })[];
   /** Phiên PACK: ảnh Cam 1 lúc đóng gói (J-17, L8); ảnh đã xóa → `url = null`. */
-  pack_snapshot: { id: string; url: string | null; status: "READY" | "DELETED" } | null;
+  pack_snapshot: { id: string; url: string | null; status: "READY" | "DELETED" | "MISSING" } | null;
   protected_by_claims: { id: string; code: string }[];
 };
 

@@ -83,7 +83,8 @@ export function SessionPanel({
     onSuccess: () => toast(COPY.detail.rebuildOk),
     onError: (err) =>
       toast(
-        isApiError(err) && err.code === "CLIP_NOT_FAILED"
+        // item 03: API-46 409 `CLIP_NOT_FAILED` `details.status = MISSING` → `message` server ("…không cắt lại được.").
+        isApiError(err) && err.code === "CLIP_NOT_FAILED" && err.details.status !== "MISSING"
           ? COPY.detail.notFailed
           : isApiError(err)
             ? err.message
@@ -148,7 +149,7 @@ export function SessionPanel({
                 kind: "PACK_CLOSE",
                 taken_at: session.ended_at ?? session.started_at,
                 url: session.pack_snapshot.url,
-                status: session.pack_snapshot.status === "DELETED" ? "DELETED" : "READY",
+                status: session.pack_snapshot.status,
               },
             ]}
             onExpired={onSnapshotExpired}

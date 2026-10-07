@@ -494,6 +494,7 @@ export function resetMockReturns() {
   }
   seedClaims(now);
   seedPhase3Claim();
+  seedMissingClaim();
   seedRecon(now);
   mockEvidencePacks.clear();
   reconState.running = false;
@@ -860,6 +861,31 @@ function manualClaim(
  * 09:10 đã đánh dấu quét nhầm, B "Hộp rỗng" 10:15 → hồ sơ KN-000141 (hạn sàn đã qua lúc tạo — BR-42).
  */
 export const P3_CLAIM_ID = "cl-000141";
+/** item 03 T-265: hồ sơ KN-000142 của `SPXTST0000062` — 2 phiên đóng gói, clip "Thiếu tệp" (EX-K8 / K9). */
+export const MISSING_CLAIM_ID = "cl-000142";
+function seedMissingClaim() {
+  const pkg = findPackage("pkg-0000062");
+  if (!pkg) return;
+  const created = iso(Date.now() - 2 * DAY);
+  const [newer, older] = pkg.sessions;
+  mockClaims.push(
+    manualClaim(142, pkg.id, {
+      type: "LOST_IN_TRANSIT",
+      status: "NEW",
+      source: "MANUAL",
+      created_at: created,
+      evidence: [newer, older]
+        .filter((s): s is MockSession => Boolean(s))
+        .map((s, i) => ({
+          id: `ev-142-${i + 1}`,
+          kind: "SESSION",
+          ref_id: s.id,
+          auto: i === 0,
+          added_at: created,
+        })),
+    }),
+  );
+}
 function seedPhase3Claim() {
   const pkg = findPackage("pkg-0000060");
   if (!pkg) return;
@@ -1685,16 +1711,19 @@ export function sessionExtras(s: MockSession, role: string) {
     // BE: ảnh đã xóa → `url = null`, không có `protection`.
     snapshots: (s.snapshots ?? []).map((x) => ({
       ...x,
-      url: x.status === "DELETED" ? null : x.url,
+      url: x.status === "DELETED" || x.status === "MISSING" ? null : x.url,
       protection: x.status === "DELETED" ? null : protectionOf(s),
     })),
+    // item 03: clip Cam 1 thiếu tệp → ảnh lúc đóng gói cũng thiếu tệp (`url = null` — DEC-524).
     pack_snapshot:
       type === "PACK" && s.status === "COMPLETED" && s.clips.length
-        ? {
-            id: `snap-pack-${s.id}`,
-            url: mockSnapshot(`snap-pack-${s.id}`, "PACK_CLOSE", "").url,
-            status: "READY" as const,
-          }
+        ? s.clips.find((c) => c.camera_role === "CAM1")?.status === "MISSING"
+          ? { id: `snap-pack-${s.id}`, url: null, status: "MISSING" as const }
+          : {
+              id: `snap-pack-${s.id}`,
+              url: mockSnapshot(`snap-pack-${s.id}`, "PACK_CLOSE", "").url,
+              status: "READY" as const,
+            }
         : null,
     protected_by_claims: mockClaims
       .filter((c) => claimIsOpen(c) && c.evidence.some((e) => e.ref_id === s.id))

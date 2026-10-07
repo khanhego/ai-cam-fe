@@ -9,7 +9,13 @@ import { packagesApi, type PackageDetail, type PackageSession } from "@/lib/api/
 import { settingsApi } from "@/lib/api/settings";
 import { ShopChip } from "@/shared/filters/ShopChip";
 import { fmtDuration, fmtShort } from "@/shared/format";
-import { platformStatus, SESSION_STATUS, SOURCE, WAREHOUSE_STATUS } from "@/shared/labels";
+import {
+  MEDIA_MISSING_LABEL,
+  platformStatus,
+  SESSION_STATUS,
+  SOURCE,
+  WAREHOUSE_STATUS,
+} from "@/shared/labels";
 import { RECON_SEVERITY, RECON_STATUS, reconRuleLabel, SESSION_TYPE } from "@/shared/returns/labels";
 import { Alert, Button, cx, Dialog, EmptyState, Skeleton, StatusChip, TrackingNumber } from "@/shared/ui";
 
@@ -83,6 +89,10 @@ function SessionList({
                     {SESSION_TYPE[type]}
                   </StatusChip>
                   <StatusChip tone={tone}>{label}</StatusChip>
+                  {/* item 03 (02b-admin §9): clip `MISSING` → chip xám "Thiếu tệp" trong danh sách. */}
+                  {s.clips.some((c) => c.status === "MISSING") && (
+                    <StatusChip icon="videocam_off">{MEDIA_MISSING_LABEL}</StatusChip>
+                  )}
                   <span className="text-body-sm tabular-nums">{fmtDuration(s.duration_s)}</span>
                 </span>
               </span>
