@@ -15,7 +15,9 @@ import { evidenceLabel, hasStatusChip, sessionChips, type SessionEvidence } from
 import { PriorReturnAlert } from "./PriorReturnAlert";
 import { RemoveEvidenceDialog } from "./RemoveEvidenceDialog";
 import { RemovedEvidenceList } from "./RemovedEvidenceList";
+import { ReviewSessionDialog, type ReviewMode } from "./ReviewSessionDialog";
 import { claimErrorText, useClaimMutation } from "./useClaimMutation";
+import { useReviewSession } from "./useReviewSession";
 
 const E = COPY.evidence;
 type SnapshotEvidence = Extract<ClaimEvidence, { kind: "SNAPSHOT" }>;
@@ -34,6 +36,12 @@ const MISSING_TEXT = {
 
 type EvidenceVars = { sessionIds: string[]; snapshotIds: string[]; note?: string };
 
+/** Menu "⋮ → Đánh dấu quét nhầm" (01 §10.5 D17 v0.4): phiên mở hoàn Đã hủy / Bỏ dở chưa bị loại. */
+const canMarkWrongScan = (ev: SessionEvidence) =>
+  ev.session.type === "RETURN" &&
+  (ev.session.status === "CANCELLED" || ev.session.status === "ABANDONED") &&
+  !ev.session.evidence_exclusion;
+
 const sessionLabel = (s: SessionEvidence["session"]) =>
   `${s.type === "RETURN" ? E.return : E.pack} ${fmtShort(s.started_at)}`;
 
@@ -45,6 +53,7 @@ function SessionRow({
   busy,
   onPlay,
   onRemove,
+  onMarkWrongScan,
 }: {
   ev: SessionEvidence;
   selected: boolean;
@@ -52,7 +61,9 @@ function SessionRow({
   busy: boolean;
   onPlay: () => void;
   onRemove: () => void;
+  onMarkWrongScan: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const s = ev.session;
   const label = sessionLabel(s);
   const duration = s.ended_at != null ? (Date.parse(s.ended_at) - Date.parse(s.started_at)) / 1000 : null;
@@ -110,6 +121,39 @@ function SessionRow({
             {E.remove}
           </Button>
         )}
+        {editable && canMarkWrongScan(ev) && (
+          <span className="relative">
+            <IconButton
+              icon="more_vert"
+              label={E.rowMenu(label)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              disabled={busy}
+              onClick={() => setMenuOpen((v) => !v)}
+            />
+            {menuOpen && (
+              <ul
+                role="menu"
+                aria-label={E.rowMenu(label)}
+                className="absolute right-0 z-10 mt-1 min-w-48 rounded-md bg-surface-container py-1 shadow-elevation-2"
+              >
+                <li role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="state-layer w-full px-4 py-2 text-left text-body-md text-on-surface"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onMarkWrongScan();
+                    }}
+                  >
+                    {E.markWrongScan}
+                  </button>
+                </li>
+              </ul>
+            )}
+          </span>
+        )}
       </span>
     </li>
   );
@@ -135,6 +179,20 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
     void qc.invalidateQueries({ queryKey: ["claim", claim.id] });
   };
   const [removing, setRemoving] = useState<ClaimEvidence | null>(null);
+  const [reviewing, setReviewing] = useState<{
+    mode: ReviewMode;
+    sessionId: string;
+    startedAt: string;
+    keepUntil: string | null;
+  } | null>(null);
+  const review = useReviewSession(claim.id, () => setReviewing(null));
+  const openReview = (mode: ReviewMode, sessionId: string, startedAt: string) =>
+    setReviewing({
+      mode,
+      sessionId,
+      startedAt,
+      keepUntil: sessions.find((e) => e.session.id === sessionId)?.removal_keep_until ?? null,
+    });
   const snapshotEvidence = claim.evidence.filter((e): e is SnapshotEvidence => e.kind === "SNAPSHOT");
   const current =
     sessions.find((e) => e.session.id === playing) ?? sessions.find((e) => e.session.clips.length > 0);
@@ -173,7 +231,13 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
 
   return (
     <div className="flex flex-col gap-3">
-      <PriorReturnAlert claim={claim} editable={editable} busy={save.isPending} onAdd={add} />
+      <PriorReturnAlert
+        claim={claim}
+        editable={editable}
+        busy={save.isPending || review.isPending}
+        onAdd={add}
+        onReview={openReview}
+      />
       {claim.missing.length > 0 && (
         <ul className="flex flex-wrap gap-2">
           {claim.missing.map((m) => (
@@ -198,6 +262,7 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
               busy={save.isPending}
               onPlay={() => setPlaying(ev.session.id)}
               onRemove={() => setRemoving(ev)}
+              onMarkWrongScan={() => openReview("MARK", ev.session.id, ev.session.started_at)}
             />
           ))}
         </ul>
@@ -267,6 +332,22 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
         busy={save.isPending}
         onRestore={restore}
       />
+      {reviewing && (
+        <ReviewSessionDialog
+          key={`${reviewing.mode}-${reviewing.sessionId}`}
+          mode={reviewing.mode}
+          sessionId={reviewing.sessionId}
+          label={`${E.return} ${fmtShort(reviewing.startedAt)}`}
+          keepUntil={reviewing.keepUntil}
+          busy={review.isPending}
+          error={review.error}
+          onSubmit={(vars) => review.mutate(vars)}
+          onClose={() => {
+            review.reset();
+            setReviewing(null);
+          }}
+        />
+      )}
       {removing && (
         <RemoveEvidenceDialog
           label={evidenceLabel(removing)}

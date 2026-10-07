@@ -153,6 +153,38 @@ export const COPY = {
     restore: "Thêm lại",
     restoreFor: (label: string) => `Thêm lại ${label}`,
     systemUser: "Hệ thống",
+    // ---- item 03 T-264 (01 §10.5 D17 v0.4 — API-189) ----
+    rowMenu: (label: string) => `Thao tác ${label}`,
+    markWrongScan: "Đánh dấu quét nhầm",
+    unmark: "Bỏ đánh dấu",
+    unmarkAt: (at: string) => `Bỏ đánh dấu phiên ${at}`,
+    reviewAlert: (n: number) =>
+      `Kiện có ${n} phiên mở hoàn do quản lý hủy trước khi hệ thống ghi lý do — đã đưa vào bằng chứng nhưng chưa làm phiên chính. Xem video rồi chọn.`,
+    confirmReturn: "Là phiên hoàn thật",
+    wrongScanShort: "Quét nhầm",
+    reviewActionsFor: (at: string) => `Phiên ${at}`,
+  },
+  /** API-189 dialogs (01 §10.5 D17). */
+  review: {
+    markTitle: "Đánh dấu phiên quét nhầm?",
+    unmarkTitle: "Bỏ đánh dấu quét nhầm?",
+    confirmTitle: "Xác nhận là phiên hoàn thật?",
+    reason: "Lý do*",
+    reasonRequired: "Chọn lý do.",
+    note: "Ghi chú*",
+    noteHint: "5–500 ký tự",
+    noteRule: "Nhập ghi chú (5–500 ký tự).",
+    markText: (date: string) =>
+      `Phiên sẽ bị bỏ khỏi bằng chứng của mọi hồ sơ chưa đóng và không được tự chọn lại. Video vẫn được giữ tới ${date} (trừ khi thuộc hồ sơ khác).`,
+    unmarkText: "Phiên không tự vào lại bằng chứng — thêm tay nếu cần.",
+    confirmText: "Phiên sẽ được tính như phiên mở hoàn thường và có thể thành phiên chính.",
+    mark: "Đánh dấu",
+    unmarkConfirm: "Bỏ đánh dấu",
+    confirm: "Xác nhận",
+    cancel: "Hủy",
+    marked: "Đã đánh dấu phiên quét nhầm.",
+    unmarked: "Đã bỏ đánh dấu.",
+    confirmed: "Đã xác nhận.",
   },
   pack: {
     open: "Xuất gói bằng chứng",
