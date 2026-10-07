@@ -1,19 +1,37 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { backupApi, type BackupIssue } from "@/lib/api/backup";
+import { backupApi, type BackupIssue, type ResolveIssueAction } from "@/lib/api/backup";
 import { fmtShort, shortHash } from "@/shared/format";
-import { BACKUP_ISSUE_KIND, type BackupIssueKind } from "@/shared/labels";
+import { BACKUP_ISSUE_KIND } from "@/shared/labels";
 import { Alert, Button, Skeleton, TrackingNumber } from "@/shared/ui";
 
 import { COPY } from "./copy";
+import { ResolveIssueDialog } from "./ResolveIssueDialog";
+import type { IssueAlertKind } from "./rules";
 
 const I = COPY.issues;
 
-/** Loại vấn đề D23 có Alert + danh sách (API-185 `kind`). */
-export type IssueAlertKind = Extract<BackupIssueKind, "HASH_MISMATCH" | "SOURCE_MISSING">;
+/** Nút theo loại vấn đề (FE chỉ hiện hành động hợp lệ — 02 §6.2 API-188, DEC-525). */
+const ACTIONS: Record<IssueAlertKind, ResolveIssueAction[]> = {
+  HASH_MISMATCH: ["UPLOAD_ANYWAY", "IGNORE"],
+  SOURCE_MISSING: ["RETRY", "IGNORE"],
+};
+const ACTION_LABEL: Record<ResolveIssueAction, string> = {
+  UPLOAD_ANYWAY: I.uploadAnyway,
+  IGNORE: I.ignore,
+  RETRY: I.retry,
+};
 
-function IssueRow({ issue }: { issue: BackupIssue }) {
+function IssueRow({
+  issue,
+  kind,
+  onAction,
+}: {
+  issue: BackupIssue;
+  kind: IssueAlertKind;
+  onAction: (action: ResolveIssueAction) => void;
+}) {
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3">
       <div className="min-w-0 flex-1">
@@ -34,12 +52,26 @@ function IssueRow({ issue }: { issue: BackupIssue }) {
           )}
         </p>
       </div>
+      <div className="flex gap-2">
+        {ACTIONS[kind].map((a) => (
+          <Button
+            key={a}
+            size="sm"
+            variant={a === "IGNORE" ? "text" : "tonal"}
+            aria-label={`${ACTION_LABEL[a]} — ${issue.tracking_number ?? I.noTracking}`}
+            onClick={() => onAction(a)}
+          >
+            {ACTION_LABEL[a]}
+          </Button>
+        ))}
+      </div>
     </li>
   );
 }
 
 /** Danh sách tệp một loại vấn đề (API-185, mặc định chỉ mục chưa xử lý; trang 1 — ≤ 20 mục). */
 function IssueItems({ kind }: { kind: IssueAlertKind }) {
+  const [pending, setPending] = useState<{ issue: BackupIssue; action: ResolveIssueAction } | null>(null);
   const q = useQuery({
     queryKey: ["backup", "issues", kind],
     queryFn: () => backupApi.issues({ kind }),
@@ -62,13 +94,26 @@ function IssueItems({ kind }: { kind: IssueAlertKind }) {
     <>
       <ul className="divide-y divide-outline-variant" aria-label={I.listLabel(BACKUP_ISSUE_KIND[kind])}>
         {q.data.items.map((it) => (
-          <IssueRow key={it.object_id} issue={it} />
+          <IssueRow
+            key={it.object_id}
+            issue={it}
+            kind={kind}
+            onAction={(action) => setPending({ issue: it, action })}
+          />
         ))}
       </ul>
       {q.data.total > q.data.items.length && (
         <p className="pt-2 text-body-sm text-on-surface-variant">
           {I.more(q.data.items.length, q.data.total)}
         </p>
+      )}
+      {pending && (
+        <ResolveIssueDialog
+          issue={pending.issue}
+          issueKind={kind}
+          action={pending.action}
+          onClose={() => setPending(null)}
+        />
       )}
     </>
   );

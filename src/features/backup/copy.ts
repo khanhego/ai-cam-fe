@@ -108,7 +108,7 @@ export const COPY = {
     /** mới */
     hide: "Ẩn danh sách",
     /** mới */
-    listLabel: (kind: string) => `Danh sách tệp ${kind.toLowerCase()}`,
+    listLabel: (kind: string) => `Danh sách tệp: ${kind}`,
     tracking: "Mã kiện",
     /** mới */
     noTracking: "Không gắn kiện",

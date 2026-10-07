@@ -219,7 +219,7 @@ test("EX-K6: Alert lệch mã băm → Xem danh sách → mã kiện link D4 + m
     .getByText("2 clip có mã băm khác lúc tạo — không được sao lưu.")
     .closest("[role=alert]")!;
   await user.click(within(alert as HTMLElement).getByRole("button", { name: "Xem danh sách" }));
-  const list = await screen.findByRole("list", { name: "Danh sách tệp lệch mã băm" });
+  const list = await screen.findByRole("list", { name: "Danh sách tệp: Lệch mã băm" });
   const items = within(list).getAllByRole("listitem");
   expect(items).toHaveLength(2);
   expect(within(items[0]!).getByRole("link", { name: /SPXTST0000004/ })).toHaveAttribute(

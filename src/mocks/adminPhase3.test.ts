@@ -17,7 +17,7 @@ import { sharesApi } from "@/lib/api/shares";
 import { shopsApi } from "@/lib/api/shops";
 import { vnDay } from "@/shared/format";
 
-import { mockBackup } from "./handlers/backup";
+import { issue, mockBackup } from "./handlers/backup";
 import { FAIL_TARGET } from "./handlers/notify";
 import { mockReportsState } from "./handlers/reports";
 import { mockApprovals } from "./handlers/approvals";
@@ -332,6 +332,40 @@ describe("backup (API-180..188)", () => {
       "BACKUP_ISSUE_RESOLVED",
     );
     expect((await backupApi.issues()).total).toBe(1);
+  });
+
+  test("API-187: khóa cũ → xếp 790, gọi lại 0 (idempotent), old_keys còn với reuploadable 0; khóa chưa xác nhận → 409", async () => {
+    await as();
+    mockBackup.oldKeys = true;
+    expect(await backupApi.reuploadOldKey()).toEqual({ queued: 790, bytes: 146_028_888_064 });
+    expect(await backupApi.reuploadOldKey()).toEqual({ queued: 0, bytes: 0 });
+    const b = await backupApi.get();
+    expect(b.key.old_keys).toEqual([expect.objectContaining({ evidence_objects: 812, reuploadable: 0 })]);
+    expect(b.evidence.pending).toBe(793);
+    mockBackup.confirmedFingerprint = null;
+    expect((await fail(backupApi.reuploadOldKey())).code).toBe("BACKUP_KEY_UNCONFIRMED");
+  });
+
+  test("API-188 SOURCE_MISSING: RETRY được, UPLOAD_ANYWAY → 409; IGNORE khi tệp đã có lại → 409 ACTION_INVALID", async () => {
+    await as();
+    mockBackup.issues.push(issue(3, "SOURCE_MISSING", "SPXTST0000006"), {
+      ...issue(4, "SOURCE_MISSING", "SPXTST0000007"),
+      sourceBack: true,
+    });
+    const page = await backupApi.issues({ kind: "SOURCE_MISSING" });
+    expect(page.total).toBe(2);
+    expect(page.items[0]).not.toHaveProperty("sourceBack");
+    expect((await fail(backupApi.resolveIssue("bo-3", "UPLOAD_ANYWAY", "Vẫn tải"))).code).toBe(
+      "BACKUP_ISSUE_ACTION_INVALID",
+    );
+    expect((await backupApi.resolveIssue("bo-3", "RETRY", "IT đã chép lại")).resolution?.action).toBe(
+      "RETRY",
+    );
+    const back = await fail(backupApi.resolveIssue("bo-4", "IGNORE", "Ổ hỏng"));
+    expect([back.code, back.message]).toEqual([
+      "BACKUP_ISSUE_ACTION_INVALID",
+      "Tệp đã có lại tại kho — bấm Thử lại ngay.",
+    ]);
   });
 
   test("API-81: sức khỏe có backup + sync có sàn / tên shop (bỏ shop đã ngắt)", async () => {

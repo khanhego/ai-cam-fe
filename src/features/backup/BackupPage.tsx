@@ -13,6 +13,7 @@ import { BackupOptions } from "./BackupOptions";
 import { ConfirmKeyDialog } from "./ConfirmKeyDialog";
 import { COPY } from "./copy";
 import { IssueAlert } from "./IssuesList";
+import { OldKeysAlert } from "./OldKeysAlert";
 import { writeLockTip } from "./rules";
 
 /** Poll khi có lượt DB đang chạy (02b-admin §4); ngoài ra chỉ WS `backup.updated` invalidate. */
@@ -191,7 +192,9 @@ function BackupView({ s }: { s: BackupStatus }) {
       {s.last_error && (
         <Alert kind="warning">{COPY.lastError(fmtShort(s.last_error.at), s.last_error.message)}</Alert>
       )}
+      <OldKeysAlert s={s} />
       <IssueAlert kind="HASH_MISMATCH" count={s.evidence.hash_mismatch} />
+      <IssueAlert kind="SOURCE_MISSING" count={s.evidence.source_missing} />
       <BackupCards status={s} />
       <BackupHistoryTable history={s.history} currentFp={s.key.fingerprint} />
       <BackupOptions status={s} />

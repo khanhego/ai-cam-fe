@@ -1,4 +1,5 @@
 import { BACKUP_LIMITS, type BackupStatus } from "@/lib/api/backup";
+import type { BackupIssueKind } from "@/shared/labels";
 
 import { COPY } from "./copy";
 
@@ -15,3 +16,6 @@ export function writeLockTip(s: BackupStatus): string | null {
   if (s.state === "ON") return null;
   return s.state === "DISABLED" ? COPY.disabledTip : COPY.pausedTip;
 }
+
+/** Loại vấn đề D23 có Alert + danh sách + hành động (API-185 `kind`; `UPLOAD_FAILED` chỉ đếm ở `evidence.failed`). */
+export type IssueAlertKind = Extract<BackupIssueKind, "HASH_MISMATCH" | "SOURCE_MISSING">;

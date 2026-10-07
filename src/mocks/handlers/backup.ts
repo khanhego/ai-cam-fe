@@ -11,8 +11,9 @@ import { requireRole } from "./session";
 /**
  * API-180..188 (02 §6.2, 02b-admin §12). Kịch bản theo query của trang lúc tải `pnpm dev:mock`:
  * `?backupState=NOT_CONFIGURED|KEY_UNCONFIRMED|KEY_CHANGED|RESTORE_PENDING|DISABLED|ON`, `?oldKeys=1` (1 khóa cũ: 812
- * tệp, 42 bản DB), `?dbFail=2` (`consecutive_failures = 2`), `?srcMissing=1` (1 tệp `SOURCE_MISSING`); mặc định có 2 tệp
- * `HASH_MISMATCH` xử lý được. Test đổi trực tiếp `mockBackup`.
+ * tệp, 42 bản DB; API-187 xếp xong → `reuploadable = 0`, khóa cũ vẫn còn), `?dbFail=2` (`consecutive_failures = 2`),
+ * `?srcMissing=1` (2 tệp `SOURCE_MISSING`: clip SPXTST0000006 + ảnh SPXTST0000007 đã có lại tại kho → `IGNORE` 409 — DEC-639);
+ * mặc định có 2 tệp `HASH_MISMATCH` xử lý được. Test đổi trực tiếp `mockBackup`.
  */
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -21,7 +22,11 @@ const iso = (ms: number) => new Date(ms).toISOString();
 export const FINGERPRINT = "7F3A-91C2-0B5E-44D1";
 export const OLD_FINGERPRINT = "21C4-0D9A-77E1-5B30";
 
-type MockIssue = BackupIssue & { issueKind: "HASH_MISMATCH" | "SOURCE_MISSING" | "UPLOAD_FAILED" };
+type MockIssue = BackupIssue & {
+  issueKind: "HASH_MISMATCH" | "SOURCE_MISSING" | "UPLOAD_FAILED";
+  /** `SOURCE_MISSING`: tệp đã có lại tại kho → `IGNORE` 409 `BACKUP_ISSUE_ACTION_INVALID` (v0.4, DEC-530). */
+  sourceBack?: boolean;
+};
 
 export const mockBackup = {
   configured: true,
@@ -32,6 +37,8 @@ export const mockBackup = {
   confirmedFingerprint: FINGERPRINT as string | null,
   confirmedAt: null as string | null,
   oldKeys: false,
+  /** API-187 đã xếp tải lại: `old_keys[]` vẫn còn (bản cũ còn trên cloud tới khi J-22 ghi đè — DEC-522), `reuploadable = 0`. */
+  reuploaded: false,
   consecutiveFailures: 0,
   running: false,
   uploadMbps: 10,
@@ -42,7 +49,7 @@ export const mockBackup = {
   nextTestError: null as null | { status: number; code: string; message: string },
 };
 
-function issue(
+export function issue(
   n: number,
   kind: MockIssue["issueKind"],
   tracking: string,
@@ -79,6 +86,7 @@ export function resetMockBackup() {
       scenario === "KEY_UNCONFIRMED" ? null : scenario === "KEY_CHANGED" ? OLD_FINGERPRINT : FINGERPRINT,
     confirmedAt: scenario === "KEY_UNCONFIRMED" ? null : iso(now - 20 * DAY),
     oldKeys: mockParam("oldKeys") === "1",
+    reuploaded: false,
     consecutiveFailures: Number(mockParam("dbFail") ?? 0) || 0,
     running: false,
     uploadMbps: 10,
@@ -103,7 +111,12 @@ export function resetMockBackup() {
     issue(1, "HASH_MISMATCH", "SPXTST0000004"),
     issue(2, "HASH_MISMATCH", "SPXTST0000005"),
   ];
-  if (mockParam("srcMissing") === "1") mockBackup.issues.push(issue(3, "SOURCE_MISSING", "SPXTST0000006"));
+  if (mockParam("srcMissing") === "1")
+    mockBackup.issues.push(issue(3, "SOURCE_MISSING", "SPXTST0000006"), {
+      ...issue(4, "SOURCE_MISSING", "SPXTST0000007"),
+      kind: "SNAPSHOT",
+      sourceBack: true,
+    });
 }
 resetMockBackup();
 
@@ -143,8 +156,8 @@ export function backupStatus(): BackupStatus {
               fingerprint: OLD_FINGERPRINT,
               evidence_objects: 812,
               db_runs: 42,
-              reuploadable: 790,
-              reuploadable_bytes: 146_028_888_064,
+              reuploadable: b.reuploaded ? 0 : 790,
+              reuploadable_bytes: b.reuploaded ? 0 : 146_028_888_064,
             },
           ]
         : [],
@@ -162,7 +175,11 @@ export function backupStatus(): BackupStatus {
     },
     evidence: {
       uploaded: 1204,
-      pending: 3,
+      // + tệp API-187 đã xếp + tệp API-188 `UPLOAD_ANYWAY` / `RETRY` (→ PENDING).
+      pending:
+        3 +
+        (b.reuploaded ? 790 : 0) +
+        b.issues.filter((i) => i.resolution && i.resolution.action !== "IGNORE").length,
       failed: sourceMissing,
       oldest_pending_at: iso(Date.now() - 2 * HOUR),
       late_count: 0,
@@ -227,8 +244,9 @@ const ISSUE_KIND_OK: Record<ResolveIssueAction, MockIssue["issueKind"][]> = {
   IGNORE: ["HASH_MISMATCH", "SOURCE_MISSING"],
 };
 
-const strip = ({ issueKind, ...rest }: MockIssue): BackupIssue => {
+const strip = ({ issueKind, sourceBack, ...rest }: MockIssue): BackupIssue => {
   void issueKind;
+  void sourceBack;
   return rest;
 };
 
@@ -344,10 +362,11 @@ export const backupHandlers = [
     if (!mockBackup.configured) return NOT_CONFIGURED();
     const state = backupState();
     if (state === "RESTORE_PENDING") return RESTORE_UNVERIFIED();
+    if (state === "KEY_UNCONFIRMED" || state === "KEY_CHANGED") return KEY_UNCONFIRMED();
     if (state === "DISABLED") return DISABLED();
     // Idempotent: lần sau chỉ xếp tệp chưa xếp (mock: 0).
-    const queued = mockBackup.oldKeys ? 790 : 0;
-    mockBackup.oldKeys = false;
+    const queued = mockBackup.oldKeys && !mockBackup.reuploaded ? 790 : 0;
+    if (mockBackup.oldKeys) mockBackup.reuploaded = true;
     announce();
     return json({ queued, bytes: queued ? 146_028_888_064 : 0 }, { status: 202 });
   }),
@@ -367,6 +386,8 @@ export const backupHandlers = [
       return apiError(409, "BACKUP_ISSUE_RESOLVED", "Tệp này đã được xử lý. Tải lại danh sách.");
     if (!ISSUE_KIND_OK[body.action].includes(item.issueKind))
       return apiError(409, "BACKUP_ISSUE_ACTION_INVALID", "Hành động không hợp với loại vấn đề của tệp.");
+    if (body.action === "IGNORE" && item.issueKind === "SOURCE_MISSING" && item.sourceBack)
+      return apiError(409, "BACKUP_ISSUE_ACTION_INVALID", "Tệp đã có lại tại kho — bấm Thử lại ngay.");
     item.resolution = {
       action: body.action,
       note,
