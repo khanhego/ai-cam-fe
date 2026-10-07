@@ -7,6 +7,21 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 export const PASSWORD = "matkhau123";
 
+/**
+ * Tham số `docker compose` của stack đang test — mặc định stack dev; stack QA riêng đặt `AICAM_COMPOSE_PROJECT`,
+ * `AICAM_COMPOSE_FILES` (đường dẫn tương đối ai-cam-be, cách ":") như `ai-cam-be/scripts/qa-reset.sh` (DEC-820).
+ */
+export function composeArgs(): string[] {
+  const be = resolve(process.cwd(), "../ai-cam-be");
+  const files = (process.env.AICAM_COMPOSE_FILES ?? "docker/compose.dev.yml").split(":");
+  return [
+    "compose",
+    "-p",
+    process.env.AICAM_COMPOSE_PROJECT ?? "aicam-dev",
+    ...files.flatMap((f) => ["-f", resolve(be, f)]),
+  ];
+}
+
 /** Migrate lại + seed TST + dọn Redis (ai-cam-be/scripts/qa-reset.sh). */
 export function resetData() {
   // --mute-cam2: Cam 2 đọc góc khay trống → BR-06 không chặn ngẫu nhiên theo vòng phát của camera giả (QA G4).

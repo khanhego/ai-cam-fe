@@ -10,16 +10,15 @@
  * beat). Shopee returns thật: chưa test — thiếu partner T-3.
  */
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { loginAdmin, PASSWORD, resetData } from "./helpers";
+import { composeArgs, loginAdmin, PASSWORD, resetData } from "./helpers";
 
 test.skip(!process.env.E2E_M9_BE, "BE M9 (T-105, T-113..T-115) — đặt E2E_M9_BE=1 khi chạy e2e:real");
 test.use({ viewport: { width: 1366, height: 768 } });
 
-const COMPOSE = ["compose", "-f", resolve(process.cwd(), "../ai-cam-be/docker/compose.dev.yml")];
+const COMPOSE = composeArgs();
 
 /** Task Celery chạy ngay trong container api (cùng code + env với worker) — như `_job` của QA M9. */
 function job(expr: string): string {
