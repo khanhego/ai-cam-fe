@@ -54,11 +54,14 @@ export type Share = {
   can_revoke: boolean;
 };
 
-/** `shares[]` ở API-31 / API-132: ≤ 3 link mới nhất (trừ `FAILED`). */
+/**
+ * `shares[]` ở API-31 / API-132: ≤ 3 link mới nhất (trừ `FAILED`). `revoke_pending` chưa có trong contract (01 EX-S7 cần
+ * "Đang thu hồi — chờ Internet" cả ở D4 / D17) — FE đọc nếu có (DEC-702, *Phản hồi* Architect).
+ */
 export type ShareBrief = Pick<
   Share,
   "id" | "status" | "recipient" | "expires_at" | "session_count" | "url" | "can_revoke"
->;
+> & { revoke_pending?: boolean };
 
 /** Tab D21: `ACTIVE` gồm `CREATING`; `ALL` gồm `FAILED`. */
 export type ShareListStatus = "ACTIVE" | "REVOKED" | "EXPIRED" | "ALL";

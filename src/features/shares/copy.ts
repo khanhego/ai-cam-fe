@@ -58,3 +58,71 @@ export const COPY = {
   failedToast: (r: string) => `Không tạo được link chia sẻ cho "${r}". Mở Link chia sẻ để xem lỗi.`,
   duration: (s: number) => fmtDuration(s),
 };
+
+/** Chữ D21 Link chia sẻ + khối Link ở D4 / D17 + thu hồi / sao chép — 01 §10.5 D21 (chữ đánh dấu "mới" chưa có ở 01 — chờ PO, DEC-701). */
+export const LIST = {
+  title: "Link chia sẻ",
+  /** mới */
+  subtitle: "Link bằng chứng đã gửi cho sàn / ĐVVC — sao chép lại hoặc thu hồi.",
+  tabs: "Trạng thái link",
+  tab: { ACTIVE: "Đang hoạt động", REVOKED: "Đã thu hồi", EXPIRED: "Hết hạn", ALL: "Tất cả" },
+  q: "Tìm mã kiện / mã hồ sơ / gửi cho",
+  search: "Tìm",
+  creator: "Người tạo",
+  creatorAll: "Tất cả",
+  mine: "Của tôi",
+  /** mới */
+  sourceFilter: (label: string) => `Nguồn: ${label}`,
+  /** mới */
+  sourceFilterUnknown: "Đang lọc theo một hồ sơ / kiện",
+  /** mới */
+  clear: "Bỏ lọc",
+  caption: "Danh sách link chia sẻ",
+  col: {
+    created: "Tạo lúc",
+    creator: "Người tạo",
+    recipient: "Gửi cho",
+    source: "Nguồn",
+    sessions: "Phiên",
+    expires: "Hết hạn",
+    status: "Trạng thái",
+    actions: "Thao tác",
+  },
+  empty: "Chưa có link chia sẻ nào.",
+  emptyHint: "Tạo link từ hồ sơ khiếu nại hoặc chi tiết đơn.",
+  /** mới */
+  emptyFiltered: "Không có link nào khớp bộ lọc.",
+  /** mới — tab trống nhưng tab khác có link. */
+  emptyTab: "Không có link nào ở mục này.",
+  error: "Không tải được danh sách link chia sẻ.",
+  retry: "Thử lại",
+  loading: "Đang tải",
+  revokedBy: (who: string | null, at: string) => (who ? `${who}, ${at}` : at),
+  revokePending: "Đang thu hồi — chờ Internet",
+  revokePendingInfo: "Link vẫn mở được trên cloud tới khi kho có mạng lại hoặc hết hạn.",
+  copy: "Sao chép",
+  copyAria: (r: string) => `Sao chép link gửi ${r}`,
+  copied: "Đã sao chép link.",
+  /** mới */
+  copyFailed: "Không sao chép được link. Mở Link chia sẻ trên trình duyệt khác rồi thử lại.",
+  revoke: "Thu hồi",
+  revokeAria: (r: string) => `Thu hồi link gửi ${r}`,
+  /** Khối D4 / D17. */
+  block: (n: number) => `Link chia sẻ (${n} đang hoạt động)`,
+  blockAll: "Xem tất cả",
+  /** mới */
+  blockEmpty: "Chưa có link chia sẻ nào.",
+  expiresShort: (at: string) => `Hết hạn ${at}`,
+  sessionCount: (n: number) => `${n} phiên`,
+} as const;
+
+/** Dialog "Thu hồi link?" — 01 §10.5 D21. */
+export const REVOKE = {
+  title: "Thu hồi link?",
+  body: "Người nhận sẽ không mở được link này nữa (trong vòng 1 phút). Không hoàn tác được.",
+  confirm: "Thu hồi link",
+  cancel: "Hủy",
+  done: "Đã thu hồi link.",
+  /** mới — lỗi mạng (không có `message` server). */
+  failed: "Không thu hồi được link. Thử lại.",
+} as const;

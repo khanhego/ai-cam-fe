@@ -22,6 +22,7 @@ import { hasPermission } from "@/lib/api/auth";
 import { useAuth } from "../auth/useAuth";
 import { COPY as SHARE_COPY } from "../shares/copy";
 import { ShareLinkDialog } from "../shares/ShareLinkDialog";
+import { SharesBlock } from "../shares/SharesBlock";
 import { ClaimNotes } from "./ClaimNotes";
 import { ClaimStatusMenu, ClaimSteps } from "./ClaimStatusStepper";
 import { COPY } from "./copy";
@@ -369,6 +370,17 @@ export default function ClaimDetailPage() {
           <ClaimNotes claim={c} />
         </section>
       </div>
+      {/* item 03 (01 §10.5 D17): khối "Link chia sẻ" dưới Bằng chứng (API-132 `shares[]`). */}
+      {hasPermission(me, "shares.read") && c.shares && (
+        <div className="mt-4">
+          <SharesBlock
+            shares={c.shares}
+            activeCount={c.shares_active_count ?? 0}
+            sourceQuery={{ claim_id: c.id }}
+            idPrefix="d17"
+          />
+        </div>
+      )}
       {shareOpen && (
         <ShareLinkDialog source={{ type: "CLAIM", claimId: c.id }} onClose={() => setShareOpen(false)} />
       )}

@@ -110,8 +110,9 @@ test("item 03 (FR-10.02): mục mới theo vai, thứ tự 01 §10.3; ẩn tới
   expect(labels("CSKH", all)).toEqual(expect.arrayContaining(["Báo cáo", "Link chia sẻ"]));
   expect(labels("CSKH", all)).not.toContain("Sao lưu");
   expect(labels("SUPERVISOR", all)).not.toContain("Thông báo");
-  // Màn chưa xây (mặc định M11) → không có mục; "Kết nối sàn" có ngay (đổi tên D7).
-  expect(labels("ADMIN")).not.toContain("Link chia sẻ");
+  // Màn chưa xây → không có mục; "Kết nối sàn" có ngay (đổi tên D7). M16 (T-257): D21 đã có màn.
+  expect(labels("ADMIN")).not.toContain("Thông báo");
+  expect(labels("CSKH")).toContain("Link chia sẻ");
   // M14 (T-254): D20 đã có màn.
   expect(labels("CSKH")).toContain("Báo cáo");
   expect(labels("ADMIN")).toContain("Kết nối sàn");

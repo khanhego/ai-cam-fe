@@ -10,6 +10,8 @@ import { shopOfPackage } from "./packagesDb";
 /**
  * Link chia sẻ giả (02b-admin §12, 02 §6.2 API-160..164): `CREATING` → `ACTIVE` sau 3 lần đọc API-162 (handler phát WS
  * `share.updated` mỗi bước); `?fail=upload` ở trang → `FAILED UPLOAD_FAILED`; `?cloud=0` → kho lưu chưa cấu hình.
+ * T-257: thu hồi → `revoke_pending` tới khi "xóa xong trên cloud" (≥ 2 giây sau, lúc đọc); `?cloudOffline=1` → giữ
+ * `revoke_pending` (EX-S7 — "Đang thu hồi — chờ Internet"); link `share-4` của Supervisor (CSKH không thu hồi được).
  */
 export type MockShare = Omit<Share, "can_revoke" | "items"> & {
   session_ids: string[];
@@ -20,7 +22,9 @@ export type MockShare = Omit<Share, "can_revoke" | "items"> & {
 
 export const SHARE_TICKS = 3;
 export const mockShares: MockShare[] = [];
-export const mockCloud = { configured: true, failUpload: false };
+export const mockCloud = { configured: true, failUpload: false, offline: false };
+/** Thu hồi xong trên cloud sau bao lâu (mock J-25). */
+export const REVOKE_SETTLE_MS = 2000;
 
 const DAY = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -52,6 +56,7 @@ export function resetMockShares() {
   Object.assign(mockCloud, {
     configured: mockParam("cloud") !== "0",
     failUpload: mockParam("fail") === "upload",
+    offline: mockParam("cloudOffline") === "1",
   });
   mockShares.splice(0, mockShares.length);
   const claim = mockClaims.find((c) => c.status !== "CLOSED" && c.evidence.some((e) => e.kind === "SESSION"));
@@ -77,6 +82,8 @@ export function resetMockShares() {
     fail: false,
   };
   const active = iso(now + 5 * DAY);
+  /** Còn < 24 giờ → cột hết hạn đỏ ở D21. */
+  const soon = iso(now + 20 * 3_600_000);
   mockShares.push(
     {
       ...base,
@@ -87,6 +94,18 @@ export function resetMockShares() {
       expires_at: active,
       created_at: iso(now - 2 * DAY),
       created_by: { id: "u-cskh", display_name: "Lan" },
+    },
+    {
+      ...base,
+      id: "share-4",
+      status: "ACTIVE",
+      url: signedUrl("share-4", soon),
+      recipient: "Bưu cục Thủ Đức – khiếu nại 5521",
+      session_count: 1,
+      session_ids: sessions.slice(0, 1),
+      expires_at: soon,
+      created_at: iso(now - 6 * DAY + 3_600_000),
+      created_by: { id: "u-sup", display_name: "Nguyễn B" },
     },
     {
       ...base,
@@ -119,6 +138,13 @@ export function refreshShare(s: MockShare, now = Date.now()) {
     s.status = "EXPIRED";
     s.url = null;
   }
+  if (
+    s.revoke_pending &&
+    !mockCloud.offline &&
+    s.revoked_at &&
+    now - Date.parse(s.revoked_at) >= REVOKE_SETTLE_MS
+  )
+    s.revoke_pending = false;
   return s;
 }
 
@@ -195,8 +221,11 @@ export function sharesFor(
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   return {
     shares: list.slice(0, 3).map((s) => {
-      const { id, status, recipient, expires_at, session_count, url, can_revoke } = toShare(s, user);
-      return { id, status, recipient, expires_at, session_count, url, can_revoke };
+      const { id, status, recipient, expires_at, session_count, url, can_revoke, revoke_pending } = toShare(
+        s,
+        user,
+      );
+      return { id, status, recipient, expires_at, session_count, url, can_revoke, revoke_pending };
     }),
     shares_active_count: list.filter((s) => s.status === "ACTIVE" || s.status === "CREATING").length,
   };

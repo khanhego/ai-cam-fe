@@ -11,6 +11,7 @@ import {
   mockCloud,
   mockShares,
   refreshShare,
+  REVOKE_SETTLE_MS,
   shareOptions,
   tickShare,
   toShare,
@@ -147,7 +148,6 @@ export const sharesHandlers = [
     if (!share) return apiError(404, "NOT_FOUND", "Không tìm thấy link.");
     // Mock: mỗi lần đọc một bước dựng; thu hồi xong trên cloud ở lần đọc sau.
     if (tickShare(share)) announce(share);
-    else if (share.revoke_pending) share.revoke_pending = false;
     return json(toShare(share, user, true));
   }),
 
@@ -170,6 +170,12 @@ export const sharesHandlers = [
       ticks: 0,
     });
     announce(share);
+    // Mock J-25: xóa xong trên cloud → `revoke_pending = false` + WS (kho mất Internet `?cloudOffline=1` → giữ).
+    if (!mockCloud.offline)
+      setTimeout(() => {
+        refreshShare(share);
+        if (!share.revoke_pending) announce(share);
+      }, REVOKE_SETTLE_MS);
     return json(toShare(share, user, true));
   }),
 ];

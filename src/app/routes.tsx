@@ -46,6 +46,8 @@ export const routes: RouteObject[] = [
       { path: "claims/:id", Component: lazy(() => import("@/features/claims/ClaimDetailPage")) },
       // item 03: D20 Báo cáo (T-254; tab Năng suất kiểm vai trong trang — 02b-admin §2).
       { path: "reports", Component: lazy(() => import("@/features/reports/ReportsPage")) },
+      // item 03: D21 Link chia sẻ (T-257) — 3 vai dashboard (CSKH chỉ thu hồi link mình tạo — `can_revoke`).
+      { path: "shares", Component: lazy(() => import("@/features/shares/SharesPage")) },
       {
         path: "approvals",
         element: (

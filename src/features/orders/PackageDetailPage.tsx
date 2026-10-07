@@ -26,6 +26,7 @@ import { COPY as CLAIM_COPY } from "../claims/copy";
 import { COPY as RETURN_COPY } from "../returns/copy";
 import { COPY as SHARE_COPY } from "../shares/copy";
 import { ShareLinkDialog } from "../shares/ShareLinkDialog";
+import { SharesBlock } from "../shares/SharesBlock";
 import { COPY } from "./copy";
 import { ExportDialog } from "./ExportDialog";
 import { exportLayouts } from "./exportLayouts";
@@ -380,6 +381,16 @@ export default function PackageDetailPage() {
           defaultType={defaultType}
           defaultCounterparty={latestCase?.kind === "FAILED_DELIVERY" ? "CARRIER" : "PLATFORM"}
           onClose={() => setCreatingClaim(false)}
+        />
+      )}
+
+      {/* item 03 (01 §10.5 D4): khối "Link chia sẻ" (như D21 rút gọn — API-31 `shares[]`). */}
+      {hasPermission(me, "shares.read") && pkg.shares && (
+        <SharesBlock
+          shares={pkg.shares}
+          activeCount={pkg.shares_active_count ?? 0}
+          sourceQuery={{ package_id: pkg.id }}
+          idPrefix="d4"
         />
       )}
 

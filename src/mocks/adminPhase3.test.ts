@@ -222,18 +222,23 @@ describe("shares (API-160..164)", () => {
   test("API-161: counts theo trạng thái; CSKH không thu hồi được link người khác", async () => {
     await as("tst_cskh");
     const r = await sharesApi.list({ status: "ALL" });
-    expect(r.counts).toMatchObject({ ACTIVE: 1, REVOKED: 1, EXPIRED: 1, ALL: 3 });
+    expect(r.counts).toMatchObject({ ACTIVE: 2, REVOKED: 1, EXPIRED: 1, ALL: 4 });
     expect(r.items.every((s) => !("items" in s) || s.items === undefined)).toBe(true);
     await as("tst_sup");
-    expect((await sharesApi.list({ mine: true })).total).toBe(0);
+    // T-257: `share-4` do Supervisor tạo (CSKH không thu hồi được).
+    expect((await sharesApi.list({ mine: true })).total).toBe(1);
+    await as("tst_cskh");
+    const other = (await sharesApi.list({})).items.find((s) => s.id === "share-4")!;
+    expect(other.can_revoke).toBe(false);
+    expect((await fail(sharesApi.revoke("share-4"))).status).toBe(403);
   });
 
   test("API-31 / API-132: shares[] + shares_active_count", async () => {
     await as();
     const claim = claimWithSession();
     const detail = await claimsApi.get(claim.id);
-    expect(detail.shares_active_count).toBe(1);
-    expect(detail.shares[0]).toMatchObject({ id: "share-1", status: "ACTIVE" });
+    expect(detail.shares_active_count).toBe(2);
+    expect(detail.shares[0]).toMatchObject({ id: "share-1", status: "ACTIVE", revoke_pending: false });
     const pkg = await packagesApi.get(claim.package_id);
     expect(pkg.shares_active_count).toBeGreaterThanOrEqual(1);
   });
