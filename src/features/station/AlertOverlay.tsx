@@ -33,7 +33,7 @@ export function AlertOverlay({
         {alert.message ||
           (alert.code === "OPERATOR_REQUIRED" && alert.data.mode === "PACK"
             ? COPY.returnAlert.operatorRequiredPack
-            : "")}
+            : (COPY.alertBody[alert.code] ?? ""))}
       </p>
       {alert.code === "ALREADY_HANDED_OVER" &&
         alert.data.is_return === true &&

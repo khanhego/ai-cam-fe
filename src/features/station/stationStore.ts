@@ -201,6 +201,9 @@ export const useStationStore = create<StationStore>((set, get) => ({
     // Lệch mã do Cam 2 đến qua WS: phát âm lỗi lặp; rời lệch mã thì tắt.
     if (state.state === "MISMATCH" && prev?.state !== "MISMATCH") sound.play("error", { loop: true });
     if (state.state !== "MISMATCH" && prev?.state === "MISMATCH") sound.stop();
+    // item 03 (BR-21 làm rõ, 01 §10.4 S2): đơn chuyển "Đang yêu cầu hủy" khi đang đóng → 2 bíp lần đầu thấy cờ.
+    const flagged = (s: StationState | null) => !!s?.session?.flags.includes("ORDER_CANCEL_REQUESTED");
+    if (sameSession && state.session && flagged(state) && !flagged(prev)) sound.play("warn");
   },
 
   async scan(code) {

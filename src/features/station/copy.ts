@@ -24,6 +24,15 @@ export const COPY = {
     cancel: "Hủy phiên",
     callManager: "Gọi quản lý",
     warn15: (m: number) => `Phiên đã mở ${m} phút. Quét lại mã để hoàn tất hoặc Hủy phiên.`,
+    // ---- item 03 (01 §10.4 S2, 02b-station §9) ----
+    orderLabel: "Đơn",
+    /** "…0123" — 4 số cuối mã đơn. */
+    orderTail: (sn: string) => `…${sn.slice(-4)}`,
+    /** RF-32: > 3 đơn → 3 mã + "và {n} đơn khác". */
+    merged: (n: number, list: string, rest: number) =>
+      `Kiện gộp ${n} đơn: ${list}${rest > 0 ? ` và ${rest} đơn khác` : ""} — kiểm đủ hàng của ${n > 2 ? "tất cả" : "cả hai"}`,
+    itemOrder: (sn: string) => `(đơn …${sn.slice(-4)})`,
+    cancelRequested: "⚠ Người mua đang xin hủy đơn này. Đóng gói xong để riêng, chưa bàn giao.",
   },
   tray: {
     MATCH: "Cam 2 khớp mã trên khay",
@@ -53,10 +62,15 @@ export const COPY = {
     RETURN_IN_PROGRESS_ELSEWHERE: "ĐANG KIỂM Ở STATION KHÁC",
     INSPECTION_REQUIRED: "CHƯA CHỌN KẾT LUẬN",
     RETURN_CODE_DIFFERENT: "MÃ KHÔNG THUỘC KIỆN ĐANG KIỂM",
-    // item 03 (02b-station §9) — hành vi đầy đủ ở T-233 / T-236.
+    // item 03 (02b-station §9).
     ORDER_CANCEL_REQUESTED: "ĐƠN ĐANG YÊU CẦU HỦY",
     RETURN_MULTIPLE_ORDERS: "MÃ CÓ Ở NHIỀU ĐƠN",
   } satisfies Record<AlertCode, string>,
+  /** Thân S4 / R4 dự phòng khi server không gửi `message` (item 03, 01 §10.4 S4 / R1). */
+  alertBody: {
+    ORDER_CANCEL_REQUESTED: "Người mua đang xin hủy đơn này. Chờ xử lý trên sàn, chưa đóng gói.",
+    RETURN_MULTIPLE_ORDERS: "Mã này có ở nhiều đơn của các shop khác nhau. Chọn đúng đơn.",
+  } as Partial<Record<AlertCode, string>>,
   /** Tiêu đề S4 khi quét ở chế độ đóng gói mà chưa có tên (item 03, FR-03.16; chữ thân = `message` server). */
   alertPack: { OPERATOR_REQUIRED: "CHƯA CÓ NGƯỜI ĐÓNG GÓI" },
   /** Dòng phụ R4 khi server không gửi `message` đủ ý (01 §10.4 R4). */

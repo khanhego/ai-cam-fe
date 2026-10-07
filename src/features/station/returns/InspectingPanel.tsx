@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { StationSession, StationState } from "@/lib/api/station";
 import { canBeOk, INSPECTION_LIMITS, RETURN_KIND } from "@/shared/returns/inspection";
-import { Alert, Button, StatusChip, TextAreaField } from "@/shared/ui";
+import { Alert, Button, PlatformChip, StatusChip, TextAreaField } from "@/shared/ui";
 
 import { CancelSessionDialog } from "../CancelSessionDialog";
 import { COPY } from "../copy";
@@ -18,7 +18,7 @@ const C = COPY.returns.inspecting;
 /** Flush nháp 30 giây trước `abandon_at` (DEC-272). */
 const FLUSH_BEFORE_ABANDON_MS = 30_000;
 
-/** Mã đã quét / mã gốc / chip loại / đơn / lý do khách (01 §10.4 R2). */
+/** Mã đã quét / chip sàn · shop / mã gốc / chip loại / đơn / lý do khách (01 §10.4 R2). */
 export function ReturnHeader({ session }: { session: StationSession }) {
   const rc = session.return_case;
   const shown = rc?.return_tracking_number ?? session.package.tracking_number;
@@ -28,6 +28,12 @@ export function ReturnHeader({ session }: { session: StationSession }) {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <span className="font-mono text-display-md tracking-wide">{shown}</span>
+        {/* item 03 (01 §10.4 R2): chip sàn · shop cạnh mã kiện; phiên chưa xác định → "Chưa rõ sàn". */}
+        <PlatformChip
+          platform={session.package.order?.platform ?? null}
+          shopName={session.package.order?.shop_name}
+          size="lg"
+        />
         {rc && (
           <StatusChip tone={kindTone} className="h-8 px-3 text-title-md">
             {kindLabel}
