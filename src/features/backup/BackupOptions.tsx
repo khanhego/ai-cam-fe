@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 
 import { backupApi, type BackupSettingsInput, type BackupStatus } from "@/lib/api/backup";
 import { isApiError } from "@/lib/api/errors";
@@ -36,6 +36,8 @@ function useSaveSettings(onFieldError?: (fields: Record<string, string>) => void
 function AllPackClipsSwitch({ status }: { status: BackupStatus }) {
   const { save, error } = useSaveSettings();
   const { all_pack_clips: on, all_pack_clips_estimate_gb_per_day: gb } = status.settings;
+  const scopeId = useId();
+  const estimateId = useId();
   return (
     <div className="mb-4">
       {error && <Alert kind="error">{error}</Alert>}
@@ -45,13 +47,19 @@ function AllPackClipsSwitch({ status }: { status: BackupStatus }) {
           role="switch"
           checked={on}
           aria-checked={on}
+          aria-describedby={gb !== null ? `${scopeId} ${estimateId}` : scopeId}
           disabled={save.isPending}
           onChange={(e) => save.mutate({ all_pack_clips: e.target.checked })}
         />
         {O.allPackClips}
       </label>
+      <p id={scopeId} className="mt-1 ml-8 text-body-sm text-on-surface-variant">
+        {O.allPackClipsScope}
+      </p>
       {gb !== null && (
-        <p className="mt-1 ml-8 text-body-sm text-on-surface-variant">{O.estimate(SIZE.format(gb))}</p>
+        <p id={estimateId} className="mt-1 ml-8 text-body-sm text-on-surface-variant">
+          {O.estimate(SIZE.format(gb))}
+        </p>
       )}
     </div>
   );

@@ -234,6 +234,16 @@ test("FR-02.18 (C) + Nâng cao: công tắc mọi clip đóng gói + ước tín
   await asAdmin();
 
   expect(screen.getByText("Ước tính thêm ≈ 30 GB / ngày tải lên.")).toBeInTheDocument();
+  // L27: câu giải thích hệ quả mặc định, đọc kèm công tắc (aria-describedby).
+  const scope = screen.getByText(
+    "Mặc định chỉ sao lưu bằng chứng đang được giữ (hồ sơ hàng hoàn / khiếu nại). Mất máy kho thì clip " +
+      "đóng gói của đơn đang giao hoặc mới giao chưa có hồ sơ sẽ mất. Bật tùy chọn này để sao lưu mọi clip " +
+      "đóng gói (tốn dung lượng cloud hơn — xem ước tính).",
+  );
+  expect(screen.getByRole("switch", { name: "Sao lưu thêm mọi clip đóng gói" })).toHaveAttribute(
+    "aria-describedby",
+    expect.stringContaining(scope.id),
+  );
   await user.click(screen.getByRole("switch", { name: "Sao lưu thêm mọi clip đóng gói" }));
   await waitFor(() => expect(mockBackup.allPackClips).toBe(true));
   expect(screen.getByRole("switch", { name: "Sao lưu thêm mọi clip đóng gói" })).toBeChecked();

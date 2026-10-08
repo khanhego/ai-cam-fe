@@ -166,6 +166,11 @@ export const COPY = {
     /** mới */
     title: "Tùy chọn",
     allPackClips: "Sao lưu thêm mọi clip đóng gói",
+    /** mới — L27: hệ quả của mặc định (FR-02.18). */
+    allPackClipsScope:
+      "Mặc định chỉ sao lưu bằng chứng đang được giữ (hồ sơ hàng hoàn / khiếu nại). Mất máy kho thì clip " +
+      "đóng gói của đơn đang giao hoặc mới giao chưa có hồ sơ sẽ mất. Bật tùy chọn này để sao lưu mọi clip " +
+      "đóng gói (tốn dung lượng cloud hơn — xem ước tính).",
     estimate: (gb: string) => `Ước tính thêm ≈ ${gb} GB / ngày tải lên.`,
     advanced: "Nâng cao",
     uploadMbps: "Giới hạn tốc độ tải lên (Mbit/s)",
