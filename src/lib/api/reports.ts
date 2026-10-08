@@ -193,10 +193,11 @@ export type ReturnsReport = ReportBase & {
     rate: number | null;
     issue: number;
   }[];
+  /** `platform/shop_id/shop_name = null` = đơn nhập CSV không gắn shop (BE `ReturnShopRow` / `ClaimShopRow`). */
   by_shop: {
-    platform: Platform;
-    shop_id: string;
-    shop_name: string;
+    platform: Platform | null;
+    shop_id: string | null;
+    shop_name: string | null;
     handed_over: number;
     return_cases: number;
     rate: number | null;
@@ -223,10 +224,11 @@ export type ClaimsReport = ReportBase & {
     lost: number;
     recovered_amount: number;
   }[];
+  /** `platform/shop_id/shop_name = null` = đơn nhập CSV không gắn shop (BE `ReturnShopRow` / `ClaimShopRow`). */
   by_shop: {
-    platform: Platform;
-    shop_id: string;
-    shop_name: string;
+    platform: Platform | null;
+    shop_id: string | null;
+    shop_name: string | null;
     count: number;
     won: number;
     lost: number;

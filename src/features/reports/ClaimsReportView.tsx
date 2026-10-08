@@ -1,10 +1,9 @@
 import type { ClaimsReport } from "@/lib/api/reports";
-import { PLATFORM_SHORT } from "@/shared/labels";
 import { CLAIM_STATUS, CLAIM_TYPE, COUNTERPARTY, fmtVnd } from "@/shared/returns/labels";
 
 import { RateCard } from "./RateCard";
 import { REPORT_COPY } from "./reportCopy";
-import { fmtPct, num } from "./reportFormat";
+import { fmtPct, num, shopLabel } from "./reportFormat";
 import { claimsLink, type ReportUrlFilters } from "./reportParams";
 import { ReportTable } from "./ReportTable";
 import { SeriesChart } from "./SeriesChart";
@@ -112,13 +111,17 @@ export function ClaimsReportView({ data, filters }: { data: ClaimsReport; filter
         <ReportTable
           title={K.sections.byShop}
           rows={data.by_shop}
-          rowKey={(r) => r.shop_id}
-          rowLink={(r) => claimsLink(filters, { status: "ALL", platform: r.platform, shop: r.shop_id })}
+          rowKey={(r) => r.shop_id ?? "none"}
+          rowLink={(r) =>
+            r.shop_id
+              ? claimsLink(filters, { status: "ALL", platform: r.platform ?? undefined, shop: r.shop_id })
+              : null
+          }
           columns={[
             {
               key: "shop",
               header: K.col.shop,
-              cell: (r) => `${PLATFORM_SHORT[r.platform]} · ${r.shop_name}`,
+              cell: (r) => shopLabel(r.platform, r.shop_name),
             },
             { key: "count", header: K.col.count, numeric: true, cell: (r) => num(r.count) },
             { key: "won", header: K.col.won, numeric: true, cell: (r) => num(r.won) },

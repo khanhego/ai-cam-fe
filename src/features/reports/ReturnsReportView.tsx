@@ -1,11 +1,10 @@
 import type { ReturnsReport } from "@/lib/api/reports";
-import { PLATFORM_SHORT } from "@/shared/labels";
 import { CONCLUSION_LABEL, RETURN_KIND } from "@/shared/returns/labels";
 
 import { RateCard } from "./RateCard";
 import { REPORT_COPY } from "./reportCopy";
 import { returnsLink, type ReportUrlFilters } from "./reportParams";
-import { fmtPct, num } from "./reportFormat";
+import { fmtPct, num, shopLabel } from "./reportFormat";
 import { ReportTable } from "./ReportTable";
 import { SeriesChart } from "./SeriesChart";
 
@@ -126,10 +125,14 @@ export function ReturnsReportView({ data, filters }: { data: ReturnsReport; filt
       <ReportTable
         title={R.sections.byShop}
         rows={data.by_shop}
-        rowKey={(r) => r.shop_id}
-        rowLink={(r) => returnsLink(filters, { tab: "ALL", platform: r.platform, shop: r.shop_id })}
+        rowKey={(r) => r.shop_id ?? "none"}
+        rowLink={(r) =>
+          r.shop_id
+            ? returnsLink(filters, { tab: "ALL", platform: r.platform ?? undefined, shop: r.shop_id })
+            : null
+        }
         columns={[
-          { key: "shop", header: R.col.shop, cell: (r) => `${PLATFORM_SHORT[r.platform]} · ${r.shop_name}` },
+          { key: "shop", header: R.col.shop, cell: (r) => shopLabel(r.platform, r.shop_name) },
           { key: "handed", header: R.col.handedOver, numeric: true, cell: (r) => num(r.handed_over) },
           { key: "cases", header: R.col.cases, numeric: true, cell: (r) => num(r.return_cases) },
           { key: "rate", header: R.col.rate, numeric: true, cell: (r) => fmtPct(r.rate) },

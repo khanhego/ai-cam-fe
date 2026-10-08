@@ -326,14 +326,29 @@ function returnsReport(
         issue: 0,
       },
     ],
-    by_shop: shops.map((s, i) => ({
-      platform: s.platform,
-      shop_id: s.id,
-      shop_name: s.name,
-      handed_over: [700, 120, 180][i]!,
-      return_cases: [26, 4, 10][i]!,
-      rate: [26 / 700, 4 / 120, 10 / 180][i]!,
-    })),
+    by_shop: [
+      ...shops.map((s, i) => ({
+        platform: s.platform,
+        shop_id: s.id,
+        shop_name: s.name,
+        handed_over: [700, 120, 180][i]!,
+        return_cases: [26, 4, 10][i]!,
+        rate: [26 / 700, 4 / 120, 10 / 180][i]!,
+      })),
+      // BUG-G5-P3-1: đơn nhập CSV không gắn shop → BE trả dòng `platform/shop_id/shop_name = null` (API-150).
+      ...(platform || shopId
+        ? []
+        : [
+            {
+              platform: null,
+              shop_id: null,
+              shop_name: null,
+              handed_over: 15,
+              return_cases: 2,
+              rate: 2 / 15,
+            },
+          ]),
+    ],
     ...series(from, to),
   };
 }
@@ -378,15 +393,31 @@ function claimsReport(
       { counterparty: "PLATFORM", count: n(15), won: n(10), lost: n(3), recovered_amount: n(2_000_000) },
       { counterparty: "CARRIER", count: n(6), won: n(2), lost: 0, recovered_amount: n(350_000) },
     ],
-    by_shop: shops.map((s, i) => ({
-      platform: s.platform,
-      shop_id: s.id,
-      shop_name: s.name,
-      count: [15, 2, 4][i]!,
-      won: [9, 1, 2][i]!,
-      lost: [3, 0, 0][i]!,
-      recovered_amount: [1_900_000, 150_000, 300_000][i]!,
-    })),
+    by_shop: [
+      ...shops.map((s, i) => ({
+        platform: s.platform,
+        shop_id: s.id,
+        shop_name: s.name,
+        count: [15, 2, 4][i]!,
+        won: [9, 1, 2][i]!,
+        lost: [3, 0, 0][i]!,
+        recovered_amount: [1_900_000, 150_000, 300_000][i]!,
+      })),
+      // BUG-G5-P3-1: dòng đơn nhập CSV không gắn shop (API-151).
+      ...(platform || shopId
+        ? []
+        : [
+            {
+              platform: null,
+              shop_id: null,
+              shop_name: null,
+              count: 1,
+              won: 0,
+              lost: 0,
+              recovered_amount: 0,
+            },
+          ]),
+    ],
     ...series(from, to),
   };
 }
@@ -486,6 +517,9 @@ function buildReport(tab: ReportTab, p: URLSearchParams) {
   return productivityReport(from, to, platform, shopId, p.get("station_id"));
 }
 
+/** Khớp BE `csv_export.NO_SHOP`. */
+const NO_SHOP = "(Không có shop)";
+
 /** CSV mẫu (02 §6.2 API-153): dấu tách `;` (Excel vùng VN — BUG-G4-1, 02a DEC-970), mỗi bảng một dòng tiêu đề
  * tiếng Việt, cách nhau một dòng trống, tỷ lệ `4,0%`. */
 function toCsv(tab: ReportTab, report: ReturnType<typeof buildReport>): string {
@@ -494,7 +528,9 @@ function toCsv(tab: ReportTab, report: ReturnType<typeof buildReport>): string {
     const r = report as ReturnsReport;
     lines.push("Tỷ lệ theo shop", "Sàn;Shop;Kiện bàn giao;Hồ sơ hàng hoàn;Tỷ lệ");
     for (const s of r.by_shop)
-      lines.push(`${s.platform};${s.shop_name};${s.handed_over};${s.return_cases};${pct(s.rate)}`);
+      lines.push(
+        `${s.platform ?? ""};${s.shop_name ?? NO_SHOP};${s.handed_over};${s.return_cases};${pct(s.rate)}`,
+      );
     lines.push("", "Sản phẩm bị trả nhiều", "SKU;Sản phẩm;Đã gửi;Yêu cầu trả;Tỷ lệ");
     for (const t of r.top_products)
       lines.push(`${t.sku ?? ""};${t.product_name};${t.shipped};${t.return_requests};${pct(t.rate)}`);
@@ -502,7 +538,9 @@ function toCsv(tab: ReportTab, report: ReturnType<typeof buildReport>): string {
     const r = report as ClaimsReport;
     lines.push("Theo shop", "Sàn;Shop;Hồ sơ;Thắng;Thua;Tiền thu hồi");
     for (const s of r.by_shop)
-      lines.push(`${s.platform};${s.shop_name};${s.count};${s.won};${s.lost};${s.recovered_amount}`);
+      lines.push(
+        `${s.platform ?? ""};${s.shop_name ?? NO_SHOP};${s.count};${s.won};${s.lost};${s.recovered_amount}`,
+      );
     lines.push("", "Theo trạng thái", "Trạng thái;Số hồ sơ");
     for (const s of r.by_status) lines.push(`${s.status};${s.count}`);
   } else {

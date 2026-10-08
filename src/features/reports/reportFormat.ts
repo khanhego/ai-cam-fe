@@ -1,4 +1,5 @@
 import { fmtNumber } from "@/shared/format";
+import { PLATFORM_SHORT, type Platform } from "@/shared/labels";
 
 const PCT = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
@@ -29,4 +30,13 @@ export const num = (n: number) => fmtNumber(n);
 /** "(Không ghi tên)" (`operator_name = null`) luôn cuối bảng (02 §6.2 API-152); thứ tự còn lại giữ như server. */
 export function nullNameLast<T extends { operator_name: string | null }>(rows: T[]): T[] {
   return [...rows.filter((r) => r.operator_name !== null), ...rows.filter((r) => r.operator_name === null)];
+}
+
+/** Khớp BE `reports/csv_export.NO_SHOP` (BUG-G5-P3-1). */
+export const NO_SHOP = "(Không có shop)";
+
+/** Ô "Sàn · Shop" khối "Theo sàn / shop": dòng không gắn shop (đơn nhập CSV) → "(Không có shop)" như CSV. */
+export function shopLabel(platform: Platform | null, shopName: string | null): string {
+  const name = shopName ?? NO_SHOP;
+  return platform ? `${PLATFORM_SHORT[platform]} · ${name}` : name;
 }

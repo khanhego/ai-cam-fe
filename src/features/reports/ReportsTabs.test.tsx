@@ -45,7 +45,11 @@ test("tab Khiếu nại: 5 thẻ (75,0%, 2.350.000 đ, quá hạn đỏ → D16 
   );
   expect(within(byCp).getByText("Sàn").closest("tr")).toHaveTextContent("2.000.000 đ");
   expect(screen.getByRole("table", { name: "Theo loại × kết quả" })).toBeInTheDocument();
-  expect(screen.getByRole("table", { name: "Theo sàn / shop" })).toBeInTheDocument();
+  const byShop = screen.getByRole("table", { name: "Theo sàn / shop" });
+  // BUG-G5-P3-1: dòng shop null (đơn nhập CSV) → "(Không có shop)" như CSV, không link.
+  expect(byShop).not.toHaveTextContent(/undefined|null/);
+  const noShop = within(byShop).getByText("(Không có shop)").closest("tr")!;
+  expect(within(noShop).queryByRole("link")).toBeNull();
   // FR-09.07 (C): biểu đồ + bảng dữ liệu ẩn cho trình đọc màn hình.
   expect(screen.getByRole("region", { name: "Hồ sơ khiếu nại theo thời gian" })).toBeInTheDocument();
   expect(screen.getByRole("table", { name: "Hồ sơ khiếu nại theo thời gian" })).toBeInTheDocument();

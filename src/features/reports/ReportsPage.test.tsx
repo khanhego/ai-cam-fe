@@ -70,7 +70,7 @@ test("drawer 'Báo cáo' → D20 tab Hàng hoàn mặc định, kỳ 30 ngày; 4
   expect(within(top).getByText("Áo thun basic").closest("tr")).toHaveTextContent("Đen / L32014" + "4,4%3");
 
   const byShop = screen.getByRole("table", { name: "Theo sàn / shop" });
-  expect(within(byShop).getAllByRole("row")).toHaveLength(4);
+  expect(within(byShop).getAllByRole("row")).toHaveLength(5);
   expect(within(byShop).getAllByRole("link")[0]).toHaveAttribute(
     "href",
     expect.stringMatching(/^\/admin\/returns\?tab=ALL&from=.*&platform=SHOPEE&shop=/),
@@ -203,4 +203,14 @@ test("mẫu số 0 → '—' + chú thích; bảng rỗng → 'Không có dữ l
     await screen.findByRole("link", { name: /^Tỷ lệ hoàn: —, Chưa có kiện bàn giao trong kỳ/ }),
   ).toBeInTheDocument();
   expect(screen.getAllByText("Không có dữ liệu trong kỳ này.")).toHaveLength(4);
+});
+
+test("BUG-G5-P3-1: dòng shop null (đơn nhập CSV) → '(Không có shop)', không link, không 'undefined · null'", async () => {
+  await as();
+  renderApp("/admin/reports");
+  const byShop = await screen.findByRole("table", { name: "Theo sàn / shop" });
+  expect(byShop).not.toHaveTextContent(/undefined|null/);
+  const row = within(byShop).getByText("(Không có shop)").closest("tr")!;
+  expect(row).toHaveTextContent(/^\(Không có shop\)152/);
+  expect(within(row).queryByRole("link")).toBeNull();
 });
