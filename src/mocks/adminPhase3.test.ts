@@ -141,12 +141,14 @@ describe("reports (API-150..153)", () => {
     expect((await fail(reportsApi.claims(q))).code).toBe("REPORT_TIMEOUT");
   });
 
-  test("API-153: CSV có BOM, tỷ lệ '4,0%'", async () => {
+  test("API-153: CSV có BOM, dấu tách ';' (Excel vùng VN — BUG-G4-1), tỷ lệ '4,0%'", async () => {
     await as();
     const blob = await reportsApi.exportCsv("returns", q);
     const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(await blob.arrayBuffer());
     expect(text.charCodeAt(0)).toBe(0xfeff);
     expect(text).toContain("Tỷ lệ theo shop");
+    expect(text).toContain("Sàn;Shop;Kiện bàn giao;Hồ sơ hàng hoàn;Tỷ lệ");
+    expect(text).toMatch(/;\d+,\d%\r\n/);
   });
 });
 

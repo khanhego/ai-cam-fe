@@ -486,36 +486,37 @@ function buildReport(tab: ReportTab, p: URLSearchParams) {
   return productivityReport(from, to, platform, shopId, p.get("station_id"));
 }
 
-/** CSV mẫu (02 §6.2 API-153): mỗi bảng một dòng tiêu đề tiếng Việt, cách nhau một dòng trống, tỷ lệ `4,0%`. */
+/** CSV mẫu (02 §6.2 API-153): dấu tách `;` (Excel vùng VN — BUG-G4-1, 02a DEC-970), mỗi bảng một dòng tiêu đề
+ * tiếng Việt, cách nhau một dòng trống, tỷ lệ `4,0%`. */
 function toCsv(tab: ReportTab, report: ReturnType<typeof buildReport>): string {
   const lines: string[] = [];
   if (tab === "returns") {
     const r = report as ReturnsReport;
-    lines.push("Tỷ lệ theo shop", "Sàn,Shop,Kiện bàn giao,Hồ sơ hàng hoàn,Tỷ lệ");
+    lines.push("Tỷ lệ theo shop", "Sàn;Shop;Kiện bàn giao;Hồ sơ hàng hoàn;Tỷ lệ");
     for (const s of r.by_shop)
-      lines.push(`${s.platform},${s.shop_name},${s.handed_over},${s.return_cases},${pct(s.rate)}`);
-    lines.push("", "Sản phẩm bị trả nhiều", "SKU,Sản phẩm,Đã gửi,Yêu cầu trả,Tỷ lệ");
+      lines.push(`${s.platform};${s.shop_name};${s.handed_over};${s.return_cases};${pct(s.rate)}`);
+    lines.push("", "Sản phẩm bị trả nhiều", "SKU;Sản phẩm;Đã gửi;Yêu cầu trả;Tỷ lệ");
     for (const t of r.top_products)
-      lines.push(`${t.sku ?? ""},${t.product_name},${t.shipped},${t.return_requests},${pct(t.rate)}`);
+      lines.push(`${t.sku ?? ""};${t.product_name};${t.shipped};${t.return_requests};${pct(t.rate)}`);
   } else if (tab === "claims") {
     const r = report as ClaimsReport;
-    lines.push("Theo shop", "Sàn,Shop,Hồ sơ,Thắng,Thua,Tiền thu hồi");
+    lines.push("Theo shop", "Sàn;Shop;Hồ sơ;Thắng;Thua;Tiền thu hồi");
     for (const s of r.by_shop)
-      lines.push(`${s.platform},${s.shop_name},${s.count},${s.won},${s.lost},${s.recovered_amount}`);
-    lines.push("", "Theo trạng thái", "Trạng thái,Số hồ sơ");
-    for (const s of r.by_status) lines.push(`${s.status},${s.count}`);
+      lines.push(`${s.platform};${s.shop_name};${s.count};${s.won};${s.lost};${s.recovered_amount}`);
+    lines.push("", "Theo trạng thái", "Trạng thái;Số hồ sơ");
+    for (const s of r.by_status) lines.push(`${s.status};${s.count}`);
   } else {
     const r = report as ProductivityReport;
-    lines.push("Theo station", "Station,Kiện,TB giây,Lệch mã,Bỏ dở,Hủy,Đóng lại");
+    lines.push("Theo station", "Station;Kiện;TB giây;Lệch mã;Bỏ dở;Hủy;Đóng lại");
     for (const o of r.by_station)
       lines.push(
-        `${o.station_name},${o.packed},${o.avg_seconds ?? ""},${o.mismatch},${o.abandoned},${o.cancelled},${o.repacked}`,
+        `${o.station_name};${o.packed};${o.avg_seconds ?? ""};${o.mismatch};${o.abandoned};${o.cancelled};${o.repacked}`,
       );
     lines.push("");
-    lines.push("Theo người đóng gói", "Người đóng gói,Kiện,TB giây,Lệch mã,Bỏ dở,Hủy,Đóng lại");
+    lines.push("Theo người đóng gói", "Người đóng gói;Kiện;TB giây;Lệch mã;Bỏ dở;Hủy;Đóng lại");
     for (const o of r.by_operator)
       lines.push(
-        `${o.operator_name ?? "(Không ghi tên)"},${o.packed},${o.avg_seconds ?? ""},${o.mismatch},${o.abandoned},${o.cancelled},${o.repacked}`,
+        `${o.operator_name ?? "(Không ghi tên)"};${o.packed};${o.avg_seconds ?? ""};${o.mismatch};${o.abandoned};${o.cancelled};${o.repacked}`,
       );
   }
   return `\uFEFF${lines.join("\r\n")}\r\n`;
