@@ -164,3 +164,25 @@ test("item 02: WS nối lại → làm mới thêm D14, D15, D16", async () => {
   FakeSocket.last.onopen?.();
   for (const key of [["returns"], ["recon"], ["claims"]]) expect(calledWith(spy, key)).toBe(1);
 });
+
+test("item 03: share.updated → D21 + link đó + D4 / D17; backup.updated → D23 + D8 + D2; shop.updated → D7 + bộ lọc shop", () => {
+  const { spy, emit } = setup();
+  emit("share.updated", { share_id: "sh-1", status: "ACTIVE", progress: 100, step: null });
+  for (const key of [["shares"], ["share", "sh-1"], ["package"], ["claim"]])
+    expect(calledWith(spy, key)).toBe(1);
+  emit("backup.updated", { state: "ON", pending: 3, last_db_success_at: null });
+  for (const key of [["backup"], ["health"], ["daily"]]) expect(calledWith(spy, key)).toBe(1);
+  emit("shop.updated", { shop_id: "s", auth_status: "CONNECTED", last_synced_at: null });
+  for (const key of [["shops"], ["shopsBrief"]]) expect(calledWith(spy, key)).toBe(1);
+  expect(calledWith(spy, ["daily"])).toBe(2);
+});
+
+test("item 03: WS nối lại → làm mới thêm D21, D23, D7", async () => {
+  vi.useFakeTimers();
+  const { spy } = setup();
+  FakeSocket.last.onopen?.();
+  FakeSocket.last.onclose?.({ code: 1006 });
+  await vi.advanceTimersByTimeAsync(1000);
+  FakeSocket.last.onopen?.();
+  for (const key of [["shares"], ["backup"], ["shops"]]) expect(calledWith(spy, key)).toBe(1);
+});

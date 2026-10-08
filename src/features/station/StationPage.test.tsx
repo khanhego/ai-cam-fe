@@ -75,7 +75,7 @@ test("S4: đơn đã hủy → cảnh báo, không mở phiên", async () => {
   await scan("SPXTST0000009");
 
   expect(await screen.findByText("ĐƠN ĐÃ HỦY")).toBeInTheDocument();
-  expect(screen.getByText("SPXTST0000009 đã bị hủy trên Shopee. Không đóng gói.")).toBeInTheDocument();
+  expect(screen.getByText("SPXTST0000009 đã bị hủy trên sàn. Không đóng gói.")).toBeInTheDocument();
 });
 
 test("S4 → S5: đơn đã đóng, yêu cầu đóng gói lại, rồi rút yêu cầu", async () => {

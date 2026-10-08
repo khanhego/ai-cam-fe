@@ -17,7 +17,7 @@ import {
 import { conclusionError } from "@/shared/returns/inspection";
 import { toast } from "@/shared/ui";
 
-import { COPY } from "./copy";
+import { COPY, operatorCopy } from "./copy";
 import {
   editDraft,
   syncDraft,
@@ -201,6 +201,9 @@ export const useStationStore = create<StationStore>((set, get) => ({
     // Lệch mã do Cam 2 đến qua WS: phát âm lỗi lặp; rời lệch mã thì tắt.
     if (state.state === "MISMATCH" && prev?.state !== "MISMATCH") sound.play("error", { loop: true });
     if (state.state !== "MISMATCH" && prev?.state === "MISMATCH") sound.stop();
+    // item 03 (BR-21 làm rõ, 01 §10.4 S2): đơn chuyển "Đang yêu cầu hủy" khi đang đóng → 2 bíp lần đầu thấy cờ.
+    const flagged = (s: StationState | null) => !!s?.session?.flags.includes("ORDER_CANCEL_REQUESTED");
+    if (sameSession && state.session && flagged(state) && !flagged(prev)) sound.play("warn");
   },
 
   async scan(code) {
@@ -271,8 +274,13 @@ export const useStationStore = create<StationStore>((set, get) => ({
     try {
       get().applyState((await stationApi.cancel(session.id, reason, note)).state);
     } catch (e) {
+      // Item 03 (BR-37): phiên hoàn quá 60 giây / đã có kết luận, ảnh → server từ chối; Toast + tải lại (nút ẩn theo state).
+      if (isApiError(e) && e.code === "CANCEL_REQUIRES_SUPERVISOR") {
+        toast(e.message || COPY.returns.inspecting.cancelTooLate);
+        await get().load();
+      }
       // 409 SESSION_NOT_OPEN: state đã khác (02b-station §8) → tải lại.
-      if (isStale(e)) await get().load();
+      else if (isStale(e)) await get().load();
       else report(e, set);
     }
   },
@@ -336,6 +344,7 @@ export const useStationStore = create<StationStore>((set, get) => ({
   },
   closeOperator() {
     set({ operatorOpen: false });
+    if (get().alert?.code === "OPERATOR_REQUIRED") get().dismissAlert();
   },
 
   async setWorkMode(mode) {
@@ -494,10 +503,12 @@ export const useStationStore = create<StationStore>((set, get) => ({
     try {
       get().applyState((await stationApi.setOperator(name)).state);
       set({ operatorOpen: false });
+      if (get().alert?.code === "OPERATOR_REQUIRED") get().dismissAlert();
       return null;
     } catch (e) {
       if (isApiError(e) && e.code === "VALIDATION_ERROR") return e.fieldErrors.name ?? e.message;
-      if (isApiError(e) && e.code === "SESSION_ACTIVE") return COPY.operator.sessionActive;
+      if (isApiError(e) && e.code === "SESSION_ACTIVE")
+        return operatorCopy(get().state?.station.work_mode ?? "RETURN").sessionActive;
       if (retryable(e)) return COPY.unexpected;
       report(e, set);
       return null;
@@ -528,7 +539,12 @@ function applyResult(result: ScanResult) {
   }
   switch (alert.code) {
     case "OPERATOR_REQUIRED":
-      set({ alert: null, operatorOpen: true });
+      // Item 03 (FR-03.16, DEC-481): ở chế độ đóng gói hiện overlay vàng (2 bíp) và mở R5 "Người đóng gói" bên trên;
+      // nhập tên xong / hết `ALERT_MS` → overlay đóng. Chế độ nhận hoàn: chỉ mở R5 (như item 02).
+      if (alert.data.mode === "PACK" || result.state.station.work_mode === "PACK") {
+        set({ alert, lookup: null, operatorOpen: true });
+        alertTimer = setTimeout(() => set({ alert: null }), ALERT_MS);
+      } else set({ alert: null, operatorOpen: true });
       return;
     case "INSPECTION_REQUIRED":
       clearTimeout(inlineTimer);
@@ -545,6 +561,13 @@ function applyResult(result: ScanResult) {
       // R4 1,5 giây rồi tự mở R3 với mã đơn (02b-station §8).
       set({ alert, lookup: null });
       const query = String(alert.data.platform_order_sn ?? get().lastCode ?? "");
+      alertTimer = setTimeout(() => set({ alert: null, lookup: { query } }), MULTIPLE_TO_LOOKUP_MS);
+      return;
+    }
+    case "RETURN_MULTIPLE_ORDERS": {
+      // item 03 (BR-29, EX-R20; DEC-510): mã có ở ≥ 2 đơn khác shop → R4 vàng 1,5 giây rồi mở R3 với `data.code`.
+      set({ alert, lookup: null });
+      const query = String(alert.data.code ?? get().lastCode ?? "");
       alertTimer = setTimeout(() => set({ alert: null, lookup: { query } }), MULTIPLE_TO_LOOKUP_MS);
       return;
     }

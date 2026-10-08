@@ -43,10 +43,8 @@ test.describe("D7 Shopee (cần BE T-16/T-22)", () => {
     );
     await loginAdmin(page);
     await page.goto("/admin/settings/shopee");
-    await page
-      .getByRole("button", { name: /Kết nối (Shopee|lại)/ })
-      .first()
-      .click();
+    // item 03 (T-253): D7 đọc `platforms[]` (API-70) → Alert trong nhóm Shopee + nút "Kết nối Shopee" khóa sẵn.
     await expect(page.getByText("Chưa cấu hình Shopee Open Platform. Dùng Nhập đơn từ file.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Kết nối Shopee" })).toBeDisabled();
   });
 });

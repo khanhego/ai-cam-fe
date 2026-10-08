@@ -1,12 +1,14 @@
 import { http, HttpResponse } from "msw";
 
 import type { ClaimPatch, ClaimStatus, ClaimType, CreateClaimBody } from "@/lib/api/claims";
+import type { Role } from "@/lib/api/session";
 
 import { fmtShort } from "@/shared/format";
 import { CLAIM_STATUS, fmtVnd } from "@/shared/returns/labels";
 
 import { mockUsers } from "../db";
 import { API, apiError, json } from "../http";
+import { matchesShop } from "../packagesDb";
 import {
   CLAIM_TRANSITIONS,
   claimDue,
@@ -16,15 +18,25 @@ import {
   mockClaims,
   mockEvidencePacks,
   mockReconAlerts,
+  findSessionAnywhere,
   packSessionOf,
   packStatus,
+  removalKeepUntil,
+  sessionReview,
   toClaimDetail,
   toClaimItem,
   type MockClaim,
 } from "../returnsDb";
 import { dashboardEvent } from "../ws";
 import { reconSummary } from "./packages";
+import { affectedShares, sharesOfClaim } from "../sharesDb";
 import { DASHBOARD_ROLES, requireRole } from "./session";
+
+/** API-132 + `shares[]` theo người xem (item 03 — `can_revoke` phụ thuộc vai). */
+const claimOut = (c: MockClaim, user: { id: string; role: Role }) => ({
+  ...toClaimDetail(c),
+  ...sharesOfClaim(c.id, user),
+});
 
 const TYPES: ClaimType[] = [
   "DAMAGED",
@@ -69,6 +81,7 @@ export const claimsHandlers = [
         (!p.get("counterparty") || c.counterparty === p.get("counterparty")) &&
         (!owner || c.owner?.id === (owner === "me" ? user.id : owner)) &&
         (!due || (due === "soon" ? d.due_soon : d.overdue)) &&
+        matchesShop(pkg, p.get("platform"), p.get("shop_id")) &&
         (!q ||
           [c.code, pkg?.tracking_number, pkg?.order?.platform_order_sn].some((x) => x?.toUpperCase() === q))
       );
@@ -174,14 +187,14 @@ export const claimsHandlers = [
       dashboardEvent("recon.updated", { summary: reconSummary() });
     }
     updated(claim);
-    return json(toClaimDetail(claim), { status: 201 });
+    return json(claimOut(claim, user), { status: 201 });
   }),
 
   http.get(`${API}/claims/:id`, ({ request, params }) => {
-    const [, denied] = requireRole(request, DASHBOARD_ROLES);
+    const [user, denied] = requireRole(request, DASHBOARD_ROLES);
     if (denied) return denied;
     const c = mockClaims.find((x) => x.id === params.id);
-    return c ? json(toClaimDetail(c)) : apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ.");
+    return c ? json(claimOut(c, user)) : apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ.");
   }),
 
   http.patch(`${API}/claims/:id`, async ({ request, params }) => {
@@ -197,7 +210,7 @@ export const claimsHandlers = [
         "VERSION_CONFLICT",
         "Hồ sơ vừa được người khác cập nhật. Tải lại để xem bản mới.",
         {
-          current: toClaimDetail(c),
+          current: claimOut(c, user),
         },
       );
     if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng, chỉ thêm được ghi chú.");
@@ -256,14 +269,14 @@ export const claimsHandlers = [
       }
     }
     // Không có thay đổi → 200, không tăng `version` (DEC-312 a).
-    if (!notes.length) return json(toClaimDetail(c));
+    if (!notes.length) return json(claimOut(c, user));
     const at = new Date().toISOString();
     const actor = { id: user.id, display_name: user.display_name };
     for (const text of notes)
       c.notes.push({ id: `n-${c.id}-${c.notes.length}`, kind: "STATUS_CHANGE", text, author: actor, at });
     c.version += 1;
     updated(c);
-    return json(toClaimDetail(c));
+    return json(claimOut(c, user));
   }),
 
   http.put(`${API}/claims/:id/evidence`, async ({ request, params }) => {
@@ -283,7 +296,7 @@ export const claimsHandlers = [
         "VERSION_CONFLICT",
         "Hồ sơ vừa được người khác cập nhật. Tải lại để xem bản mới.",
         {
-          current: toClaimDetail(c),
+          current: claimOut(c, user),
         },
       );
     if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng, chỉ thêm được ghi chú.");
@@ -298,24 +311,41 @@ export const claimsHandlers = [
     if (snapshotIds.some((id) => !sessions.some((s) => s.snapshots?.some((x) => x.id === id))))
       fields.snapshot_ids = "Ảnh không thuộc kiện.";
     const keep = new Set([...sessionIds, ...snapshotIds]);
-    const removedAuto = c.evidence.filter((e) => e.auto && !keep.has(e.ref_id));
+    // item 03 (BR-38, 02 §6.2 API-134): bỏ **mọi** bằng chứng cần `note` 5–500; bỏ mềm vào `removed_evidence`.
+    const removedRefs = c.evidence.filter((e) => !keep.has(e.ref_id));
     const note = body.note?.trim() ?? "";
-    if (removedAuto.length && (note.length < 5 || note.length > 500))
+    if (removedRefs.length && (note.length < 5 || note.length > 500))
       fields.note = "Nhập lý do bỏ bằng chứng (5–500 ký tự).";
     if (Object.keys(fields).length) return invalid(fields);
     const at = new Date().toISOString();
     const kept = c.evidence.filter((e) => keep.has(e.ref_id));
+    const restoring = (c.removed ?? []).filter((r) => keep.has(r.ref_id));
     const added = [...keep]
       .filter((id) => !kept.some((e) => e.ref_id === id))
-      .map((id, i) => ({
-        id: `ev-${c.id}-${Date.now()}-${i}`,
-        kind: sessionIds.includes(id) ? ("SESSION" as const) : ("SNAPSHOT" as const),
-        ref_id: id,
-        auto: false,
-        added_at: at,
-      }));
+      .map((id, i) => {
+        // Thêm lại bằng chứng đã bỏ = khôi phục (giữ `auto` cũ).
+        const back = restoring.find((r) => r.ref_id === id);
+        return {
+          id: back?.id ?? `ev-${c.id}-${Date.now()}-${i}`,
+          kind: sessionIds.includes(id) ? ("SESSION" as const) : ("SNAPSHOT" as const),
+          ref_id: id,
+          auto: back?.auto ?? false,
+          added_at: back?.added_at ?? at,
+        };
+      });
     const removed = c.evidence.length - kept.length;
-    if (!removed && !added.length) return json(toClaimDetail(c));
+    if (!removed && !added.length) return json(claimOut(c, user));
+    const by = { id: user.id, display_name: user.display_name };
+    c.removed = [
+      ...(c.removed ?? []).filter((r) => !keep.has(r.ref_id)),
+      ...removedRefs.map((e) => ({
+        ...e,
+        removed_at: at,
+        removed_by: by,
+        reason: note,
+        keep_until: removalKeepUntil(e),
+      })),
+    ];
     c.evidence = [...kept, ...added];
     // Như BE `service.set_evidence` (DEC-312 b).
     const parts = [added.length ? `thêm ${added.length}` : "", removed ? `bỏ ${removed}` : ""].filter(
@@ -330,7 +360,108 @@ export const claimsHandlers = [
     });
     c.version += 1;
     updated(c);
-    return json(toClaimDetail(c));
+    return json(claimOut(c, user));
+  }),
+
+  // item 03 (v0.3 / v0.4, 02 §6.2 API-189 — T-264): đánh dấu / bỏ đánh dấu quét nhầm, xác nhận phiên hoàn thật.
+  http.post(`${API}/claims/:id/return-sessions/:sid/review`, async ({ request, params }) => {
+    const [user, denied] = requireRole(request, DASHBOARD_ROLES);
+    if (denied) return denied;
+    const c = mockClaims.find((x) => x.id === params.id);
+    if (!c) return apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ.");
+    const body = (await request.json()) as {
+      version?: number;
+      action?: string;
+      reason_code?: string | null;
+      note?: string;
+    };
+    const fields: Record<string, string> = {};
+    if (!["MARK_WRONG_SCAN", "UNMARK_WRONG_SCAN", "CONFIRM_RETURN"].includes(body.action ?? ""))
+      fields.action = "Thao tác không hợp lệ.";
+    if (body.action === "MARK_WRONG_SCAN" && !["WRONG_SCAN", "NOT_A_RETURN"].includes(body.reason_code ?? ""))
+      fields.reason_code = "Chọn lý do.";
+    const note = body.note?.trim() ?? "";
+    if (note.length < 5 || note.length > 500) fields.note = "Nhập ghi chú (5–500 ký tự).";
+    if (Object.keys(fields).length) return invalid(fields);
+    const rc = c.return_case_id ? findCase(c.return_case_id) : undefined;
+    const pkgIds = new Set([c.package_id, ...(rc?.package_ids ?? [])]);
+    const found = findSessionAnywhere(String(params.sid));
+    if (!found || !pkgIds.has(found.pkg.id) || found.session.type !== "RETURN")
+      return apiError(404, "NOT_FOUND", "Không tìm thấy phiên của hồ sơ.");
+    if (body.version !== c.version)
+      return apiError(
+        409,
+        "VERSION_CONFLICT",
+        "Hồ sơ vừa được người khác cập nhật. Tải lại để xem bản mới.",
+        {
+          current: claimOut(c, user),
+        },
+      );
+    if (c.status === "CLOSED") return apiError(409, "CLAIM_CLOSED", "Hồ sơ đã đóng, chỉ thêm được ghi chú.");
+    const s = found.session;
+    const review = sessionReview(s);
+    const notEligible = (msg: string) => apiError(409, "SESSION_NOT_ELIGIBLE", msg);
+    const by = { id: user.id, display_name: user.display_name };
+    const at = new Date().toISOString();
+    const bump = (claim: MockClaim, text: string) => {
+      claim.notes.push({ id: `n-${claim.id}-${claim.notes.length}`, kind: "SYSTEM", text, author: by, at });
+      claim.version += 1;
+      updated(claim);
+    };
+    if (body.action === "MARK_WRONG_SCAN") {
+      if (s.status !== "CANCELLED" && s.status !== "ABANDONED")
+        return notEligible("Phiên đã có kết luận — sửa ở chi tiết đơn.");
+      if (review.evidence_exclusion) return notEligible("Phiên đã được loại khỏi bằng chứng.");
+      s.review = {
+        ...s.review,
+        wrong_scan: { at, by, code: body.reason_code as "WRONG_SCAN" | "NOT_A_RETURN", note },
+      };
+      const shotIds = new Set((s.snapshots ?? []).map((x) => x.id));
+      for (const claim of mockClaims) {
+        if (claim.status === "CLOSED") continue;
+        const gone = claim.evidence.filter((e) => e.ref_id === s.id || shotIds.has(e.ref_id));
+        if (!gone.length && claim !== c) continue;
+        claim.evidence = claim.evidence.filter((e) => !gone.includes(e));
+        claim.removed = [
+          ...(claim.removed ?? []),
+          ...gone.map((e) => ({
+            ...e,
+            removed_at: at,
+            removed_by: by,
+            reason: `Đánh dấu quét nhầm: ${note}`,
+            keep_until: removalKeepUntil(e),
+          })),
+        ];
+        bump(claim, `Đánh dấu phiên quét nhầm: ${note}`);
+      }
+    } else if (body.action === "UNMARK_WRONG_SCAN") {
+      if (!review.wrong_scan) return notEligible("Phiên chưa được đánh dấu quét nhầm.");
+      s.review = { ...s.review, wrong_scan: null };
+      bump(c, `Bỏ đánh dấu quét nhầm: ${note}`);
+    } else {
+      const byCause =
+        review.evidence_exclusion === "STATION_CANCEL" || review.evidence_exclusion === "SUPERVISOR_CANCEL";
+      if (!review.review_needed && !byCause) return notEligible("Phiên không cần xác nhận.");
+      if (byCause && user.role === "CSKH")
+        return apiError(403, "FORBIDDEN", "Chỉ Admin / Supervisor gỡ lý do hủy của phiên.");
+      s.review = { ...s.review, review_needed: false, return_confirmed: { at, by, note } };
+      if (!c.evidence.some((e) => e.ref_id === s.id)) {
+        const back = c.removed?.find((r) => r.ref_id === s.id);
+        c.removed = (c.removed ?? []).filter((r) => r.ref_id !== s.id);
+        c.evidence.push(
+          back
+            ? { id: back.id, kind: back.kind, ref_id: back.ref_id, auto: back.auto, added_at: back.added_at }
+            : { id: `ev-${c.id}-${Date.now()}`, kind: "SESSION", ref_id: s.id, auto: false, added_at: at },
+        );
+      }
+      bump(c, `Xác nhận phiên hoàn thật: ${note}`);
+    }
+    // `affected_shares` (v0.4, DEC-531): link `CREATING` / `ACTIVE` chứa phiên (mọi nguồn) — chỉ khi `MARK_WRONG_SCAN`,
+    // không tự thu hồi.
+    return json({
+      ...claimOut(c, user),
+      affected_shares: body.action === "MARK_WRONG_SCAN" ? affectedShares(s.id, user) : [],
+    });
   }),
 
   http.post(`${API}/claims/:id/notes`, async ({ request, params }) => {

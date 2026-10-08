@@ -1,20 +1,29 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { claimsApi, type ClaimDetail, type ClaimEvidence } from "@/lib/api/claims";
+import { claimsApi, type AffectedShare, type ClaimDetail, type ClaimEvidence } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
 import { fmtDate, fmtDuration, fmtShort } from "@/shared/format";
-import { SESSION_FLAG, SESSION_STATUS, type SessionStatus } from "@/shared/labels";
+import { MEDIA_MISSING_LABEL, SESSION_FLAG, SESSION_STATUS, type SessionStatus } from "@/shared/labels";
 import { ClipPlayer } from "@/shared/media/ClipPlayer";
 import { SnapshotStrip } from "@/shared/media/SnapshotStrip";
 import { SESSION_TYPE } from "@/shared/returns/labels";
-import { Alert, Button, Dialog, EmptyState, Icon, IconButton, StatusChip, TextAreaField } from "@/shared/ui";
+import { Alert, Button, EmptyState, Icon, IconButton, StatusChip, useMenuButton } from "@/shared/ui";
 
+import { COPY as SHARE_COPY } from "../shares/copy";
 import { COPY } from "./copy";
+import { evidenceLabel, hasStatusChip, sessionChips, type SessionEvidence } from "./evidenceChips";
+import { useAuth } from "../auth/useAuth";
+import { AffectedSharesDialog } from "./AffectedSharesDialog";
+import { PriorReturnAlert } from "./PriorReturnAlert";
+import { RemoveEvidenceDialog } from "./RemoveEvidenceDialog";
+import { RemovedEvidenceList } from "./RemovedEvidenceList";
+import { ReviewSessionDialog, type ReviewMode } from "./ReviewSessionDialog";
 import { claimErrorText, useClaimMutation } from "./useClaimMutation";
+import { useReviewSession } from "./useReviewSession";
 
 const E = COPY.evidence;
-type SessionEvidence = Extract<ClaimEvidence, { kind: "SESSION" }>;
+type SnapshotEvidence = Extract<ClaimEvidence, { kind: "SNAPSHOT" }>;
 const WARN_FLAGS = new Set([
   "VIDEO_INCOMPLETE",
   "CAM2_UNVERIFIED",
@@ -30,6 +39,12 @@ const MISSING_TEXT = {
 
 type EvidenceVars = { sessionIds: string[]; snapshotIds: string[]; note?: string };
 
+/** Menu "⋮ → Đánh dấu quét nhầm" (01 §10.5 D17 v0.4): phiên mở hoàn Đã hủy / Bỏ dở chưa bị loại. */
+const canMarkWrongScan = (ev: SessionEvidence) =>
+  ev.session.type === "RETURN" &&
+  (ev.session.status === "CANCELLED" || ev.session.status === "ABANDONED") &&
+  !ev.session.evidence_exclusion;
+
 const sessionLabel = (s: SessionEvidence["session"]) =>
   `${s.type === "RETURN" ? E.return : E.pack} ${fmtShort(s.started_at)}`;
 
@@ -41,6 +56,7 @@ function SessionRow({
   busy,
   onPlay,
   onRemove,
+  onMarkWrongScan,
 }: {
   ev: SessionEvidence;
   selected: boolean;
@@ -48,22 +64,41 @@ function SessionRow({
   busy: boolean;
   onPlay: () => void;
   onRemove: () => void;
+  onMarkWrongScan: () => void;
 }) {
+  // G3-FE-6: menu ⋮ theo mẫu menu button chung (Esc / bấm ra ngoài đóng, focus vào mục — DEC-904).
+  const { open, setOpen, menuRef, triggerRef, wrapRef, onMenuKeyDown, onTriggerKeyDown } =
+    useMenuButton<HTMLSpanElement>();
   const s = ev.session;
   const label = sessionLabel(s);
   const duration = s.ended_at != null ? (Date.parse(s.ended_at) - Date.parse(s.started_at)) / 1000 : null;
   const deleted = s.clips.find((c) => c.status === "DELETED");
   const cam2Ok = s.type === "PACK" && s.status === "COMPLETED" && !s.flags.includes("CAM2_UNVERIFIED");
   const statusLabel = SESSION_STATUS[s.status as SessionStatus]?.[0];
+  // G3-FE-7: ✔ xanh chỉ cho bằng chứng dùng được — phiên bị loại (BR-39) / chỉ còn clip "Thiếu tệp" → icon trung tính.
+  const onlyMissing = s.clips.length > 0 && s.clips.every((c) => c.status === "MISSING");
+  const [rowIcon, rowTone] =
+    s.type === "RETURN" && s.evidence_exclusion
+      ? ["do_not_disturb_on", "text-on-surface-variant"]
+      : onlyMissing
+        ? ["videocam_off", "text-on-surface-variant"]
+        : ["check_circle", "text-success"];
   return (
     <li className="flex flex-wrap items-center gap-2 py-2">
-      <Icon name="check_circle" size={20} className="text-success" />
+      <Icon name={rowIcon} size={20} className={rowTone} />
       <span className="text-body-md text-on-surface">
         {label} · {s.station_name}
         {s.operator_name ? ` · ${s.operator_name}` : ""} ·{" "}
         <span className="tabular-nums">{fmtDuration(duration)}</span>
       </span>
-      {statusLabel && s.status !== "COMPLETED" && <StatusChip>{statusLabel}</StatusChip>}
+      {sessionChips(ev).map((c) => (
+        <StatusChip key={c.label} tone={c.tone}>
+          {c.label}
+        </StatusChip>
+      ))}
+      {statusLabel && s.status !== "COMPLETED" && !hasStatusChip(ev) && (
+        <StatusChip>{statusLabel}</StatusChip>
+      )}
       {cam2Ok && (
         <StatusChip tone="success" icon="verified">
           Cam 2 khớp mã
@@ -76,6 +111,10 @@ function SessionRow({
       ))}
       {ev.auto && <StatusChip tone="info">{E.auto}</StatusChip>}
       {s.clips.length === 0 && <span className="text-body-sm text-on-surface-variant">{E.noClip}</span>}
+      {/* item 03 (02b-admin §9): clip thiếu tệp trên máy chủ → chip xám; player hiện `MissingMediaBlock`. */}
+      {s.clips.some((c) => c.status === "MISSING") && (
+        <StatusChip icon="videocam_off">{MEDIA_MISSING_LABEL}</StatusChip>
+      )}
       {deleted?.deleted_at && (
         <span className="text-body-sm text-error">{E.clipDeleted(fmtDate(deleted.deleted_at))}</span>
       )}
@@ -98,6 +137,46 @@ function SessionRow({
           >
             {E.remove}
           </Button>
+        )}
+        {editable && canMarkWrongScan(ev) && (
+          <span ref={wrapRef} className="relative">
+            <IconButton
+              ref={triggerRef}
+              icon="more_vert"
+              label={E.rowMenu(label)}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              aria-controls={open ? `ev-menu-${ev.id}` : undefined}
+              disabled={busy}
+              onClick={() => setOpen((v) => !v)}
+              onKeyDown={onTriggerKeyDown}
+            />
+            {open && (
+              <ul
+                id={`ev-menu-${ev.id}`}
+                ref={menuRef}
+                role="menu"
+                aria-label={E.rowMenu(label)}
+                onKeyDown={onMenuKeyDown}
+                className="absolute right-0 z-10 mt-1 min-w-48 rounded-md bg-surface-container py-1 shadow-elevation-2"
+              >
+                <li role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    tabIndex={-1}
+                    className="state-layer w-full px-4 py-2 text-left text-body-md text-on-surface"
+                    onClick={() => {
+                      setOpen(false);
+                      onMarkWrongScan();
+                    }}
+                  >
+                    {E.markWrongScan}
+                  </button>
+                </li>
+              </ul>
+            )}
+          </span>
         )}
       </span>
     </li>
@@ -123,9 +202,27 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
     reloadedFor.current = urlsKey;
     void qc.invalidateQueries({ queryKey: ["claim", claim.id] });
   };
-  const [removing, setRemoving] = useState<SessionEvidence | null>(null);
-  const [note, setNote] = useState("");
-  const [touched, setTouched] = useState(false);
+  const [removing, setRemoving] = useState<ClaimEvidence | null>(null);
+  const [reviewing, setReviewing] = useState<{
+    mode: ReviewMode;
+    sessionId: string;
+    startedAt: string;
+    keepUntil: string | null;
+  } | null>(null);
+  const me = useAuth((s) => s.me);
+  const [affected, setAffected] = useState<AffectedShare[]>([]);
+  const review = useReviewSession(claim.id, (_vars, shares) => {
+    setReviewing(null);
+    setAffected(shares);
+  });
+  const openReview = (mode: ReviewMode, sessionId: string, startedAt: string) =>
+    setReviewing({
+      mode,
+      sessionId,
+      startedAt,
+      keepUntil: sessions.find((e) => e.session.id === sessionId)?.removal_keep_until ?? null,
+    });
+  const snapshotEvidence = claim.evidence.filter((e): e is SnapshotEvidence => e.kind === "SNAPSHOT");
   const current =
     sessions.find((e) => e.session.id === playing) ?? sessions.find((e) => e.session.clips.length > 0);
 
@@ -138,25 +235,43 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
         snapshot_ids: v.snapshotIds,
         note: v.note ?? null,
       }),
-    () => {
-      setRemoving(null);
-      setNote("");
-      setTouched(false);
-    },
+    () => setRemoving(null),
   );
   const ids = sessions.map((e) => e.session.id);
   const snapIds = snapshots.map((s) => s.id);
-  const remove = (ev: SessionEvidence, reason?: string) =>
-    save.mutate({ sessionIds: ids.filter((id) => id !== ev.session.id), snapshotIds: snapIds, note: reason });
+  // Item 03 (BR-38): bỏ **mọi** bằng chứng cần lý do 5–500 → luôn qua `RemoveEvidenceDialog`.
+  const remove = (ev: ClaimEvidence, reason: string) =>
+    save.mutate(
+      ev.kind === "SESSION"
+        ? { sessionIds: ids.filter((id) => id !== ev.session.id), snapshotIds: snapIds, note: reason }
+        : { sessionIds: ids, snapshotIds: snapIds.filter((id) => id !== ev.snapshot.id), note: reason },
+    );
   const add = (id: string) => save.mutate({ sessionIds: [...ids, id], snapshotIds: snapIds });
-  const noteText = note.trim();
-  const noteError = noteText.length < 5 || noteText.length > 500 ? E.removeRule : undefined;
+  /** "Thêm lại" bằng chứng đã bỏ = gửi lại id (API-134 khôi phục). */
+  const restore = (ev: ClaimEvidence) =>
+    save.mutate(
+      ev.kind === "SESSION"
+        ? { sessionIds: [...ids, ev.session.id], snapshotIds: snapIds }
+        : { sessionIds: ids, snapshotIds: [...snapIds, ev.snapshot.id] },
+    );
   const fields =
     isApiError(save.error) && save.error.code === "VALIDATION_ERROR" ? save.error.fieldErrors : {};
   const alert = claimErrorText(save.error);
 
   return (
     <div className="flex flex-col gap-3">
+      <PriorReturnAlert
+        claim={claim}
+        editable={editable}
+        canOverride={me?.role === "ADMIN" || me?.role === "SUPERVISOR"}
+        busy={save.isPending || review.isPending}
+        onAdd={add}
+        onReview={openReview}
+      />
+      {/* G3-EV-4: Cam 1 phiên chính không READY (API-132 `primary_unavailable`). */}
+      {claim.primary_unavailable && (
+        <Alert kind="warning">{SHARE_COPY.primaryUnavailable(claim.primary_unavailable_reason)}</Alert>
+      )}
       {claim.missing.length > 0 && (
         <ul className="flex flex-wrap gap-2">
           {claim.missing.map((m) => (
@@ -180,7 +295,8 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
               editable={editable}
               busy={save.isPending}
               onPlay={() => setPlaying(ev.session.id)}
-              onRemove={() => (ev.auto ? setRemoving(ev) : remove(ev))}
+              onRemove={() => setRemoving(ev)}
+              onMarkWrongScan={() => openReview("MARK", ev.session.id, ev.session.started_at)}
             />
           ))}
         </ul>
@@ -191,6 +307,27 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
           snapshots={snapshots}
           onExpired={onSnapshotExpired}
         />
+      )}
+      {editable && snapshotEvidence.length > 0 && (
+        <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label={E.photos(snapshotEvidence.length)}>
+          {snapshotEvidence.map((ev) => {
+            const label = evidenceLabel(ev);
+            return (
+              <li key={ev.id} className="inline-flex items-center gap-1 text-body-sm text-on-surface-variant">
+                {label}
+                <Button
+                  variant="text-danger"
+                  size="sm"
+                  disabled={save.isPending}
+                  aria-label={`${E.remove} ${label}`}
+                  onClick={() => setRemoving(ev)}
+                >
+                  {E.remove}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
       )}
       {claim.other_sessions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-body-md text-on-surface">
@@ -223,37 +360,40 @@ export function EvidenceList({ claim, editable }: { claim: ClaimDetail; editable
           <ClipPlayer key={current.session.id} clips={current.session.clips} sideBySide />
         </section>
       )}
+      <RemovedEvidenceList
+        items={claim.removed_evidence}
+        editable={editable}
+        busy={save.isPending}
+        onRestore={restore}
+      />
+      {affected.length > 0 && <AffectedSharesDialog shares={affected} onClose={() => setAffected([])} />}
+      {reviewing && (
+        <ReviewSessionDialog
+          key={`${reviewing.mode}-${reviewing.sessionId}`}
+          mode={reviewing.mode}
+          sessionId={reviewing.sessionId}
+          label={`${E.return} ${fmtShort(reviewing.startedAt)}`}
+          keepUntil={reviewing.keepUntil}
+          busy={review.isPending}
+          error={review.error}
+          onSubmit={(vars) => review.mutate(vars)}
+          onClose={() => {
+            review.reset();
+            setReviewing(null);
+          }}
+        />
+      )}
       {removing && (
-        <Dialog
-          open
-          title={E.removeTitle}
+        <RemoveEvidenceDialog
+          label={evidenceLabel(removing)}
+          kind={removing.kind}
+          keepUntil={removing.removal_keep_until}
+          busy={save.isPending}
+          serverError={alert}
+          fieldError={fields.note}
+          onConfirm={(reason) => remove(removing, reason)}
           onClose={() => setRemoving(null)}
-          actions={
-            <Button
-              variant="danger"
-              disabled={save.isPending}
-              onClick={() => {
-                setTouched(true);
-                if (!noteError) remove(removing, noteText);
-              }}
-            >
-              {E.removeConfirm}
-            </Button>
-          }
-        >
-          <p className="mb-3">
-            {sessionLabel(removing.session)} — {E.removeHint}
-          </p>
-          <TextAreaField
-            name="evidence-note"
-            label={E.removeTitle}
-            rows={2}
-            value={note}
-            error={(touched ? noteError : undefined) ?? fields.note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-          {alert && <Alert kind="error">{alert}</Alert>}
-        </Dialog>
+        />
       )}
     </div>
   );

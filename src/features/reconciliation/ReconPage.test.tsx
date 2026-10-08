@@ -27,7 +27,7 @@ test("TC-P2.07 / 08: CSKH xem bảng (Đang mở có số, mức Cao trước), 
     within(table)
       .getAllByRole("columnheader")
       .map((h) => h.textContent),
-  ).toEqual(["Mức", "Quy tắc", "Mã kiện", "Kho", "Sàn", "Từ lúc"]);
+  ).toEqual(["Mức", "Quy tắc", "Mã kiện", "Sàn · Shop", "Kho", "Sàn", "Từ lúc"]);
   const rows = within(table).getAllByRole("row").slice(1);
   expect(rows).toHaveLength(7);
   expect(rows[0]).toHaveTextContent("Cao");

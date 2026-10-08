@@ -6,11 +6,11 @@ import { createQueryClient } from "@/app/queryClient";
 import { login } from "@/lib/api/auth";
 import { mockClaims, mockReconAlerts } from "@/mocks/returnsDb";
 
-import { navFor, type Item02Screen } from "./nav";
+import { navFor, type Item02Screen, type Screen } from "./nav";
 import { NavBadge } from "./NavBadge";
 
 const ALL = new Set<Item02Screen>(["D14", "D15", "D16"]);
-const labels = (role: Parameters<typeof navFor>[0], ready?: ReadonlySet<Item02Screen>) =>
+const labels = (role: Parameters<typeof navFor>[0], ready?: ReadonlySet<Screen>) =>
   navFor(role, ready).map((i) => i.label);
 
 test("DEC-342: đủ màn D14 (T-153), D15 (T-156), D16 (T-157) → 3 mục trong drawer cho ADMIN / SUPERVISOR / CSKH", () => {
@@ -84,4 +84,44 @@ test("badge Yêu cầu duyệt giữ như Phase 1 (API-20 PENDING)", async () =>
   await login("tst_sup", "matkhau123", "DASHBOARD");
   renderBadge("approvals");
   expect(await screen.findByText(", 1 yêu cầu đang chờ")).toBeInTheDocument();
+});
+
+test("item 03 (FR-10.02): mục mới theo vai, thứ tự 01 §10.3; ẩn tới khi màn xong (DEC-51)", () => {
+  const all = new Set<Screen>(["D14", "D15", "D16", "D17", "D20", "D21", "D22", "D23"]);
+  expect(labels("ADMIN", all)).toEqual([
+    "Tổng quan",
+    "Tra cứu đơn",
+    "Hàng hoàn",
+    "Lệch trạng thái",
+    "Hồ sơ khiếu nại",
+    "Báo cáo",
+    "Link chia sẻ",
+    "Yêu cầu duyệt",
+    "Nhập đơn",
+    "Live view",
+    "Station",
+    "Kết nối sàn",
+    "Lưu trữ video",
+    "Thông báo",
+    "Sao lưu",
+    "Người dùng",
+    "Nhật ký thao tác",
+  ]);
+  expect(labels("CSKH", all)).toEqual(expect.arrayContaining(["Báo cáo", "Link chia sẻ"]));
+  expect(labels("CSKH", all)).not.toContain("Sao lưu");
+  expect(labels("SUPERVISOR", all)).not.toContain("Thông báo");
+  // Màn chưa xây → không có mục (DEC-51); "Kết nối sàn" có ngay (đổi tên D7). M16 (T-257): D21. M17 (T-258): D22.
+  expect(labels("ADMIN", new Set<Screen>())).not.toContain("Thông báo");
+  expect(labels("ADMIN")).toContain("Thông báo");
+  expect(labels("CSKH")).toContain("Link chia sẻ");
+  // M14 (T-254): D20 đã có màn.
+  expect(labels("CSKH")).toContain("Báo cáo");
+  expect(labels("ADMIN")).toContain("Kết nối sàn");
+  const icons = Object.fromEntries(navFor("ADMIN", all).map((i) => [i.label, i.icon]));
+  expect(icons).toMatchObject({
+    "Báo cáo": "bar_chart",
+    "Link chia sẻ": "link",
+    "Thông báo": "notifications",
+    "Sao lưu": "cloud_upload",
+  });
 });

@@ -28,6 +28,28 @@ export const COPY = {
   cancelReturnBody: (code: string) => `Phiên mở hoàn ${code} sẽ bị hủy.`,
   cancelConfirm: "Hủy phiên",
   badge: (n: number) => `${n} yêu cầu đang chờ`,
+  // item 03 v0.3 (01 §10.5 D13 — DEC-514, DEC-525): Dialog "Hủy phiên mở hoàn?".
+  cancelReturn: {
+    title: "Hủy phiên mở hoàn?",
+    reason: "Lý do*",
+    reasons: {
+      WRONG_SCAN: "Quét nhầm kiện khác",
+      NOT_A_RETURN: "Không phải kiện hàng hoàn",
+      OTHER: "Lý do khác (kiện hoàn thật)",
+    },
+    note: "Ghi chú*",
+    notePlaceholder: "Ví dụ: quét nhầm mã kiện bên cạnh",
+    excluded: "Video phiên này vẫn được giữ nhưng không tự vào hồ sơ khiếu nại của kiện.",
+    other: "Video phiên này vẫn được giữ và tự vào hồ sơ khiếu nại nếu kiện có hồ sơ sau này.",
+    reasonRequired: "Chọn lý do hủy.",
+    noteRule: "Nhập ghi chú (5–500 ký tự).",
+    confirm: "Hủy phiên",
+    back: "Quay lại",
+  },
+  // item 03 (01 §10.5 D13, FR-04.14): tóm tắt phiên hoàn trên thẻ "Gọi quản lý".
+  summaryLabel: "Phiên hoàn",
+  summary: (conclusion: string | null, photos: number, minutes: number) =>
+    `${conclusion ? `Đã có kết luận: ${conclusion}` : "Chưa có kết luận"} · ${photos} ảnh · mở ${minutes} phút`,
 };
 
 export const ACTION_LABEL: Record<ApprovalAction, string> = {

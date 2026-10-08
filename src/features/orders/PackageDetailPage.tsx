@@ -7,8 +7,15 @@ import type { ClaimType } from "@/lib/api/claims";
 import { isApiError } from "@/lib/api/errors";
 import { packagesApi, type PackageDetail, type PackageSession } from "@/lib/api/packages";
 import { settingsApi } from "@/lib/api/settings";
+import { ShopChip } from "@/shared/filters/ShopChip";
 import { fmtDuration, fmtShort } from "@/shared/format";
-import { platformStatus, SESSION_STATUS, SOURCE, WAREHOUSE_STATUS } from "@/shared/labels";
+import {
+  MEDIA_MISSING_LABEL,
+  platformStatus,
+  SESSION_STATUS,
+  SOURCE,
+  WAREHOUSE_STATUS,
+} from "@/shared/labels";
 import { RECON_SEVERITY, RECON_STATUS, reconRuleLabel, SESSION_TYPE } from "@/shared/returns/labels";
 import { Alert, Button, cx, Dialog, EmptyState, Skeleton, StatusChip, TrackingNumber } from "@/shared/ui";
 
@@ -23,6 +30,9 @@ import { ReturnCaseSection } from "../returns/ReturnCaseSection";
 import { screenReady } from "../shell/nav";
 import { COPY as CLAIM_COPY } from "../claims/copy";
 import { COPY as RETURN_COPY } from "../returns/copy";
+import { SessionShareButton } from "../shares/SessionShareButton";
+import { ShareLinkDialog } from "../shares/ShareLinkDialog";
+import { SharesBlock } from "../shares/SharesBlock";
 import { COPY } from "./copy";
 import { ExportDialog } from "./ExportDialog";
 import { exportLayouts } from "./exportLayouts";
@@ -79,6 +89,10 @@ function SessionList({
                     {SESSION_TYPE[type]}
                   </StatusChip>
                   <StatusChip tone={tone}>{label}</StatusChip>
+                  {/* item 03 (02b-admin §9): clip `MISSING` → chip xám "Thiếu tệp" trong danh sách. */}
+                  {s.clips.some((c) => c.status === "MISSING") && (
+                    <StatusChip icon="videocam_off">{MEDIA_MISSING_LABEL}</StatusChip>
+                  )}
                   <span className="text-body-sm tabular-nums">{fmtDuration(s.duration_s)}</span>
                 </span>
               </span>
@@ -107,6 +121,7 @@ export default function PackageDetailPage() {
   });
   const [picked, setPicked] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [sharing, setSharing] = useState<string | null>(null);
   const [creatingClaim, setCreatingClaim] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [linking, setLinking] = useState<string | null>(null);
@@ -211,6 +226,9 @@ export default function PackageDetailPage() {
             <TrackingNumber value={pkg.tracking_number} size="lg" />
             <StatusChip tone={whTone}>{whLabel}</StatusChip>
             {pkg.is_placeholder && <StatusChip tone="warning">{C.placeholder}</StatusChip>}
+            {!pkg.is_placeholder && (
+              <ShopChip platform={order?.platform ?? null} shop={order?.shop ?? null} />
+            )}
             {order?.platform_status && (
               <StatusChip>
                 {C.platform}: {platformStatus(order.platform_status)}
@@ -313,11 +331,23 @@ export default function PackageDetailPage() {
               canRebuild={me.role === "ADMIN" || me.role === "SUPERVISOR"}
               onSnapshotExpired={onSnapshotExpired}
               actions={
-                exportLayouts(session).length > 0 && (
-                  <Button icon="ios_share" onClick={() => setExporting(true)}>
-                    {C.export}
-                  </Button>
-                )
+                <>
+                  {exportLayouts(session).length > 0 && (
+                    <Button icon="ios_share" onClick={() => setExporting(true)}>
+                      {C.export}
+                    </Button>
+                  )}
+                  {/* item 03 (01 §10.5 D4): mỗi phiên có clip → "Tạo link chia sẻ" (ShareLinkDialog với phiên đó).
+                      G3-FE-8: chỉ khi có clip READY (clip Đang xử lý / lỗi / đã xóa / thiếu tệp không dựng được link). */}
+                  {/* G3V-2 (DEC-934): phiên bị loại / Cần soát → nút khóa + chữ ngắn (SessionShareButton). */}
+                  {session.clips.some((c) => c.status === "READY") && hasPermission(me, "shares.create") && (
+                    <SessionShareButton
+                      key={session.id}
+                      session={session}
+                      onOpen={() => setSharing(session.id)}
+                    />
+                  )}
+                </>
               }
             />
           ) : (
@@ -337,6 +367,9 @@ export default function PackageDetailPage() {
       </div>
 
       {exporting && session && <ExportDialog session={session} onClose={() => setExporting(false)} />}
+      {sharing && (
+        <ShareLinkDialog source={{ type: "SESSION", sessionId: sharing }} onClose={() => setSharing(null)} />
+      )}
       {adjusting && (
         <Dialog open title={RECON_COPY.adjust.title} onClose={() => setAdjusting(false)}>
           <AdjustStatusForm
@@ -362,6 +395,16 @@ export default function PackageDetailPage() {
           defaultType={defaultType}
           defaultCounterparty={latestCase?.kind === "FAILED_DELIVERY" ? "CARRIER" : "PLATFORM"}
           onClose={() => setCreatingClaim(false)}
+        />
+      )}
+
+      {/* item 03 (01 §10.5 D4): khối "Link chia sẻ" (như D21 rút gọn — API-31 `shares[]`). */}
+      {hasPermission(me, "shares.read") && pkg.shares && (
+        <SharesBlock
+          shares={pkg.shares}
+          activeCount={pkg.shares_active_count ?? 0}
+          sourceQuery={{ package_id: pkg.id }}
+          idPrefix="d4"
         />
       )}
 

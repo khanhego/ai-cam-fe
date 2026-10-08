@@ -5,6 +5,8 @@ import { RequireRole } from "@/features/auth/RequireRole";
 import { AppShell } from "@/features/shell/AppShell";
 import { ForbiddenPage, NotFoundPage } from "@/features/shell/ErrorPages";
 
+import { LegacyShopeeRedirect } from "./LegacyShopeeRedirect";
+
 /** Trang công cụ chỉ có khi `pnpm dev`; Vite thay `import.meta.env.DEV` = false lúc build nên nhánh này bị loại. */
 const devRoutes: RouteObject[] = import.meta.env.DEV
   ? [{ path: "/_ui", Component: lazy(() => import("./UiGallery")) }]
@@ -42,6 +44,10 @@ export const routes: RouteObject[] = [
       { path: "recon", Component: lazy(() => import("@/features/reconciliation/ReconPage")) },
       { path: "claims", Component: lazy(() => import("@/features/claims/ClaimsPage")) },
       { path: "claims/:id", Component: lazy(() => import("@/features/claims/ClaimDetailPage")) },
+      // item 03: D20 Báo cáo (T-254; tab Năng suất kiểm vai trong trang — 02b-admin §2).
+      { path: "reports", Component: lazy(() => import("@/features/reports/ReportsPage")) },
+      // item 03: D21 Link chia sẻ (T-257) — 3 vai dashboard (CSKH chỉ thu hồi link mình tạo — `can_revoke`).
+      { path: "shares", Component: lazy(() => import("@/features/shares/SharesPage")) },
       {
         path: "approvals",
         element: (
@@ -90,7 +96,11 @@ export const routes: RouteObject[] = [
           </RequireRole>
         ),
         children: [
-          { path: "shopee", Component: lazy(() => import("@/features/platforms/ShopeePage")) },
+          // D7 Kết nối sàn (T-253), D22 Thông báo (T-258), D23 Sao lưu (T-259).
+          { path: "platforms", Component: lazy(() => import("@/features/platforms/PlatformsPage")) },
+          { path: "notifications", Component: lazy(() => import("@/features/notify/NotificationsPage")) },
+          { path: "backup", Component: lazy(() => import("@/features/backup/BackupPage")) },
+          { path: "shopee", element: <LegacyShopeeRedirect /> },
           { path: "storage", Component: lazy(() => import("@/features/settings/StoragePage")) },
           { path: "users", Component: lazy(() => import("@/features/users/UsersPage")) },
           { path: "audit", Component: lazy(() => import("@/features/audit/AuditPage")) },

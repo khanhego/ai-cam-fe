@@ -1,4 +1,6 @@
 import { RECON_RULES, type ReconFilters, type ReconRule, type ReconSeverity } from "@/lib/api/recon";
+import { platformToApi, platformToParams, platformUrlFields } from "@/shared/filters/platformFilterValue";
+import type { Platform } from "@/shared/labels";
 
 /** Bộ lọc D15 ↔ URL (02b-admin §1: `/admin/recon?status=&severity=&rule=&from=&to=&page=`). */
 export type ReconTab = "OPEN" | "RESOLVED" | "ALL";
@@ -11,6 +13,9 @@ export type ReconUrlFilters = {
   rule?: ReconRule;
   from?: string;
   to?: string;
+  /** item 03 (DEC-488): sàn / shop ở URL (`platform`, `shop`). */
+  platform?: Platform | null;
+  shop?: string | null;
   page?: number;
 };
 
@@ -25,6 +30,7 @@ const day = (v: string | null) => (v && DAY.test(v) ? v : undefined);
 export function reconFiltersFromParams(p: URLSearchParams): ReconUrlFilters {
   const page = Number(p.get("page"));
   return {
+    ...platformUrlFields(p),
     status: oneOf(p.get("status"), RECON_TABS) ?? DEFAULT_TAB,
     severity: oneOf(p.get("severity"), SEVERITIES),
     rule: oneOf(p.get("rule"), RECON_RULES),
@@ -38,6 +44,7 @@ export function paramsFromReconFilters(f: ReconUrlFilters): Record<string, strin
   const out: Record<string, string> = {};
   if (f.status !== DEFAULT_TAB) out.status = f.status;
   for (const k of ["severity", "rule", "from", "to"] as const) if (f[k]) out[k] = f[k]!;
+  Object.assign(out, platformToParams({ platform: f.platform ?? null, shopId: f.shop ?? null }));
   if (f.page && f.page > 1) out.page = String(f.page);
   return out;
 }
@@ -49,8 +56,10 @@ export const toApiReconFilters = (f: ReconUrlFilters): ReconFilters => ({
   rule: f.rule,
   date_from: f.from,
   date_to: f.to,
+  ...platformToApi({ platform: f.platform ?? null, shopId: f.shop ?? null }),
   page: f.page ?? 1,
   page_size: PAGE_SIZE,
 });
 
-export const hasReconFilters = (f: ReconUrlFilters) => Boolean(f.severity || f.rule || f.from || f.to);
+export const hasReconFilters = (f: ReconUrlFilters) =>
+  Boolean(f.severity || f.rule || f.from || f.to || f.platform || f.shop);

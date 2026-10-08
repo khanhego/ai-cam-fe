@@ -45,6 +45,9 @@ const invalidate = (qc: QueryClient, ...keys: unknown[][]) =>
  *   `recon.updated` → D15 + D4 + D2 (badge Lệch); `claim.updated` → D16 + D17 của hồ sơ đó + D4 + D2 (badge Hồ sơ);
  *   `evidence_pack.updated` → ghi thẳng trạng thái gói vào `['evidence-pack', id]` (dữ liệu đầy đủ như API-137).
  * - WS nối lại → thêm D14, D15, D16 (sự kiện lỡ trong lúc mất).
+ * - Item 03 (02 §6.2 WS-02 mới, 02b-admin §4): `share.updated` → D21 + link đang theo dõi + khối Link ở D4 / D17;
+ *   `backup.updated` (chỉ ADMIN) → D23 + D8 sức khỏe + D2; `shop.updated` (chỉ ADMIN) → D7 + bộ lọc shop + D2.
+ *   WS nối lại → thêm D21, D23, D7.
  */
 export function useDashboardSocket(
   socketFactory?: (url: string) => WebSocket,
@@ -60,7 +63,7 @@ export function useDashboardSocket(
     const report = throttled(() => invalidate(queryClient, ["daily"]), REPORT_THROTTLE_MS);
     const returns = throttled(() => invalidate(queryClient, ["returns"]), RETURNS_THROTTLE_MS);
     const onMessage = (msg: WsMessage) => {
-      const data = (msg.data ?? {}) as { id?: string; claim_id?: string };
+      const data = (msg.data ?? {}) as { id?: string; claim_id?: string; share_id?: string };
       if (msg.type === "report.updated") report.fire();
       else if (msg.type === "camera.status")
         invalidate(queryClient, ["stations"], ["station"], ["daily"], ["live"]);
@@ -83,6 +86,16 @@ export function useDashboardSocket(
           ["package"],
           ["daily"],
         );
+      else if (msg.type === "share.updated")
+        invalidate(
+          queryClient,
+          ["shares"],
+          data.share_id ? ["share", data.share_id] : ["share"],
+          ["package"],
+          ["claim"],
+        );
+      else if (msg.type === "backup.updated") invalidate(queryClient, ["backup"], ["health"], ["daily"]);
+      else if (msg.type === "shop.updated") invalidate(queryClient, ["shops"], ["shopsBrief"], ["daily"]);
       else if (msg.type === "evidence_pack.updated" && data.id)
         queryClient.setQueryData(["evidence-pack", data.id], (old: object | undefined) => ({
           ...old,
@@ -93,7 +106,18 @@ export function useDashboardSocket(
     let openedBefore = false;
     const onStatus = (status: WsStatus) => {
       if (status !== "open") return;
-      if (openedBefore) invalidate(queryClient, ["approvals"], ["daily"], ["returns"], ["recon"], ["claims"]);
+      if (openedBefore)
+        invalidate(
+          queryClient,
+          ["approvals"],
+          ["daily"],
+          ["returns"],
+          ["recon"],
+          ["claims"],
+          ["shares"],
+          ["backup"],
+          ["shops"],
+        );
       openedBefore = true;
     };
     const conn = connectWs({ path: "/ws/dashboard", onMessage, onStatus, socketFactory });

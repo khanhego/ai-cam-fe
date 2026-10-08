@@ -10,16 +10,15 @@
  * beat). Shopee returns thật: chưa test — thiếu partner T-3.
  */
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { loginAdmin, PASSWORD, resetData } from "./helpers";
+import { composeArgs, loginAdmin, PASSWORD, resetData } from "./helpers";
 
 test.skip(!process.env.E2E_M9_BE, "BE M9 (T-105, T-113..T-115) — đặt E2E_M9_BE=1 khi chạy e2e:real");
 test.use({ viewport: { width: 1366, height: 768 } });
 
-const COMPOSE = ["compose", "-f", resolve(process.cwd(), "../ai-cam-be/docker/compose.dev.yml")];
+const COMPOSE = composeArgs();
 
 /** Task Celery chạy ngay trong container api (cùng code + env với worker) — như `_job` của QA M9. */
 function job(expr: string): string {
@@ -58,7 +57,11 @@ async function connectMockShop(request: APIRequestContext, admin: Record<string,
     headers: { Cookie: `aicam_shopee_state=${state}` },
     maxRedirects: 0,
   });
-  expect(cb.headers().location).toBe("/admin/settings/shopee?result=connected");
+  // item 03 (02 §6.2 API-72, T-207): callback về D7 mới; BE cũ (trước T-207) còn trả đường `/shopee`.
+  expect(cb.headers().location).toMatch(
+    // T-262: Shopee mock nhiều shop (`MOCK_SHOPEE_SHOP_IDS`) — một lần ủy quyền có thể trả > 1 shop.
+    /^\/admin\/settings\/(platforms\?platform=shopee&result=connected&count=\d+|shopee\?result=connected)$/,
+  );
 }
 
 test.skip(
@@ -75,7 +78,10 @@ test("M9 (BE thật): J-13 mock → D14 Đang về / Chỉ hoàn tiền → API-
   test.setTimeout(300_000);
   const admin = await token(request, "tst_admin");
   await connectMockShop(request, admin);
-  expect(job("tasks.sync_returns()")).toContain("'status': 'OK'");
+  // Item 03 (T-205): `sync_returns()` không shop = phân phối mỗi shop một task → chạy J-13 đồng bộ cho shop Shopee
+  // đầu `990001` (dữ liệu Phase 2) để có kết quả xác định (T-229, DEC-826).
+  const shopA = psql("SELECT id FROM shop WHERE platform = 'SHOPEE' AND platform_shop_id = '990001'");
+  expect(job(`tasks.sync_shop_returns('${shopA}')`)).toContain("'status': 'OK'");
 
   // D14 (CSKH): hồ sơ "Đang về" có mã chiều về; tab Chỉ hoàn tiền có yêu cầu 044 (TC-05.30, 05.31, 07.37).
   await loginAdmin(page, "tst_cskh");

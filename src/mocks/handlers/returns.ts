@@ -5,7 +5,7 @@ import { canBeOk, INSPECTION_LIMITS } from "@/shared/returns/inspection";
 import { daysBetween, vnDay } from "@/shared/format";
 
 import { API, apiError, json } from "../http";
-import { mockPackages } from "../packagesDb";
+import { matchesShop, mockPackages } from "../packagesDb";
 import {
   blockedReason,
   claimIsOpen,
@@ -19,6 +19,7 @@ import {
   recomputeCase,
   sessionExtras,
   toReturnDetail,
+  responseDue,
   toReturnItem,
   type MockReturnCase,
 } from "../returnsDb";
@@ -76,6 +77,11 @@ export const returnsHandlers = [
     const q = params.get("q")?.trim().toUpperCase();
     const from = params.get("date_from");
     const to = params.get("date_to");
+    // item 03 (02 §6.2 API-110 mở rộng).
+    const platform = params.get("platform");
+    const shopId = params.get("shop_id");
+    const pendingOnly = params.get("pending_only") === "true";
+    const sort = params.get("sort");
     const fields: Record<string, string> = {};
     if (!["EXPECTED", "MISSING", "RECEIVED", "NO_PARCEL", "UNIDENTIFIED", "ALL"].includes(tab))
       fields.tab = "Không hợp lệ";
@@ -91,9 +97,22 @@ export const returnsHandlers = [
         (!kind || c.kind === kind) &&
         (!q || matchQ(c, q)) &&
         (!from || filterDay(c) >= from) &&
-        (!to || filterDay(c) <= to),
+        (!to || filterDay(c) <= to) &&
+        matchesShop(findPackage(c.package_ids[0] ?? ""), platform, shopId),
     );
-    const all = base.filter((c) => inTab(c, tab)).sort(sortFor(tab));
+    const pending = (c: MockReturnCase) => {
+      if (!pendingOnly) return true;
+      const r = toReturnItem(c);
+      return (
+        c.kind === "REFUND_ONLY" &&
+        !r.claim &&
+        (r.platform_status_group === "REQUESTED" || r.platform_status_group === "ACCEPTED")
+      );
+    };
+    const dueAsc = (a: MockReturnCase, b: MockReturnCase) =>
+      (responseDue(a).response_due_at ?? "9999").localeCompare(responseDue(b).response_due_at ?? "9999");
+    const useDue = sort === "due_asc" || (!sort && tab === "NO_PARCEL");
+    const all = base.filter((c) => inTab(c, tab) && pending(c)).sort(useDue ? dueAsc : sortFor(tab));
     const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(params.get("page_size") ?? 20) || 20));
     const count = (t: string) => base.filter((c) => inTab(c, t)).length;

@@ -47,6 +47,8 @@ export const COPY = {
   col: {
     code: "Mã hồ sơ",
     package: "Mã kiện",
+    /** item 03 (FR-07.01). */
+    shop: "Sàn · Shop",
     type: "Loại",
     counterparty: "Bên nhận",
     status: "Trạng thái",
@@ -125,6 +127,86 @@ export const COPY = {
     removeConfirm: "Bỏ bằng chứng",
     saved: "Đã cập nhật bằng chứng.",
     player: "Clip bằng chứng",
+    // ---- item 03 (01 §10.5 D17 — BR-38, BR-39) ----
+    primary: "Phiên chính",
+    prior: (status: string) => `Phiên mở hoàn trước · ${status === "ABANDONED" ? "Bỏ dở" : "Đã hủy"}`,
+    priorAlert: (n: number, list: string, primary: boolean) =>
+      `Kiện có ${n} phiên mở hoàn trước (${list}) — đã đưa vào bằng chứng${primary ? ", là phiên chính" : ""}.`,
+    priorItem: (status: string, at: string) => `${status === "ABANDONED" ? "bỏ dở" : "đã hủy"} ${at}`,
+    excludedAlert: (n: number, times: string) =>
+      `Kiện có ${n} phiên mở hoàn bị loại vì quét nhầm (${times}) — không đưa vào bằng chứng. Video vẫn được giữ; thêm tay nếu cần.`,
+    addToEvidence: "Thêm vào bằng chứng",
+    addToEvidenceAt: (at: string) => `Thêm vào bằng chứng phiên ${at}`,
+    snapshot: (at: string) => `Ảnh ${at}`,
+    removeDialogTitle: "Bỏ bằng chứng?",
+    removeReason: "Lý do",
+    removeReasonHint: "Bắt buộc, 5–500 ký tự",
+    removeReasonRule: "Nhập lý do bỏ bằng chứng (5–500 ký tự).",
+    keepSession: (date: string) =>
+      `Clip và ảnh của phiên này được giữ tới ${date} rồi tự xóa (trừ khi thuộc hồ sơ khác).`,
+    keepSnapshot: (date: string) => `Ảnh này được giữ tới ${date} rồi tự xóa (trừ khi thuộc hồ sơ khác).`,
+    cancel: "Hủy",
+    removedTitle: (n: number) => `Bằng chứng đã bỏ (${n})`,
+    removedBy: (by: string, at: string) => `Bỏ bởi ${by} lúc ${at}`,
+    removedReason: (reason: string) => `Lý do: ${reason}`,
+    removedKeep: (date: string) => `Giữ tới ${date}`,
+    restore: "Thêm lại",
+    restoreFor: (label: string) => `Thêm lại ${label}`,
+    systemUser: "Hệ thống",
+    // ---- item 03 T-264 (01 §10.5 D17 v0.4 — API-189) ----
+    rowMenu: (label: string) => `Thao tác ${label}`,
+    markWrongScan: "Đánh dấu quét nhầm",
+    unmark: "Bỏ đánh dấu",
+    unmarkAt: (at: string) => `Bỏ đánh dấu phiên ${at}`,
+    reviewAlert: (n: number) =>
+      `Kiện có ${n} phiên mở hoàn do quản lý hủy trước khi hệ thống ghi lý do — đã đưa vào bằng chứng nhưng chưa làm phiên chính. Xem video rồi chọn.`,
+    confirmReturn: "Là phiên hoàn thật",
+    confirmReturnAt: (at: string) => `Là phiên hoàn thật (${at})`,
+    /** v0.5 (DEC-529): chip phiên đã gỡ lý do hủy / đã xác nhận "Cần soát" (`session.return_confirmed`). */
+    returnConfirmed: "Đã xác nhận phiên hoàn thật",
+    wrongScanShort: "Quét nhầm",
+    reviewActionsFor: (at: string) => `Phiên ${at}`,
+  },
+  /** API-189 dialogs (01 §10.5 D17). */
+  review: {
+    markTitle: "Đánh dấu phiên quét nhầm?",
+    unmarkTitle: "Bỏ đánh dấu quét nhầm?",
+    confirmTitle: "Xác nhận là phiên hoàn thật?",
+    /** v0.5 (DEC-529): gỡ lý do hủy "Quét nhầm" / "Không phải hàng hoàn" — ADMIN / SUPERVISOR. */
+    overrideTitle: "Gỡ lý do hủy, xác nhận là phiên hoàn thật?",
+    overrideText:
+      "Phiên sẽ vào bằng chứng của hồ sơ này và có thể thành phiên chính. Lý do hủy cũ vẫn lưu trong nhật ký.",
+    overridden: "Đã xác nhận phiên hoàn thật.",
+    reason: "Lý do*",
+    reasonRequired: "Chọn lý do.",
+    note: "Ghi chú*",
+    noteHint: "5–500 ký tự",
+    noteRule: "Nhập ghi chú (5–500 ký tự).",
+    markText: (date: string) =>
+      `Phiên sẽ bị bỏ khỏi bằng chứng của mọi hồ sơ chưa đóng và không được tự chọn lại. Video vẫn được giữ tới ${date} (trừ khi thuộc hồ sơ khác).`,
+    unmarkText: "Phiên không tự vào lại bằng chứng — thêm tay nếu cần.",
+    confirmText: "Phiên sẽ được tính như phiên mở hoàn thường và có thể thành phiên chính.",
+    mark: "Đánh dấu",
+    unmarkConfirm: "Bỏ đánh dấu",
+    confirm: "Xác nhận",
+    cancel: "Hủy",
+    marked: "Đã đánh dấu phiên quét nhầm.",
+    unmarked: "Đã bỏ đánh dấu.",
+    confirmed: "Đã xác nhận.",
+  },
+  /** `AffectedSharesDialog` (01 §10.5 D17 v0.5 — DEC-531): phiên vừa đánh dấu quét nhầm còn trong link chia sẻ. */
+  affected: {
+    title: (n: number) => `Phiên này đang có trong ${n} link chia sẻ còn hiệu lực`,
+    text: "Người nhận vẫn xem được video phiên này tới khi thu hồi hoặc hết hạn.",
+    expires: (at: string) => `hết hạn ${at}`,
+    revoke: "Thu hồi link",
+    revokeFor: (r: string) => `Thu hồi link gửi ${r}`,
+    askAdmin: "Nhờ Admin / Supervisor thu hồi",
+    /** mới (DEC-721) — dòng đã thu hồi trong dialog. */
+    revoked: "Đã thu hồi",
+    /** mới (DEC-721) — người tạo link. */
+    createdBy: (who: string) => `Tạo bởi ${who}`,
+    close: "Đóng",
   },
   pack: {
     open: "Xuất gói bằng chứng",

@@ -17,6 +17,7 @@ import { RetentionConfirmDialog } from "./RetentionConfirmDialog";
 import {
   isReduction,
   PHASE1_KEYS,
+  PHASE3_NUMBER_KEYS,
   SETTINGS_KEYS,
   validateSettings,
   type SettingsForm,
@@ -37,10 +38,12 @@ type Body = Omit<SettingsPutBody, "confirm_reduction">;
 function SettingsEditor({ initial }: { initial: SystemSettings }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<SettingsForm>(() => toForm(initial));
+  const [packer, setPacker] = useState(initial.packer_name_required);
   const [errors, setErrors] = useState<Partial<Record<SettingsKey, string>>>({});
   const [alert, setAlert] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ body: Body; impact: RetentionImpact | null } | null>(null);
-  const dirty = SETTINGS_KEYS.some((k) => form[k] !== String(initial[k]));
+  const dirty =
+    SETTINGS_KEYS.some((k) => form[k] !== String(initial[k])) || packer !== initial.packer_name_required;
   const min = initial.retention_clip_min_days;
 
   const save = useMutation({
@@ -48,6 +51,7 @@ function SettingsEditor({ initial }: { initial: SystemSettings }) {
     onSuccess: (data) => {
       qc.setQueryData(["settings"], data);
       setForm(toForm(data));
+      setPacker(data.packer_name_required);
       setConfirm(null);
       toast(COPY.saved);
     },
@@ -72,8 +76,9 @@ function SettingsEditor({ initial }: { initial: SystemSettings }) {
     const { errors: errs, value } = validateSettings(form, min);
     setErrors(errs);
     if (!value) return;
-    if (isReduction(value, initial)) setConfirm({ body: value, impact: null });
-    else save.mutate(value);
+    const body = { ...value, packer_name_required: packer };
+    if (isReduction(value, initial)) setConfirm({ body, impact: null });
+    else save.mutate(body);
   }
 
   const field = (k: SettingsKey) => (
@@ -103,13 +108,29 @@ function SettingsEditor({ initial }: { initial: SystemSettings }) {
       <h2 className="mb-4 text-title-md text-on-surface">{COPY.sessionTitle}</h2>
       <div className="grid gap-x-4 sm:grid-cols-2">{PHASE1_KEYS.slice(2).map(field)}</div>
       <h2 className="mb-4 text-title-md text-on-surface">{COPY.thresholdTitle}</h2>
-      <div className="grid gap-x-4 sm:grid-cols-2">{THRESHOLD_KEYS.map(field)}</div>
+      <div className="grid gap-x-4 sm:grid-cols-2">
+        {[...THRESHOLD_KEYS, ...PHASE3_NUMBER_KEYS].map(field)}
+      </div>
+      <h2 className="mb-2 text-title-md text-on-surface">{COPY.stationTitle}</h2>
+      <label className="flex items-center gap-3 text-body-lg text-on-surface">
+        <input
+          type="checkbox"
+          role="switch"
+          name="packer_name_required"
+          checked={packer}
+          aria-checked={packer}
+          onChange={(e) => setPacker(e.target.checked)}
+        />
+        {COPY.packerRequired}
+      </label>
+      <p className="mt-1 mb-5 ml-8 text-body-sm text-on-surface-variant">{COPY.packerRequiredHint}</p>
       <div className="flex justify-end gap-2">
         <Button
           variant="text"
           disabled={!dirty || save.isPending}
           onClick={() => {
             setForm(toForm(initial));
+            setPacker(initial.packer_name_required);
             setErrors({});
           }}
         >

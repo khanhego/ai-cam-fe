@@ -6,6 +6,7 @@ import { Button, cx, Dialog, Icon } from "@/shared/ui";
 import { fmtDateTime } from "@/shared/format";
 
 import { STRIP_COPY } from "./copy";
+import { MissingMediaBlock } from "./MissingMediaBlock";
 
 /** Ảnh trong dải: `url` null khi ảnh đã bị xóa (API-132 `EvidenceSnapshot` — DEC-312 e). */
 export type StripSnapshot = Omit<Snapshot, "url"> & { url: string | null };
@@ -39,6 +40,9 @@ function Thumb({
   const deleted = snapshot.status === "DELETED" || !snapshot.url;
   const failed = !deleted && (errors >= 2 || (errors >= 1 && !onExpired));
   const label = `Ảnh ${index + 1}`;
+
+  // item 03: ảnh "Thiếu tệp" (`url = null`) — ô xám, không mở được (01 §10.5 "Clip / ảnh Thiếu tệp").
+  if (snapshot.status === "MISSING") return <MissingMediaBlock kind="snapshot" label={label} />;
 
   if (failed)
     return (

@@ -1,8 +1,17 @@
-import type { Clip, ClipStatus, PackageDetail, PackageListItem, PackageSession } from "@/lib/api/packages";
+import type {
+  Clip,
+  ClipStatus,
+  PackageDetail,
+  PackageListItem,
+  PackageSession,
+  ReturnSessionReview,
+} from "@/lib/api/packages";
 import type { SessionFlag } from "@/lib/api/station";
 import { vnDay } from "@/shared/format";
-import type { SessionStatus, WarehouseStatus } from "@/shared/labels";
+import type { Platform, PlatformStatusGroup, SessionStatus, WarehouseStatus } from "@/shared/labels";
 import type { Inspection, Snapshot } from "@/shared/returns/types";
+
+import { SHOP, type MockShopRef } from "./shopsDb";
 
 /**
  * Kiện, phiên, clip, bản xuất giả cho D2–D4 (02b-admin §12). Bám seed `aicam seed-demo --prefix TST`
@@ -24,6 +33,10 @@ type Item02SessionKeys =
   | "protected_by_claims";
 type Item02PackageKeys =
   "is_placeholder" | "return_cases" | "recon_alerts" | "claims" | "allowed_status_targets";
+/** item 03: trường tính lúc trả (shop, nhóm trạng thái, kiện gộp — `orderExtras`; link — handler). */
+type Item03PackageKeys = "order" | "shares" | "shares_active_count";
+type Item03OrderKeys = "shop" | "platform_status_group" | "merged_orders";
+export type MockOrder = Omit<NonNullable<PackageDetail["order"]>, Item03OrderKeys>;
 export type MockClip = Omit<Clip, Item02ClipKeys> & { session_id: string };
 export type MockSession = Omit<PackageSession, "clips" | Item02SessionKeys> & {
   station_id: string;
@@ -37,8 +50,15 @@ export type MockSession = Omit<PackageSession, "clips" | Item02SessionKeys> & {
   snapshots?: Snapshot[];
   /** Ảnh Cam 1 lúc đóng gói (J-17, L8) — phiên PACK. */
   pack_snapshot?: Snapshot | null;
+  /** item 03 (BR-39, API-189): lý do Supervisor, đánh dấu quét nhầm, "Cần soát", xác nhận — thiếu = null / false. */
+  review?: Partial<Omit<ReturnSessionReview, "evidence_exclusion">>;
 };
-export type MockPackage = Omit<PackageDetail, "sessions" | Item02PackageKeys> & {
+export type MockPackage = Omit<PackageDetail, "sessions" | Item02PackageKeys | Item03PackageKeys> & {
+  order: MockOrder | null;
+  /** item 03: shop của đơn (thiếu → "TST Shop A" — mọi dữ liệu Phase 1 / 2, 04 §1); đơn file → null. */
+  shop_ref?: MockShopRef;
+  /** item 03: đơn thêm cùng mã vận đơn (kiện gộp — FR-05.22). */
+  merged_orders?: string[];
   sessions: MockSession[];
   created_at: string;
   /** Kiện tạm của hàng hoàn chưa xác định (`TAM-…`, 02 §6.3 #2). */
@@ -87,7 +107,11 @@ type SessionSeed = {
   durationS?: number;
   flags?: SessionFlag[];
   clips?: ClipStatus | null;
+  /** item 03 T-265: trạng thái riêng Cam 2 (mặc định = `clips`). */
+  cam2?: ClipStatus;
   held?: boolean;
+  /** item 03: người đóng gói (FR-03.16). */
+  operator?: string;
 };
 
 type PackageSeed = {
@@ -104,6 +128,11 @@ type PackageSeed = {
   items?: [string, string | null, number][];
   sessions?: SessionSeed[];
   unverified?: boolean;
+  /** item 03. */
+  shop?: MockShopRef;
+  merged?: string[];
+  /** item 03 (BR-32): mã có ở ≥ 2 shop lúc quét → sự kiện dòng thời gian có `shops`. */
+  ambiguousShops?: { platform: Platform; name: string }[];
 };
 
 const DEFAULT_ITEMS: [string, string | null, number][] = [["Áo thun basic", "Đen / L", 2]];
@@ -201,7 +230,7 @@ function seeds(): PackageSeed[] {
   ];
   for (let i = 16; i <= 30; i++)
     list.push({ n: String(i).padStart(7, "0"), status: "NEW", platform: "READY_TO_SHIP" });
-  list.push(...returnSeeds());
+  list.push(...returnSeeds(), ...phase3Seeds());
   // Lịch sử: 6 kiện mỗi ngày trong 7 ngày trước, đã bàn giao / đã giao.
   for (let d = 1; d <= 7; d++) {
     for (let k = 0; k < 6; k++) {
@@ -315,6 +344,105 @@ function returnSeeds(): PackageSeed[] {
   ];
 }
 
+/**
+ * item 03 (04 §1 dữ liệu Phase 3): kiện shop "TST B" và TikTok "TST TikTok A (mock)" cho lọc sàn / shop, chip sàn, kiện
+ * gộp, mã đơn trùng 2 shop (`2410DUP00001`). Phiên từ 1 ngày trước (không đổi số D2 hôm nay).
+ */
+function phase3Seeds(): PackageSeed[] {
+  const packed = (daysAgo: number, minute: number): SessionSeed => ({
+    station: "st-2",
+    status: "COMPLETED",
+    daysAgo,
+    minute,
+    clips: "READY",
+  });
+  const tt = (n: string): Pick<PackageSeed, "n" | "tracking" | "shop"> => ({
+    n: "",
+    tracking: `TTTST00000000${n}`,
+    shop: SHOP.TT_A,
+  });
+  return [
+    {
+      n: "",
+      tracking: "SPXTSTB000000001",
+      orderSn: "2410TSTB0001",
+      shop: SHOP.B,
+      status: "PACKED",
+      platform: "READY_TO_SHIP",
+      // FR-03.16: phiên PACK có người đóng gói (D4 "Người đóng gói: Minh").
+      sessions: [{ ...packed(1, 300), operator: "Minh" }],
+    },
+    // item 03 T-260 / T-264 (04 TC-08.40..08.52): kiện có phiên mở hoàn trước / quét nhầm / Cần soát (returnsDb).
+    { n: "0000060", status: "RETURN_RECEIVED_ISSUE", platform: "TO_RETURN", sessions: [packed(3, 40)] },
+    // item 03 T-265 (EX-K8 / K9, FR-02.16): phiên hiệu lực cả 2 clip "Thiếu tệp" (+ ảnh lúc đóng gói thiếu tệp), phiên cũ
+    // Cam 1 còn / Cam 2 thiếu tệp → hồ sơ KN-000142 (returnsDb `seedMissingClaim`).
+    {
+      n: "0000062",
+      status: "HANDED_OVER",
+      platform: "SHIPPED",
+      sessions: [
+        { ...packed(4, 50), status: "SUPERSEDED", cam2: "MISSING" },
+        { ...packed(4, 60), clips: "MISSING" },
+      ],
+    },
+    // TC-05.93 (EX-P14, BR-32): mã có ở 2 shop → kiện chưa xác minh, cờ AMBIGUOUS_SHOP, dòng thời gian liệt kê shop.
+    {
+      n: "",
+      tracking: "SPXTSTX0000001",
+      orderSn: null,
+      unverified: true,
+      status: "PACKED",
+      sessions: [{ ...packed(1, 330), flags: ["UNVERIFIED", "AMBIGUOUS_SHOP"] }],
+      ambiguousShops: [
+        { platform: "SHOPEE", name: "TST B" },
+        { platform: "TIKTOK", name: "TST TikTok B (mock)" },
+      ],
+    },
+    {
+      n: "",
+      tracking: "SPXTSTB000000021",
+      orderSn: "2410DUP00001",
+      shop: SHOP.B,
+      status: "HANDED_OVER",
+      platform: "SHIPPED",
+      sessions: [packed(2, 300)],
+    },
+    {
+      ...tt("13"),
+      orderSn: "5761TT0000000013",
+      status: "PACKED",
+      platform: "AWAITING_SHIPMENT",
+      sessions: [packed(1, 310)],
+    },
+    {
+      ...tt("16"),
+      orderSn: "5761TT0000000016",
+      status: "HANDED_OVER",
+      platform: "IN_TRANSIT",
+      sessions: [packed(2, 310)],
+    },
+    {
+      ...tt("21"),
+      orderSn: "2410DUP00001",
+      status: "HANDED_OVER",
+      platform: "IN_TRANSIT",
+      sessions: [packed(2, 320)],
+    },
+    {
+      ...tt("77"),
+      orderSn: "5761TT0000000771",
+      merged: ["5761TT0000000772"],
+      status: "PACKED",
+      platform: "AWAITING_SHIPMENT",
+      items: [
+        ["Áo thun basic", "Đen / L", 2],
+        ["Tất cổ ngắn", "Trắng", 1],
+      ],
+      sessions: [packed(1, 320)],
+    },
+  ];
+}
+
 let clipSeq = 0;
 
 function buildSession(pkgId: string, idx: number, s: SessionSeed): MockSession {
@@ -327,16 +455,18 @@ function buildSession(pkgId: string, idx: number, s: SessionSeed): MockSession {
     for (const role of ["CAM1", "CAM2"] as const) {
       clipSeq += 1;
       const retention = ended ? ended + RETENTION_CLIP_DAYS * DAY : null;
+      const status = role === "CAM2" && s.cam2 ? s.cam2 : s.clips;
       clips.push({
         id: `clip-${id.slice(4)}-${role === "CAM1" ? 1 : 2}`,
         session_id: id,
         camera_role: role,
-        status: s.clips,
-        sha256: s.clips === "READY" || s.clips === "DELETED" ? hex(clipSeq) : null,
-        duration_s: s.clips === "PENDING" || s.clips === "FAILED" ? null : duration + 10,
+        status,
+        // `MISSING` (item 03): DB còn mã băm, máy chủ không có tệp.
+        sha256: status === "READY" || status === "DELETED" || status === "MISSING" ? hex(clipSeq) : null,
+        duration_s: status === "PENDING" || status === "FAILED" ? null : duration + 10,
         held: Boolean(s.held),
         retention_until: s.held ? null : retention ? iso(retention) : null,
-        deleted_at: s.clips === "DELETED" && retention ? iso(retention) : null,
+        deleted_at: status === "DELETED" && retention ? iso(retention) : null,
         flags: [],
       });
     }
@@ -354,6 +484,7 @@ function buildSession(pkgId: string, idx: number, s: SessionSeed): MockSession {
     cancel_reason: s.status === "CANCELLED" ? "WRONG_SCAN" : null,
     note: null,
     clips,
+    ...(s.operator ? { operator_name: s.operator } : {}),
   };
 }
 
@@ -397,6 +528,15 @@ function buildPackage(seed: PackageSeed): MockPackage {
         actor: s.station_name,
       });
   }
+  if (seed.ambiguousShops && first)
+    timeline.push({
+      at: first.started_at,
+      source: "WAREHOUSE",
+      from_status: null,
+      to_status: "PACKING",
+      actor: first.station_name,
+      shops: seed.ambiguousShops,
+    });
   const last = sessions[0]?.ended_at ? Date.parse(sessions[0].ended_at) : created;
   if (["HANDED_OVER", "DELIVERED", "CANCELLED_AFTER_PACK"].includes(seed.status)) {
     timeline.push({
@@ -453,6 +593,8 @@ function buildPackage(seed: PackageSeed): MockPackage {
           },
     sessions,
     timeline,
+    ...(seed.shop ? { shop_ref: seed.shop } : {}),
+    ...(seed.merged ? { merged_orders: seed.merged } : {}),
   };
 }
 
@@ -473,6 +615,73 @@ export const findClip = (clipId: string) =>
     .find((c) => c.id === clipId) as MockClip | undefined;
 export const findSession = (sessionId: string) => allSessions().find((s) => s.id === sessionId);
 
+/** item 03: shop của kiện (`order` null / đơn file → null). */
+export function shopOfPackage(p: Pick<MockPackage, "order" | "shop_ref">): MockShopRef | null {
+  if (!p.order || p.order.source === "CSV") return null;
+  return p.shop_ref ?? SHOP.A;
+}
+
+/** Nhóm trạng thái đơn từ chữ sàn (02 §5.3 — mapping trong mock thay `platforms/<sàn>/mapping.py`). */
+const STATUS_GROUP: Record<Platform, Record<string, PlatformStatusGroup>> = {
+  SHOPEE: {
+    UNPAID: "UNPAID",
+    READY_TO_SHIP: "AWAITING_SHIPMENT",
+    PROCESSED: "AWAITING_SHIPMENT",
+    RETRY_SHIP: "AWAITING_SHIPMENT",
+    SHIPPED: "SHIPPED",
+    TO_CONFIRM_RECEIVE: "DELIVERED",
+    COMPLETED: "DELIVERED",
+    IN_CANCEL: "CANCEL_REQUESTED",
+    CANCELLED: "CANCELLED",
+    TO_RETURN: "RETURNING",
+  },
+  TIKTOK: {
+    UNPAID: "UNPAID",
+    ON_HOLD: "UNPAID",
+    AWAITING_SHIPMENT: "AWAITING_SHIPMENT",
+    PARTIALLY_SHIPPING: "AWAITING_SHIPMENT",
+    AWAITING_COLLECTION: "AWAITING_SHIPMENT",
+    IN_TRANSIT: "SHIPPED",
+    DELIVERED: "DELIVERED",
+    COMPLETED: "DELIVERED",
+    CANCELLED: "CANCELLED",
+  },
+};
+export function statusGroupOf(platform: Platform, status: string | null): PlatformStatusGroup | null {
+  if (!status) return null;
+  return STATUS_GROUP[platform][status] ?? "UNKNOWN";
+}
+
+/** Phần item 03 của `order` ở API-31 (02 §6.2 "API-31 mở rộng"). */
+export function orderOf(p: MockPackage): PackageDetail["order"] {
+  if (!p.order) return null;
+  const shop = shopOfPackage(p);
+  const platform = shop?.platform ?? p.order.platform;
+  return {
+    ...p.order,
+    platform,
+    shop: shop ? { id: shop.id, name: shop.name, platform: shop.platform } : null,
+    platform_status_group: statusGroupOf(platform, p.order.platform_status),
+    merged_orders: (p.merged_orders ?? []).map((sn) => ({ platform_order_sn: sn })),
+    items: p.order.items.map((it, i) => ({
+      ...it,
+      platform_order_sn:
+        p.merged_orders?.length && i > 0 ? (p.merged_orders[i - 1] ?? null) : p.order!.platform_order_sn,
+    })),
+  };
+}
+
+/** item 03: lọc `platform` + `shop_id` (shop không thuộc sàn → không khớp gì — 02 §6 quy ước). */
+export function matchesShop(
+  p: Pick<MockPackage, "order" | "shop_ref"> | undefined,
+  platform: string | null,
+  shopId: string | null,
+): boolean {
+  if (!platform && !shopId) return true;
+  const shop = p ? shopOfPackage(p) : null;
+  return (!platform || shop?.platform === platform) && (!shopId || shop?.id === shopId);
+}
+
 /** Hàng API-30 từ kiện mock. */
 export function toListItem(p: MockPackage): Omit<PackageListItem, "return_case" | "is_placeholder"> {
   const last = p.sessions.find((s) => s.status === "COMPLETED") ?? p.sessions[0];
@@ -485,16 +694,29 @@ export function toListItem(p: MockPackage): Omit<PackageListItem, "return_case" 
     source: p.order?.source ?? "API",
     last_session: last ? { station_name: last.station_name, ended_at: last.ended_at } : null,
     has_clip: p.sessions.some((s) => s.clips.some((c) => c.status === "READY")),
+    ...platformShopOf(p),
+  };
+}
+
+/** `platform` + `shop {id, name}` trên item danh sách (API-30, 110, 120, 130). */
+export function platformShopOf(p: Pick<MockPackage, "order" | "shop_ref"> | undefined) {
+  const shop = p ? shopOfPackage(p) : null;
+  return {
+    platform: shop?.platform ?? (p?.order ? p.order.platform : null),
+    shop: shop ? { id: shop.id, name: shop.name } : null,
   };
 }
 
 /** Bỏ trường nội bộ trước khi trả API-31. */
 export function toDetail(p: MockPackage) {
-  const { created_at, is_placeholder, ...rest } = p;
+  const { created_at, is_placeholder, shop_ref, merged_orders, ...rest } = p;
   void created_at;
   void is_placeholder;
+  void shop_ref;
+  void merged_orders;
   return {
     ...rest,
+    order: orderOf(p),
     sessions: p.sessions.map((s) => ({
       id: s.id,
       status: s.status,

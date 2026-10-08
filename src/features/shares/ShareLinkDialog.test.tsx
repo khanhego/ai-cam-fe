@@ -1,0 +1,407 @@
+/**
+ * Item 03 T-256 — ShareLinkDialog (01 §10.5 "ShareLinkDialog", FR-07.05, UC-16; 02b-admin §5 / §6 / §8; DEC-487, 531):
+ * validate, tạo → tiến độ (poll API-162) → link + sao chép; lỗi tải lên + Thử lại; chạy nền + Toast; kho chưa cấu hình;
+ * 409 SESSION_CLIP_UNAVAILABLE; nguồn phiên ở D4; Alert "Cần soát" / "Chưa chọn video mở hộp", chip "Cần soát".
+ */
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+
+import { login } from "@/lib/api/auth";
+import { sharesApi } from "@/lib/api/shares";
+import { apiError } from "@/mocks/http";
+import { findPackage, findSessionAnywhere, mockClaims, P3_CLAIM_ID } from "@/mocks/returnsDb";
+import { mockCloud, mockShares, shareOptions, toShare } from "@/mocks/sharesDb";
+import { renderApp } from "@/test/render";
+import { server } from "@/test/server";
+
+import { sharePoll } from "./shareProgress";
+
+beforeEach(async () => {
+  sharePoll.ms = 20;
+  await login("tst_cskh", "matkhau123", "DASHBOARD");
+});
+afterAll(() => {
+  sharePoll.ms = 2000;
+});
+
+async function openFromClaim() {
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  await user.click(await screen.findByRole("button", { name: "Tạo link chia sẻ" }));
+  const dialog = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  await within(dialog).findByText(/^Phiên gửi kèm/);
+  return { user, dialog };
+}
+const checkbox = (dialog: HTMLElement, re: RegExp) => within(dialog).getByRole("checkbox", { name: re });
+
+test("mặc định từ D17: phiên tự chọn (chính trước), phiên 'Cần soát' không chọn sẵn + Alert; nút khóa tới khi đủ", async () => {
+  const { user, dialog } = await openFromClaim();
+  expect(within(dialog).getByText("Hồ sơ KN-000141 · Kiện SPXTST0000060")).toBeInTheDocument();
+  expect(
+    within(dialog).getByText(
+      "Hồ sơ còn 1 phiên mở hoàn Cần soát chưa xử lý — xem ở chi tiết hồ sơ trước khi gửi link.",
+    ),
+  ).toBeInTheDocument();
+  const boxes = within(dialog).getAllByRole("checkbox", { name: /^(Đóng gói|Mở hoàn) ·/ });
+  expect(boxes[0]).toHaveAccessibleName(/^Mở hoàn · .* · Bỏ dở · phiên trước · /);
+  expect(boxes[0]).toBeChecked();
+  const review = boxes.find((b) => b.closest("label")!.textContent!.includes("Cần soát"))!;
+  expect(review).not.toBeChecked();
+  expect(checkbox(dialog, /^Đóng gói/)).toBeChecked();
+  expect(within(dialog).getByRole("radio", { name: "Ghép Cam 1 + Cam 2" })).toBeChecked();
+  expect(within(dialog).getByRole("checkbox", { name: "Kèm ảnh (2)" })).toBeChecked();
+  expect(within(dialog).getByRole("radio", { name: "7 ngày" })).toBeChecked();
+  expect(within(dialog).getByText(/^Video Cam 2 có thể thấy nhãn vận đơn/)).toBeInTheDocument();
+
+  const create = within(dialog).getByRole("button", { name: "Tạo link" });
+  expect(create).toBeDisabled();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "AB");
+  await user.tab();
+  expect(within(dialog).getByText("Ghi rõ gửi cho ai (3–100 ký tự).")).toBeInTheDocument();
+  expect(create).toBeDisabled();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "C");
+  expect(create).toBeEnabled();
+
+  // Bỏ hết phiên mở hoàn → Alert "Chưa chọn video mở hộp" (không chặn); bỏ hết → "Chọn ít nhất 1 phiên."
+  for (const b of within(dialog).getAllByRole("checkbox", { name: /^Mở hoàn/ }))
+    if ((b as HTMLInputElement).checked) await user.click(b);
+  expect(
+    within(dialog).getByText("Chưa chọn video mở hộp nào — link chỉ có video đóng gói."),
+  ).toBeInTheDocument();
+  expect(create).toBeEnabled();
+  await user.click(checkbox(dialog, /^Đóng gói/));
+  expect(within(dialog).getByText("Chọn ít nhất 1 phiên.")).toBeInTheDocument();
+  expect(create).toBeDisabled();
+});
+
+test("UC-16: tạo link → tiến độ → 'Link đã sẵn sàng' + Sao chép (Toast) + hạn + gửi cho", async () => {
+  const { user, dialog } = await openFromClaim();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "CSKH Shopee – phiếu 98765");
+  await user.click(within(dialog).getByRole("radio", { name: "3 ngày" }));
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+
+  const d2 = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  expect(await within(d2).findByText("Link đã sẵn sàng")).toBeInTheDocument();
+  const link = within(d2).getByLabelText("Link chia sẻ") as HTMLInputElement;
+  expect(link).toHaveAttribute("readonly");
+  expect(link.value).toMatch(/^https?:\/\//);
+  expect(within(d2).getByText("Gửi cho: CSKH Shopee – phiếu 98765")).toBeInTheDocument();
+  expect(within(d2).getByText(/^Hết hạn \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeInTheDocument();
+  await user.click(within(d2).getByRole("button", { name: "Sao chép link" }));
+  // userEvent.setup() thay `navigator.clipboard` bằng bản giả của nó → đọc lại.
+  expect(await navigator.clipboard.readText()).toBe(link.value);
+  expect(await screen.findAllByText("Đã sao chép link.")).not.toHaveLength(0);
+  const created = mockShares.find((x) => x.recipient === "CSKH Shopee – phiếu 98765")!;
+  expect(created).toMatchObject({ layout: "SIDE_BY_SIDE", status: "ACTIVE" });
+});
+
+test("lỗi tải lên → Alert + Thử lại → tạo lại thành công", async () => {
+  mockCloud.failUpload = true;
+  const { user, dialog } = await openFromClaim();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "ĐVVC SPX");
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+  const d2 = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  expect(
+    await within(d2).findByText("Không tải được lên kho lưu cloud. Kiểm tra Internet rồi bấm Thử lại."),
+  ).toBeInTheDocument();
+  mockCloud.failUpload = false;
+  await user.click(within(d2).getByRole("button", { name: "Thử lại" }));
+  expect(await within(screen.getByRole("dialog")).findByText("Link đã sẵn sàng")).toBeInTheDocument();
+});
+
+test("đóng khi đang tạo → chạy nền, Toast khi xong", async () => {
+  sharePoll.ms = 200;
+  const { user, dialog } = await openFromClaim();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "CSKH Shopee");
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+  const d2 = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  expect(within(d2).getByRole("progressbar", { name: "Tiến độ tạo link" })).toBeInTheDocument();
+  await user.click(within(d2).getByRole("button", { name: "Đóng" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(
+    await screen.findByText('Link chia sẻ cho "CSKH Shopee" đã sẵn sàng.', {}, { timeout: 5000 }),
+  ).toBeInTheDocument();
+});
+
+test("kho lưu chưa cấu hình → Alert + nút Tạo link khóa", async () => {
+  mockCloud.configured = false;
+  const { user, dialog } = await openFromClaim();
+  expect(
+    within(dialog).getByText("Chưa cấu hình kho lưu cloud. Admin: Cài đặt → Sao lưu."),
+  ).toBeInTheDocument();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "CSKH Shopee");
+  expect(within(dialog).getByRole("button", { name: "Tạo link" })).toBeDisabled();
+});
+
+test("409 SESSION_CLIP_UNAVAILABLE → Toast + tải lại danh sách; 422 fields.recipient dưới ô", async () => {
+  let calls = 0;
+  server.use(
+    http.post("/api/v1/shares", () => {
+      calls += 1;
+      return calls === 1
+        ? apiError(409, "SESSION_CLIP_UNAVAILABLE", "Phiên vừa mất clip — chọn lại phiên.", {
+            session_id: "x",
+          })
+        : apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", {
+            fields: { recipient: "Gửi cho không hợp lệ (server)." },
+          });
+    }),
+  );
+  const { user, dialog } = await openFromClaim();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "CSKH Shopee");
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+  expect(await screen.findByText("Phiên vừa mất clip — chọn lại phiên.")).toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+  expect(await within(dialog).findByText("Gửi cho không hợp lệ (server).")).toBeInTheDocument();
+});
+
+test("D4: 'Tạo link chia sẻ' trên phiên có clip → nguồn phiên, phiên đó chọn sẵn", async () => {
+  const user = userEvent.setup();
+  renderApp("/admin/packages/pkg-SPXTSTB000000001");
+  await user.click(await screen.findByRole("button", { name: "Tạo link chia sẻ" }));
+  const dialog = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  expect(await within(dialog).findByText("Kiện SPXTSTB000000001")).toBeInTheDocument();
+  const boxes = within(dialog).getAllByRole("checkbox", { name: /^Đóng gói/ });
+  expect(boxes).toHaveLength(1);
+  expect(boxes[0]).toBeChecked();
+  expect(within(dialog).queryByText(/Chưa chọn video mở hộp/)).toBeNull();
+});
+
+test("API-164 404 → Toast, đóng dialog", async () => {
+  server.use(
+    http.get("/api/v1/shares/options", () => apiError(404, "NOT_FOUND", "Không tìm thấy hồ sơ / phiên.")),
+  );
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  await user.click(await screen.findByRole("button", { name: "Tạo link chia sẻ" }));
+  expect(await screen.findByText("Không tìm thấy hồ sơ / phiên.")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+async function createFromClaim(recipient: string) {
+  const { user, dialog } = await openFromClaim();
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), recipient);
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+  return { user, d2: await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" }) };
+}
+
+test("G3-FE-1: API-162 trả REVOKED / EXPIRED → báo thu hồi / hết hạn, không có nút Thử lại", async () => {
+  for (const [status, text] of [
+    ["REVOKED", "Link đã bị thu hồi."],
+    ["EXPIRED", "Link đã hết hạn."],
+  ] as const) {
+    server.use(
+      http.get("/api/v1/shares/:id", ({ params }) => {
+        const s = mockShares.find((x) => x.id === params.id);
+        if (!s) return; // `/shares/options` → handler gốc.
+        s.status = status;
+        return HttpResponse.json(toShare(s, { id: "u", role: "ADMIN" }, true));
+      }),
+    );
+    const { d2 } = await createFromClaim(`CSKH ${status}`);
+    expect(await within(d2).findByText(text)).toBeInTheDocument();
+    expect(within(d2).queryByRole("button", { name: "Thử lại" })).toBeNull();
+    expect(within(d2).queryByRole("progressbar")).toBeNull();
+    expect(within(d2).queryByText(/Không dựng được video|Không tải được lên kho/)).toBeNull();
+    cleanup();
+  }
+});
+
+test("G3-FE-4: API-162 lỗi khi chưa có dữ liệu → chỉ Alert tải lỗi + Thử lại, không hiện khối Đang tạo", async () => {
+  server.use(
+    http.get("/api/v1/shares/:id", ({ params }) =>
+      params.id === "options" ? undefined : apiError(404, "NOT_FOUND", "Không tìm thấy link."),
+    ),
+  );
+  const { d2 } = await createFromClaim("CSKH lỗi đọc");
+  expect(await within(d2).findByText("Không tải được danh sách phiên.")).toBeInTheDocument();
+  expect(within(d2).queryByRole("progressbar")).toBeNull();
+  expect(within(d2).queryByText(/^Link tiếp tục được tạo khi đóng/)).toBeNull();
+  expect(within(d2).getByRole("button", { name: "Thử lại" })).toBeInTheDocument();
+});
+
+test("G3-FE-3: Sao chép link lỗi (clipboard + execCommand) → Toast lỗi chung, ô link được chọn sẵn", async () => {
+  const { user, d2 } = await createFromClaim("CSKH sao chép lỗi");
+  await within(d2).findByText("Link đã sẵn sàng");
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+  const exec = vi.fn(() => false);
+  Object.defineProperty(document, "execCommand", { value: exec, configurable: true });
+  await user.click(within(d2).getByRole("button", { name: "Sao chép link" }));
+  expect(
+    await screen.findByText("Không sao chép được link. Mở Link chia sẻ trên trình duyệt khác rồi thử lại."),
+  ).toBeInTheDocument();
+  expect(exec).toHaveBeenCalledWith("copy");
+  const link = within(d2).getByLabelText("Link chia sẻ") as HTMLInputElement;
+  expect(document.activeElement === link || link.selectionEnd === link.value.length).toBe(true);
+  write.mockRestore();
+});
+
+test("G3-FE-5: phiên bị loại (BR-39) thêm tay → chip 'Bị loại khỏi bằng chứng — <lý do như D17>', không chọn sẵn", async () => {
+  const claim = mockClaims.find((c) => c.id === P3_CLAIM_ID)!;
+  for (const id of ["ses-p3-c", "ses-p3-m"])
+    claim.evidence.push({
+      id: `ev-t-${id}`,
+      kind: "SESSION",
+      ref_id: id,
+      auto: false,
+      added_at: claim.created_at,
+    });
+  const { dialog } = await openFromClaim();
+  const marked = await within(dialog).findByText("Bị loại khỏi bằng chứng — Đã đánh dấu quét nhầm");
+  // G3V-3 (DEC-935): lý do lấy thẳng API-164 `evidence_exclusion` (không gọi API-132) → nhãn theo loại loại trừ.
+  const wrong = await within(dialog).findByText("Bị loại khỏi bằng chứng — Hủy tại trạm");
+  for (const chip of [marked, wrong]) {
+    const box = within(chip.closest("label")!).getByRole("checkbox");
+    expect(box).not.toBeChecked();
+    expect(box).toBeEnabled();
+  }
+});
+
+test("G3-FE-8: D4 — phiên không có clip READY (thiếu tệp / đang xử lý) → không có 'Tạo link chia sẻ'", async () => {
+  const pkg = findPackage("pkg-SPXTSTB000000001")!;
+  for (const s of pkg.sessions) s.clips.forEach((c, i) => (c.status = i === 0 ? "MISSING" : "PENDING"));
+  renderApp("/admin/packages/pkg-SPXTSTB000000001");
+  await screen.findByRole("heading", { name: /Clip/ });
+  expect(screen.queryByRole("button", { name: "Tạo link chia sẻ" })).toBeNull();
+});
+
+test("G3-EV-4: Cam 1 phiên chính thiếu tệp → Alert ở D17 (API-132) và ShareLinkDialog (API-164)", async () => {
+  const cam1 = findSessionAnywhere("ses-p3-a")!.session.clips.find((c) => c.camera_role === "CAM1")!;
+  cam1.status = "MISSING";
+  const text = "Phiên chính thiếu tệp Cam 1 — khôi phục từ sao lưu hoặc chọn phiên khác.";
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  const section = (await screen.findByRole("heading", { name: "Bằng chứng" })).closest("section")!;
+  expect(await within(section).findByText(text)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Tạo link chia sẻ" }));
+  const dialog = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  expect(await within(dialog).findByText(text)).toBeInTheDocument();
+});
+
+test("G3-EV-4: lý do khác (Clip lỗi) → Alert kèm nhãn lý do; Cam 1 READY → không Alert", async () => {
+  const cam1 = findSessionAnywhere("ses-p3-a")!.session.clips.find((c) => c.camera_role === "CAM1")!;
+  cam1.status = "FAILED";
+  const { dialog } = await openFromClaim();
+  expect(
+    within(dialog).getByText("Phiên chính chưa dùng được Cam 1 (Clip lỗi) — chọn phiên khác."),
+  ).toBeInTheDocument();
+  cleanup();
+  cam1.status = "READY";
+  const again = await openFromClaim();
+  expect(within(again.dialog).queryByText(/^Phiên chính (thiếu tệp|chưa dùng được) Cam 1/)).toBeNull();
+});
+
+test("API-160 409 SESSION_EXCLUDED (nguồn phiên) → Alert lỗi rõ, nút Tạo link khóa, không tự gửi lại", async () => {
+  let calls = 0;
+  server.use(
+    http.post("/api/v1/shares", () => {
+      calls += 1;
+      return apiError(409, "SESSION_EXCLUDED", "Phiên đã bị đánh dấu quét nhầm — không tạo link được.", {
+        session_id: "x",
+      });
+    }),
+  );
+  const user = userEvent.setup();
+  renderApp("/admin/packages/pkg-SPXTSTB000000001");
+  await user.click(await screen.findByRole("button", { name: "Tạo link chia sẻ" }));
+  const dialog = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  await within(dialog).findByText("Kiện SPXTSTB000000001");
+  await user.type(within(dialog).getByLabelText(/^Gửi cho/), "CSKH Shopee");
+  await user.click(within(dialog).getByRole("button", { name: "Tạo link" }));
+  const alert = await within(dialog).findByRole("alert");
+  expect(alert).toHaveTextContent("Phiên đã bị đánh dấu quét nhầm — không tạo link được.");
+  expect(within(alert).queryByRole("button", { name: "Thử lại" })).toBeNull();
+  expect(within(dialog).getByRole("button", { name: "Tạo link" })).toBeDisabled();
+  await new Promise((r) => setTimeout(r, 50));
+  expect(calls).toBe(1);
+});
+
+test("MSW API-160: nguồn phiên bị loại (quét nhầm) → 409 SESSION_EXCLUDED", async () => {
+  const err = await sharesApi
+    .create({
+      source_type: "SESSION",
+      claim_id: null,
+      session_id: "ses-p3-m",
+      session_ids: ["ses-p3-m"],
+      layout: "SIDE_BY_SIDE",
+      include_snapshots: false,
+      recipient: "CSKH Shopee",
+      expires_days: 7,
+    })
+    .catch((e: unknown) => e);
+  expect(err).toMatchObject({ status: 409, code: "SESSION_EXCLUDED" });
+});
+
+test("G3V-2: MSW API-164 nguồn phiên — phiên bị loại / Cần soát → default_selected false; phiên thường → true", async () => {
+  const row = async (id: string) => (await sharesApi.options({ session_id: id })).sessions[0]!;
+  for (const id of ["ses-p3-c", "ses-p3-r", "ses-p3-m"]) expect((await row(id)).default_selected).toBe(false);
+  expect(await row("ses-p3-r")).toMatchObject({ review_needed: true, selectable: true });
+  expect(await row("ses-p3-m")).toMatchObject({ excluded: true, selectable: true });
+  expect((await row("ses-p3-a")).default_selected).toBe(true);
+});
+
+test("G3V-2: D4 — phiên bị loại / Cần soát → 'Tạo link chia sẻ' khóa + chữ ngắn; phiên thường → bấm được", async () => {
+  const later = (id: string) => (findSessionAnywhere(id)!.session.started_at = "2099-01-01T00:00:00Z");
+  later("ses-p3-m");
+  renderApp("/admin/packages/pkg-0000060");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Tạo link chia sẻ" })).toBeDisabled());
+  const btn = screen.getByRole("button", { name: "Tạo link chia sẻ" });
+  expect(btn).toHaveAccessibleDescription("Bị loại / cần soát — chưa gửi link được");
+  expect(btn).toHaveAttribute(
+    "title",
+    "Phiên mở hoàn bị loại khỏi bằng chứng (quét nhầm / cần soát) — xác nhận ở hồ sơ khiếu nại trước khi gửi link.",
+  );
+  cleanup();
+  findSessionAnywhere("ses-p3-a")!.session.started_at = "2099-02-01T00:00:00Z";
+  renderApp("/admin/packages/pkg-0000060");
+  const ok = await screen.findByRole("button", { name: "Tạo link chia sẻ" });
+  await new Promise((r) => setTimeout(r, 50));
+  expect(ok).toBeEnabled();
+  expect(screen.queryByText("Bị loại / cần soát — chưa gửi link được")).toBeNull();
+});
+
+test("G3V-3: MSW API-164 có sessions[].evidence_exclusion (nguồn hồ sơ + nguồn phiên)", async () => {
+  const claim = mockClaims.find((c) => c.id === P3_CLAIM_ID)!;
+  claim.evidence.push({
+    id: "ev-t-m",
+    kind: "SESSION",
+    ref_id: "ses-p3-m",
+    auto: false,
+    added_at: claim.created_at,
+  });
+  const byClaim = await sharesApi.options({ claim_id: P3_CLAIM_ID });
+  const ex = Object.fromEntries(byClaim.sessions.map((s) => [s.id, s.evidence_exclusion]));
+  expect(ex["ses-p3-m"]).toBe("MARKED");
+  expect(ex["ses-p3-a"]).toBeNull();
+  expect((await sharesApi.options({ session_id: "ses-p3-c" })).sessions[0]!.evidence_exclusion).toBe(
+    "STATION_CANCEL",
+  );
+});
+
+test("G3V-3: chip 'Bị loại' dùng API-164 evidence_exclusion (Quản lý hủy), không đọc API-132 trong dialog", async () => {
+  let claimCalls = 0;
+  server.use(
+    http.get(`/api/v1/shares/options`, () => {
+      const real = shareOptions({ session_id: "ses-p3-a" })!;
+      const row = { ...real.sessions[0]!, excluded: true, default_selected: false };
+      return HttpResponse.json({
+        ...real,
+        sessions: [{ ...row, evidence_exclusion: "SUPERVISOR_CANCEL" }],
+      });
+    }),
+  );
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  const open = await screen.findByRole("button", { name: "Tạo link chia sẻ" });
+  server.use(
+    http.get(`/api/v1/claims/:id`, () => {
+      claimCalls += 1;
+      return HttpResponse.json({}, { status: 500 });
+    }),
+  );
+  await user.click(open);
+  const dialog = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  expect(await within(dialog).findByText("Bị loại khỏi bằng chứng — Quản lý hủy")).toBeInTheDocument();
+  expect(claimCalls).toBe(0);
+});

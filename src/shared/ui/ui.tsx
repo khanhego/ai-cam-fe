@@ -108,6 +108,7 @@ export function IconButton({
   icon: string;
   label: string;
   variant?: "standard" | "tonal" | "filled" | "danger";
+  ref?: Ref<HTMLButtonElement>;
 }) {
   const tone = {
     standard: "text-on-surface-variant",
@@ -456,11 +457,14 @@ export function SegmentedButtons<T extends string>({
   value,
   onChange,
   label,
+  disabled,
 }: {
   options: [T, string, string?][];
   value: T;
   onChange: (v: T) => void;
   label: string;
+  /** Lựa chọn khóa (vd. loại kênh chưa cấu hình trên máy chủ — D22). */
+  disabled?: readonly T[];
 }) {
   return (
     <div
@@ -473,9 +477,10 @@ export function SegmentedButtons<T extends string>({
           key={k}
           type="button"
           aria-pressed={value === k}
+          disabled={disabled?.includes(k)}
           onClick={() => onChange(k)}
           className={cx(
-            "state-layer inline-flex items-center gap-1.5 px-4 text-label-lg",
+            "state-layer inline-flex items-center gap-1.5 px-4 text-label-lg disabled:opacity-38",
             i > 0 && "border-l border-outline",
             value === k ? "bg-secondary-container text-on-secondary-container" : "text-on-surface",
           )}

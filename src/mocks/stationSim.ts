@@ -2,13 +2,16 @@ import { ACTIONS_BY_TYPE, type ApprovalAction, type ApprovalContext } from "@/li
 import type {
   CancelReason,
   ClosedSession,
+  MatchedOrder,
   OpenReturnSessionBody,
   RecentSession,
   ReturnLookup,
   ScanAlert,
   ScanResult,
   SessionFlag,
+  StationItem,
   StationKind,
+  StationOrder,
   StationSession,
   StationState,
   WorkMode,
@@ -17,7 +20,8 @@ import { CONCLUSION_LABEL, canBeOk, INSPECTION_LIMITS } from "@/shared/returns/i
 import type { Conclusion, InspectionInput, Snapshot } from "@/shared/returns/types";
 import { WAREHOUSE_STATUS, type WarehouseStatus } from "@/shared/labels";
 
-import { mockPackages, type MockPackage } from "./packagesDb";
+import { mockPackages, shopOfPackage, type MockPackage } from "./packagesDb";
+import { mockFlag, SHOP, type MockShopRef } from "./shopsDb";
 import {
   blockedReason,
   closeReturn,
@@ -46,8 +50,22 @@ import {
  * Item 02 (T-131): chế độ bàn RETURN (02 §6.2 API-10/11 RETURN, API-100..105) trên dữ liệu `returnsDb` (04 §1 dải
  * `SPXTST00000[4-5]x`): `SPXRTTST000041` mở Khách trả hàng · `SPXTST0000042` Giao thất bại · `2410TST00043` đơn 2 kiện
  * → RETURN_MULTIPLE_PACKAGES · `SPXTST0000053` đã nhận · `SPXTST0000010` chưa gửi · `SPXVN0000000000` không tìm thấy.
+ *
+ * Item 03 (T-231, 02b-station §12; dữ liệu 04 §1): `SPXTST0000001..30` shop "TST Shop A", `SPXTSTB000000001..20` shop
+ * "TST B" (Shopee); `TTTST0000000013..19` TikTok "TST TikTok A (mock)" (`…19` hủy), `TTTST0000000077` kiện gộp 2 đơn,
+ * `TTTST0000000050` / `…052` yêu cầu hủy → `ORDER_CANCEL_REQUESTED`, `TTTST0000000051` yêu cầu hủy tới khi đang đóng
+ * (handler gắn cờ sau 5 giây), `…053` đã hủy. Bàn hoàn `2410DUP00001` → `RETURN_MULTIPLE_ORDERS`. `?packerRequired=1`
+ * bật `operator_required`. Phiên RETURN có `self_cancel_until`; API-12 quá hạn → 409 `CANCEL_REQUIRES_SUPERVISOR`.
  */
-type Pkg = { code: string; status: string; verified: boolean };
+type Pkg = {
+  code: string;
+  status: string;
+  verified: boolean;
+  order: StationOrder | null;
+  items: StationItem[];
+  /** Đơn nhóm `CANCEL_REQUESTED` (BR-01): chặn mở phiên. */
+  cancelRequested: boolean;
+};
 
 /** Phiên trong sim: thêm phần nội bộ (khay Cam 2, kiện / hồ sơ hàng hoàn). */
 type SimSession = StationSession & {
@@ -65,6 +83,37 @@ const ORDER_SN = /^[A-Z0-9]{10,20}$/;
 const RETURN_WARN_MIN = 20;
 const RETURN_ABANDON_MIN = 45;
 export const SNAPSHOT_MAX = 20;
+/** BR-37: phiên RETURN tự hủy được trong 60 giây đầu (chưa kết luận, chưa ảnh chụp tay). */
+export const SELF_CANCEL_MS = 60_000;
+/** Mã đơn có ở 2 shop khác nhau (04 §1 — BR-29, EX-R20). */
+export const DUP_ORDER_SN = "2410DUP00001";
+const DUP_ORDERS = [
+  { platform: SHOP.B.platform, shop_name: SHOP.B.name, platform_order_sn: DUP_ORDER_SN },
+  { platform: SHOP.TT_A.platform, shop_name: SHOP.TT_A.name, platform_order_sn: DUP_ORDER_SN },
+];
+
+/** Mã chiều về có ở 2 hồ sơ mở của 2 shop (02a §5.1 #15, 02b-station v0.3 — T-236). */
+export const DUP_RETURN_CODE = "RTTST-DUP-1";
+
+/**
+ * item 03 (BR-29, EX-R20): mã quét ở bàn hoàn khớp ≥ 2 đơn của các shop khác nhau → `RETURN_MULTIPLE_ORDERS` (FE mở R3
+ * với `data.code`). Mã đơn `2410DUP00001`, hoặc mã chiều về có ở ≥ 2 hồ sơ mở khác shop (như BE `resolve_code` §5.1 #15).
+ */
+function ambiguousOrders(code: string): MatchedOrder[] | null {
+  if (code === DUP_ORDER_SN) return DUP_ORDERS;
+  const cases = mockReturnCases.filter(
+    (c) => isCaseOpen(c) && c.return_tracking_number?.toUpperCase() === code,
+  );
+  if (cases.length < 2) return null;
+  const orders = cases.flatMap((c) => {
+    const p = findPackage(c.package_ids[0] ?? "");
+    const shop = p ? shopOfPackage(p) : null;
+    return p?.order && shop
+      ? [{ platform: shop.platform, shop_name: shop.name, platform_order_sn: p.order.platform_order_sn }]
+      : [];
+  });
+  return new Set(orders.map((o) => `${o.platform}:${o.shop_name}`)).size >= 2 ? orders : null;
+}
 
 /** Trường mặc định của phiên PACK (02 §6.2 API-10: phiên PACK có `return_case`, `inspection`… = null). */
 const PACK_FIELDS = {
@@ -91,12 +140,96 @@ const ITEMS_12 = [
   { product_name: "Túi vải", variation: null, quantity: 1, image_url: null },
 ];
 
+/** `TTTST0000000077`: mỗi đơn 1 sản phẩm (04 §1). */
+const ITEMS_MERGED = [
+  { product_name: "Áo thun basic", variation: "Đen / L", quantity: 2, image_url: null },
+  { product_name: "Tất cổ ngắn", variation: "Trắng", quantity: 1, image_url: null },
+];
+
+const orderOf = (
+  shop: MockShopRef,
+  sn: string,
+  items: Omit<StationItem, "platform_order_sn">[],
+  extra: { buyer_note?: string | null; merged?: string[]; itemSn?: string[] } = {},
+): Pick<Pkg, "order" | "items"> => ({
+  order: {
+    platform: shop.platform,
+    shop_name: shop.name,
+    platform_order_sn: sn,
+    buyer_note: extra.buyer_note ?? null,
+    merged_orders: (extra.merged ?? []).map((x) => ({ platform_order_sn: x })),
+  },
+  items: items.map((it, i) => ({ ...it, platform_order_sn: extra.itemSn?.[i] ?? sn })),
+});
+
+/** Kiện đóng gói theo seed 04 §1; null → mã không có trên sàn (phiên chưa xác minh, "Chưa rõ sàn"). */
+function catalog(code: string): Omit<Pkg, "code"> | null {
+  const base = { verified: true, cancelRequested: false };
+  let m = /^SPXTST0000(\d{3})$/.exec(code);
+  if (m) {
+    const n = Number(m[1]);
+    if (n < 1 || n > 30) return null;
+    const status = n === 9 ? "CANCELLED" : n === 10 ? "PACKED" : n === 11 ? "HANDED_OVER" : "NEW";
+    return {
+      ...base,
+      status,
+      ...orderOf(SHOP.A, code.replace("SPXTST", "2410TST"), code.endsWith("012") ? ITEMS_12 : ITEMS_DEFAULT, {
+        buyer_note: code.endsWith("5") ? "Gói kỹ giúp em" : null,
+      }),
+    };
+  }
+  m = /^SPXTSTB0000000(\d{2})$/.exec(code);
+  if (m) {
+    const n = Number(m[1]);
+    if (n < 1 || n > 21) return null;
+    const sn = n === 21 ? DUP_ORDER_SN : `2410TSTB${String(n).padStart(4, "0")}`;
+    return { ...base, status: "NEW", ...orderOf(SHOP.B, sn, ITEMS_DEFAULT) };
+  }
+  m = /^TTTST00000000(\d{2})$/.exec(code);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const sn = `5761TT00000000${m[1]}`;
+  if (n === 77)
+    return {
+      ...base,
+      status: "NEW",
+      ...orderOf(SHOP.TT_A, "5761TT0000000771", ITEMS_MERGED, {
+        merged: ["5761TT0000000772"],
+        itemSn: ["5761TT0000000771", "5761TT0000000772"],
+      }),
+    };
+  if (n === 21) return { ...base, status: "NEW", ...orderOf(SHOP.TT_A, DUP_ORDER_SN, ITEMS_DEFAULT) };
+  const known: Record<number, string> = {
+    13: "NEW",
+    14: "NEW",
+    15: "NEW",
+    16: "HANDED_OVER",
+    17: "HANDED_OVER",
+    18: "HANDED_OVER",
+    19: "CANCELLED",
+    50: "NEW",
+    51: "NEW",
+    52: "NEW",
+    53: "CANCELLED",
+  };
+  const status = known[n];
+  if (!status) return null;
+  return {
+    ...base,
+    status,
+    cancelRequested: n === 50 || n === 52,
+    ...orderOf(SHOP.TT_A, sn, ITEMS_DEFAULT),
+  };
+}
+
 export class StationSim {
   stationName = "TST Station 01";
   /** 04 §1: TST Station 01 loại "Cả hai", mặc định chế độ đóng gói. */
   kind: StationKind = "BOTH";
   workMode: WorkMode = "PACK";
   operatorName: string | null = null;
+  /** item 03: Admin bật "Bắt buộc tên người đóng gói" (API-80 `packer_name_required`). */
+  operatorRequired = mockFlag("packerRequired");
   todayReturnCount = 0;
   todayReturnIssueCount = 0;
   packages = new Map<string, Pkg>();
@@ -117,10 +250,16 @@ export class StationSim {
   private pkg(code: string): Pkg {
     let p = this.packages.get(code);
     if (!p) {
-      const n = Number(code.replace(/\D/g, "").slice(-4));
-      const known = /^SPXTST0000\d{3}$/.test(code) && n >= 1 && n <= 30;
-      const status = n === 9 ? "CANCELLED" : n === 10 ? "PACKED" : n === 11 ? "HANDED_OVER" : "NEW";
-      p = { code, status: known ? status : "NEW", verified: known };
+      p = {
+        code,
+        ...(catalog(code) ?? {
+          status: "NEW",
+          verified: false,
+          cancelRequested: false,
+          order: null,
+          items: [],
+        }),
+      };
       this.packages.set(code, p);
     }
     return p;
@@ -143,6 +282,7 @@ export class StationSim {
         kind: this.kind,
         work_mode: this.workMode,
         operator_name: this.operatorName,
+        operator_required: this.operatorRequired,
       },
       state: this.approval ? "WAITING_APPROVAL" : s ? (s.status === "OPEN" ? open : s.status) : "READY",
       cameras: this.cameras,
@@ -159,6 +299,7 @@ export class StationSim {
             started_at: s.started_at,
             flags: s.flags,
             operator_name: s.operator_name,
+            self_cancel_until: selfCancelUntil(s),
             package: s.package,
             return_case: s.return_case,
             inspection: s.inspection,
@@ -205,9 +346,21 @@ export class StationSim {
           `${rp.pkg.tracking_number} là kiện hàng hoàn — nhận ở bàn nhận hoàn.`,
           { is_return: true },
         );
+      // item 03 (FR-03.16): bắt buộc tên người đóng gói — chặn lúc quét (DEC-481).
+      if (this.operatorRequired && !this.operatorName)
+        return this.alert("OPERATOR_REQUIRED", "Nhập tên người đóng gói trước khi đóng gói.", {
+          mode: "PACK",
+        });
       const p = this.pkg(code);
+      const platform = { platform: p.order?.platform ?? null };
       if (p.status === "CANCELLED")
-        return this.alert("ORDER_CANCELLED", `${code} đã bị hủy trên Shopee. Không đóng gói.`);
+        return this.alert("ORDER_CANCELLED", `${code} đã bị hủy trên sàn. Không đóng gói.`, platform);
+      if (p.cancelRequested)
+        return this.alert(
+          "ORDER_CANCEL_REQUESTED",
+          `${code}: người mua đang xin hủy đơn này. Chờ xử lý trên sàn, chưa đóng gói.`,
+          platform,
+        );
       if (p.status === "PACKED")
         return this.alert("ALREADY_PACKED", `${code} đã đóng gói tại TST Station 02.`, {
           packed_at: new Date(Date.now() - 3_600_000).toISOString(),
@@ -224,21 +377,13 @@ export class StationSim {
       this.session = {
         id: `ses-${now}`,
         ...PACK_FIELDS,
+        // Phiên PACK chép tên người đóng gói của station (02 §6.2 API-10).
+        operator_name: this.operatorName,
+        self_cancel_until: null,
         status: "OPEN",
         started_at: new Date(now).toISOString(),
         flags: p.verified ? [] : ["UNVERIFIED"],
-        package: {
-          id: `pkg-${code}`,
-          tracking_number: code,
-          order: p.verified
-            ? {
-                platform: "SHOPEE",
-                platform_order_sn: code.replace("SPXTST", "2410TST"),
-                buyer_note: code.endsWith("5") ? "Gói kỹ giúp em" : null,
-              }
-            : null,
-          items: p.verified ? (code.endsWith("012") ? ITEMS_12 : ITEMS_DEFAULT) : [],
-        },
+        package: { id: `pkg-${code}`, tracking_number: code, order: p.order, items: p.items },
         mismatch: null,
         warn_at: new Date(now + 15 * 60_000).toISOString(),
         abandon_at: new Date(now + 30 * 60_000).toISOString(),
@@ -315,10 +460,20 @@ export class StationSim {
     return true;
   }
 
-  /** API-12: lý do theo loại phiên (02 §5.2). Trả mã lỗi hoặc null. */
-  cancel(sessionId: string, reason?: CancelReason): "SESSION_NOT_OPEN" | "VALIDATION_ERROR" | null {
+  /**
+   * API-12: lý do theo loại phiên (02 §5.2). Trả mã lỗi hoặc null. Item 03: phiên RETURN ngoài BR-37 (quá 60 giây theo giờ
+   * server, đã lưu kết luận hoặc có ảnh chụp tay) → `CANCEL_REQUIRES_SUPERVISOR`.
+   */
+  cancel(
+    sessionId: string,
+    reason?: CancelReason,
+  ): "SESSION_NOT_OPEN" | "VALIDATION_ERROR" | "CANCEL_REQUIRES_SUPERVISOR" | null {
     const s = this.session;
     if (!s || s.id !== sessionId || s.status === "WAITING_APPROVAL") return "SESSION_NOT_OPEN";
+    if (s.type === "RETURN") {
+      const until = selfCancelUntil(s);
+      if (until === null || Date.now() >= Date.parse(until)) return "CANCEL_REQUIRES_SUPERVISOR";
+    }
     if (reason) {
       const allowed: CancelReason[] =
         s.type === "RETURN"
@@ -436,18 +591,16 @@ export class StationSim {
       this.session = {
         id: `ses-${now}`,
         ...PACK_FIELDS,
+        operator_name: this.operatorName,
+        self_cancel_until: null,
         status: "OPEN",
         started_at: new Date(now).toISOString(),
         flags: ["REPACK"],
         package: {
           id: `pkg-${a.tracking_number}`,
           tracking_number: a.tracking_number,
-          order: {
-            platform: "SHOPEE",
-            platform_order_sn: a.tracking_number.replace("SPXTST", "2410TST"),
-            buyer_note: null,
-          },
-          items: ITEMS_DEFAULT,
+          order: p.order ? { ...p.order, buyer_note: null } : null,
+          items: p.items,
         },
         mismatch: null,
         warn_at: new Date(now + 15 * 60_000).toISOString(),
@@ -556,17 +709,23 @@ export class StationSim {
       started_at: new Date(now).toISOString(),
       flags,
       operator_name: this.operatorName,
+      self_cancel_until: null,
       package: {
         id: pkg.id,
         tracking_number: pkg.tracking_number,
         order: pkg.order
           ? {
-              platform: "SHOPEE",
+              // Shop của đơn (dữ liệu Phase 1 / 2 thuộc "TST Shop A"; Phase 3 theo `shop` của kiện — T-236).
+              platform: (shopOfPackage(pkg) ?? SHOP.A).platform,
+              shop_name: (shopOfPackage(pkg) ?? SHOP.A).name,
               platform_order_sn: pkg.order.platform_order_sn,
               buyer_note: pkg.order.buyer_note,
+              merged_orders: [],
             }
           : null,
-        items: itemsOf(pkg),
+        items: itemsOf(pkg).map((it) =>
+          pkg.order ? { ...it, platform_order_sn: pkg.order.platform_order_sn } : it,
+        ),
       },
       return_case: {
         id: caseRef.id,
@@ -631,7 +790,17 @@ export class StationSim {
     if (!SCAN_CODE.test(code) && !ORDER_SN.test(code))
       return this.alert("INVALID_CODE", "Mã vừa quét không phải mã vận đơn / mã đơn. Quét lại mã trên kiện.");
     if (!this.operatorName)
-      return this.alert("OPERATOR_REQUIRED", "Nhập tên người kiểm trước khi nhận hàng hoàn.");
+      return this.alert("OPERATOR_REQUIRED", "Nhập tên người kiểm trước khi nhận hàng hoàn.", {
+        mode: "RETURN",
+      });
+    // item 03 (BR-29, EX-R20): mã đơn sàn / mã chiều về khớp ≥ 2 đơn khác shop → không mở phiên, FE mở R3 với `data.code`.
+    const dup = ambiguousOrders(code);
+    if (dup)
+      return this.alert(
+        "RETURN_MULTIPLE_ORDERS",
+        `Mã ${code} có ở ${dup.length} đơn của các shop khác nhau. Chọn đúng đơn.`,
+        { code, orders: dup },
+      );
     const found = resolveReturnCode(code);
     if (found.kind === "NOT_FOUND")
       return this.alert("RETURN_NOT_FOUND", `Không có đơn nào khớp mã ${code}, sàn không trả lời.`, {
@@ -851,6 +1020,9 @@ export class StationSim {
             : null,
           can_open: blocked === null,
           blocked_reason: blocked,
+          // item 03 (API-104): shop của đơn (dữ liệu Phase 1 / 2 thuộc "TST Shop A"); kiện không có đơn → null.
+          platform: shopOfPackage(p)?.platform ?? null,
+          shop_name: shopOfPackage(p)?.name ?? null,
         };
       });
     return { items, platform_checked: items.length === 0 && q.length >= 8 };
@@ -875,7 +1047,9 @@ export class StationSim {
     if (this.busy()) return err(409, "SESSION_ACTIVE", "Station đang có phiên. Đóng phiên trước.");
     let result: Omit<ScanResult, "state">;
     if (!this.operatorName) {
-      result = this.alert("OPERATOR_REQUIRED", "Nhập tên người kiểm trước khi nhận hàng hoàn.");
+      result = this.alert("OPERATOR_REQUIRED", "Nhập tên người kiểm trước khi nhận hàng hoàn.", {
+        mode: "RETURN",
+      });
     } else if (pkgId) {
       const pkg = findPackage(pkgId);
       if (!pkg) return err(404, "NOT_FOUND", "Không tìm thấy kiện.");
@@ -965,6 +1139,19 @@ export class StationSim {
     };
   }
 
+  /**
+   * item 03 (DEC-494): J-04 / J-06 thấy đơn vào nhóm `CANCEL_REQUESTED` khi kiện đang `PACKING` → cờ phiên
+   * `ORDER_CANCEL_REQUESTED` (không đổi trạng thái kho, phiên đóng bình thường). Trả true khi vừa gắn cờ.
+   */
+  flagOrderCancelRequested(trackingNumber?: string): boolean {
+    const s = this.session;
+    if (!s || s.type !== "PACK") return false;
+    if (trackingNumber && s.package.tracking_number !== trackingNumber) return false;
+    if (s.flags.includes("ORDER_CANCEL_REQUESTED")) return false;
+    s.flags = [...s.flags, "ORDER_CANCEL_REQUESTED"];
+    return true;
+  }
+
   /** Clip PACK của kiện đang có phiên RETURN hoạt động ở station này (API-40 luật STATION — 02 §6.1). */
   canViewPackClip(clipId: string): boolean {
     const s = this.session;
@@ -981,6 +1168,14 @@ export class StationSim {
 }
 
 const packagesOfAll = () => mockPackages;
+
+/** API-10 `self_cancel_until` (BR-37): chỉ phiên RETURN `OPEN` chưa lưu kết luận và chưa có ảnh `MANUAL`. */
+export function selfCancelUntil(s: StationSession): string | null {
+  if (s.type !== "RETURN" || s.status !== "OPEN") return null;
+  if (s.inspection?.conclusion) return null;
+  if ((s.snapshots ?? []).some((x) => x.kind === "MANUAL")) return null;
+  return new Date(Date.parse(s.started_at) + SELF_CANCEL_MS).toISOString();
+}
 
 export let stationSim = new StationSim();
 export const resetStationSim = () => {

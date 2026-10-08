@@ -54,7 +54,8 @@ test("TC-P2.05: D14 API-110 — tab mặc định Đang về, tab_counts; STATIO
   expect(r.items.every((i) => ["EXPECTED", "INSPECTING", "PARTIALLY_RECEIVED"].includes(i.status))).toBe(
     true,
   );
-  expect(r.tab_counts).toMatchObject({ MISSING: 1, NO_PARCEL: 1, UNIDENTIFIED: 1 });
+  // NO_PARCEL: HH-000044 + HH-000061 (TikTok Chỉ hoàn tiền — item 03).
+  expect(r.tab_counts).toMatchObject({ MISSING: 1, NO_PARCEL: 2, UNIDENTIFIED: 1 });
   expect(r.total).toBe(r.tab_counts.EXPECTED);
   const hh41 = r.items.find((i) => i.code === "HH-000041")!;
   expect(hh41).toMatchObject({
@@ -65,6 +66,7 @@ test("TC-P2.05: D14 API-110 — tab mặc định Đang về, tab_counts; STATIO
   expect((await returnsApi.list({ tab: "RECEIVED" })).items.map((i) => i.code)).toContain("HH-000053");
   expect((await returnsApi.list({ tab: "ALL", q: "spxrttst000041" })).items).toHaveLength(1);
   expect((await returnsApi.list({ tab: "ALL", kind: "REFUND_ONLY" })).items.map((i) => i.code)).toEqual([
+    "HH-000061",
     "HH-000044",
   ]);
   const detail = await returnsApi.get(hh41.id);
@@ -246,8 +248,15 @@ test("TC-P2.07 / TC-P2.08: D15 API-120 sắp xếp mức + summary; API-121 xử
 test("TC-P2.09 / D16: API-130 lọc + status_counts; STATION 403", async () => {
   await as("tst_cskh");
   const all = await claimsApi.list({});
-  expect(all.status_counts).toMatchObject({ NEW: 3, SUBMITTED: 1, WAITING: 1, WON: 1, LOST: 1, CLOSED: 1 });
-  expect((await claimsApi.list({ status: "NEW" })).items.map((c) => c.status)).toEqual(["NEW", "NEW", "NEW"]);
+  // item 03 T-265: + KN-000142 (clip Thiếu tệp).
+  expect(all.status_counts).toMatchObject({ NEW: 5, SUBMITTED: 1, WAITING: 1, WON: 1, LOST: 1, CLOSED: 1 });
+  expect((await claimsApi.list({ status: "NEW" })).items.map((c) => c.status)).toEqual([
+    "NEW",
+    "NEW",
+    "NEW",
+    "NEW",
+    "NEW",
+  ]);
   expect((await claimsApi.list({ due: "soon" })).items.map((c) => c.code)).toContain("KN-000124");
   expect((await claimsApi.list({ due: "overdue" })).items.map((c) => c.code)).toEqual(["KN-000121"]);
   expect((await claimsApi.list({ owner: "me" })).items.every((c) => c.owner?.display_name === "Lan")).toBe(
@@ -475,7 +484,7 @@ test("FR-09.01: API-32 counts + attention mới (D2 hiển thị từ T-160)", a
   expect(d.counts).toMatchObject({
     returns_missing: 1,
     recon_open: { HIGH: 3, MEDIUM: 2, LOW: 2 },
-    claims_open: 7,
+    claims_open: 9,
   });
   expect(d.counts.claims_due_soon).toBeGreaterThanOrEqual(1);
   expect(d.attention.map((a) => a.kind)).toEqual(

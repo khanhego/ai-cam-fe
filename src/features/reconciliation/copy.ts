@@ -40,6 +40,8 @@ export const COPY = {
       package: "Mã kiện",
       warehouse: "Kho",
       platform: "Sàn",
+      /** item 03 (FR-07.01). */
+      shop: "Sàn · Shop",
       since: "Từ lúc",
       result: "Kết quả xử lý",
       actions: "Thao tác",

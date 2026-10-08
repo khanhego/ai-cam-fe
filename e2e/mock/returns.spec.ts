@@ -20,7 +20,7 @@ async function stationLogin(page: Page) {
 
 async function startReturnShift(page: Page) {
   await page.getByRole("button", { name: "Chuyển sang nhận hàng hoàn" }).click();
-  const r5 = page.getByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const r5 = page.getByRole("dialog", { name: "Người kiểm" });
   await expect(r5).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(r5).toBeVisible(); // R5 bắt buộc: Esc không đóng

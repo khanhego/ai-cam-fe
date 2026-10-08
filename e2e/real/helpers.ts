@@ -7,12 +7,45 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 export const PASSWORD = "matkhau123";
 
+/**
+ * Tham số `docker compose` của stack đang test — mặc định stack dev; stack QA riêng đặt `AICAM_COMPOSE_PROJECT`,
+ * `AICAM_COMPOSE_FILES` (đường dẫn tương đối ai-cam-be, cách ":") như `ai-cam-be/scripts/qa-reset.sh` (DEC-820).
+ */
+export function composeArgs(): string[] {
+  const be = resolve(process.cwd(), "../ai-cam-be");
+  const files = (process.env.AICAM_COMPOSE_FILES ?? "docker/compose.dev.yml").split(":");
+  return [
+    "compose",
+    "-p",
+    process.env.AICAM_COMPOSE_PROJECT ?? "aicam-dev",
+    ...files.flatMap((f) => ["-f", resolve(be, f)]),
+  ];
+}
+
+/** Một câu SQL trên Postgres của stack đang test (tiền điều kiện dữ liệu — chỉ stack dev / QA). */
+export function psql(sql: string): string {
+  return execFileSync(
+    "docker",
+    [...composeArgs(), "exec", "-T", "postgres", "psql", "-U", "aicam", "-d", "aicam", "-tA", "-c", sql],
+    { encoding: "utf8" },
+  ).trim();
+}
+
 /** Migrate lại + seed TST + dọn Redis (ai-cam-be/scripts/qa-reset.sh). */
 export function resetData() {
   // --mute-cam2: Cam 2 đọc góc khay trống → BR-06 không chặn ngẫu nhiên theo vòng phát của camera giả (QA G4).
-  execFileSync(resolve(process.cwd(), "../ai-cam-be/scripts/qa-reset.sh"), ["--mute-cam2"], {
-    stdio: "ignore",
-  });
+  try {
+    execFileSync(resolve(process.cwd(), "../ai-cam-be/scripts/qa-reset.sh"), ["--mute-cam2"], {
+      stdio: "pipe",
+      encoding: "utf8",
+    });
+  } catch (err) {
+    // Lỗi reset hiếm gặp (T-229): giữ stdout / stderr của qa-reset.sh trong báo lỗi để chẩn đoán.
+    const e = err as { stdout?: string; stderr?: string; message: string };
+    throw new Error(`${e.message}\n${(e.stdout ?? "").slice(-1500)}\n${(e.stderr ?? "").slice(-1500)}`, {
+      cause: err,
+    });
+  }
 }
 
 /** Máy quét HID: gõ liền (≤ 5 ms/phím) rồi Enter. */
@@ -111,7 +144,7 @@ export const heading = (page: Page, name: string) => page.getByRole("heading", {
 /** Station → chế độ nhận hoàn, R5 "Lan QA" → R1 (TC-04.01). */
 export async function startReturnShift(page: Page, operator = "Lan QA") {
   await page.getByRole("button", { name: "Chuyển sang nhận hàng hoàn" }).click();
-  const r5 = page.getByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const r5 = page.getByRole("dialog", { name: "Người kiểm" });
   await r5.getByLabel("Tên người kiểm").fill(operator);
   await r5.getByRole("button", { name: "Bắt đầu ca" }).click();
   await expect(heading(page, "SẴN SÀNG NHẬN HÀNG HOÀN")).toBeVisible();

@@ -22,7 +22,12 @@ export const RETURN_TAB: Record<ReturnTab, string> = {
 };
 
 /** Ngưỡng cấu hình chèn vào tên quy tắc ("quá {N} ngày", "{X} giờ") — lấy từ API-80. */
-export type RuleThresholds = { return_missing_days?: number; handover_warn_hours?: number };
+/** item 03: `refund_only_default_hours` (API-80, BR-40) cho ⓘ hạn mặc định Chỉ hoàn tiền (D14). */
+export type RuleThresholds = {
+  return_missing_days?: number;
+  handover_warn_hours?: number;
+  refund_only_default_hours?: number;
+};
 
 /** Tên quy tắc đối soát trên UI (01 §10.5 D15). */
 export function reconRuleLabel(rule: ReconRule, t: RuleThresholds = {}): string {

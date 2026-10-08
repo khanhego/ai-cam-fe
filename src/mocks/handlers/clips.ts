@@ -25,6 +25,11 @@ function clipStateError(clip: MockClip) {
       retention_clip_days: RETENTION_CLIP_DAYS,
     });
   if (clip.status === "FAILED") return apiError(409, "CLIP_NOT_READY", "Clip cắt lỗi.", { status: "FAILED" });
+  // item 03 (02 §6.1 API-40 / 41 / 42 / 43, FR-02.16): DB có clip, máy chủ không có tệp.
+  if (clip.status === "MISSING")
+    return apiError(409, "CLIP_NOT_READY", "Thiếu tệp clip trên máy chủ — không phát được.", {
+      status: "MISSING",
+    });
   if (clip.status !== "READY")
     return apiError(409, "CLIP_NOT_READY", "Clip đang được cắt.", { status: "PENDING" });
   return null;
@@ -115,6 +120,10 @@ export const clipsHandlers = [
     const session = findSession(String(params.id));
     if (!session) return apiError(404, "NOT_FOUND", "Không tìm thấy phiên.");
     const failed = session.clips.filter((c) => c.status === "FAILED");
+    if (failed.length === 0 && session.clips.some((c) => c.status === "MISSING"))
+      return apiError(409, "CLIP_NOT_FAILED", "Clip thiếu tệp trên máy chủ — không cắt lại được.", {
+        status: "MISSING",
+      });
     if (failed.length === 0) return apiError(409, "CLIP_NOT_FAILED", "Clip không ở trạng thái lỗi.");
     for (const c of failed) c.status = "PENDING";
     // Giả lập worker cắt lại xong sau 3 giây.

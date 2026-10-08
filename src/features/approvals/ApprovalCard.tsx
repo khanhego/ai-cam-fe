@@ -9,10 +9,11 @@ import {
   type AlreadyResolvedDetails,
   type ApprovalAction,
   type ApprovalItem,
+  type CancelReturnReason,
 } from "@/lib/api/approvals";
 import { isApiError } from "@/lib/api/errors";
 import { APPROVAL_TYPE } from "@/shared/labels";
-import { SESSION_TYPE } from "@/shared/returns/labels";
+import { CONCLUSION_LABEL, SESSION_TYPE } from "@/shared/returns/labels";
 import {
   Alert,
   Button,
@@ -24,6 +25,7 @@ import {
   type ButtonVariant,
 } from "@/shared/ui";
 
+import { CancelReturnDialog } from "./CancelReturnDialog";
 import { ACTION_DONE, ACTION_LABEL, COPY } from "./copy";
 import { alreadyResolvedText, trayStillWrong } from "./decision";
 
@@ -59,14 +61,22 @@ export function ApprovalCard({
   const [note, setNote] = useState("");
   const [noteError, setNoteError] = useState<string | undefined>();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelFields, setCancelFields] = useState<Record<string, string>>({});
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: PENDING_APPROVALS_KEY });
     void queryClient.invalidateQueries({ queryKey: ["daily"] });
   };
 
   const decide = useMutation({
-    mutationFn: ({ action, note }: { action: ApprovalAction; note?: string }) =>
-      approvalsApi.decide(item.id, action, note ?? null),
+    mutationFn: ({
+      action,
+      note,
+      reasonCode,
+    }: {
+      action: ApprovalAction;
+      note?: string;
+      reasonCode?: CancelReturnReason;
+    }) => approvalsApi.decide(item.id, action, note ?? null, reasonCode ?? null),
     onSuccess: (_data, { action }) => {
       setNoteOpen(false);
       setCancelOpen(false);
@@ -79,6 +89,8 @@ export function ApprovalCard({
         onConflict(alreadyResolvedText(e.details as AlreadyResolvedDetails));
         return refresh();
       }
+      // item 03: hủy phiên hoàn — lỗi dưới ô lý do / ghi chú của CancelReturnDialog.
+      if (e.code === "VALIDATION_ERROR" && cancelOpen && isReturn) return setCancelFields(e.fieldErrors);
       if (e.code === "VALIDATION_ERROR" && e.fieldErrors.note) return setNoteError(e.fieldErrors.note);
       setNoteOpen(false);
       setCancelOpen(false);
@@ -98,7 +110,10 @@ export function ApprovalCard({
       setNoteError(undefined);
       return setNoteOpen(true);
     }
-    if (action === "CANCEL_SESSION") return setCancelOpen(true);
+    if (action === "CANCEL_SESSION") {
+      setCancelFields({});
+      return setCancelOpen(true);
+    }
     decide.mutate({ action });
   }
 
@@ -111,6 +126,7 @@ export function ApprovalCard({
   }
 
   const [typeLabel, tone] = APPROVAL_TYPE[item.type];
+  const isReturn = item.session_type === "RETURN";
   const minutes = Math.max(0, Math.floor((now - Date.parse(item.created_at)) / 60_000));
   const ctx = item.context;
   const other = ctx?.actual && ctx.actual !== item.tracking_number ? ctx.actual : null;
@@ -137,6 +153,18 @@ export function ApprovalCard({
           <>
             <dt className="text-on-surface-variant">{COPY.operatorLabel}</dt>
             <dd className="text-on-surface">{item.operator_name}</dd>
+          </>
+        )}
+        {item.return_summary && (
+          <>
+            <dt className="text-on-surface-variant">{COPY.summaryLabel}</dt>
+            <dd className="text-on-surface tabular-nums">
+              {COPY.summary(
+                item.return_summary.conclusion ? CONCLUSION_LABEL[item.return_summary.conclusion] : null,
+                item.return_summary.snapshot_count,
+                Math.max(0, Math.floor((now - Date.parse(item.return_summary.opened_at)) / 60_000)),
+              )}
+            </dd>
           </>
         )}
         {other && (
@@ -199,24 +227,35 @@ export function ApprovalCard({
         </form>
       </Dialog>
 
-      <Dialog
-        open={cancelOpen}
-        title={COPY.cancelTitle}
-        onClose={() => setCancelOpen(false)}
-        actions={
-          <Button
-            variant="danger"
-            disabled={decide.isPending}
-            onClick={() => decide.mutate({ action: "CANCEL_SESSION" })}
-          >
-            {COPY.cancelConfirm}
-          </Button>
-        }
-      >
-        {item.session_type === "RETURN"
-          ? COPY.cancelReturnBody(item.tracking_number)
-          : COPY.cancelBody(item.tracking_number)}
-      </Dialog>
+      {isReturn ? (
+        cancelOpen && (
+          <CancelReturnDialog
+            open
+            trackingNumber={item.tracking_number}
+            busy={decide.isPending}
+            fieldErrors={cancelFields}
+            onSubmit={(reasonCode, note) => decide.mutate({ action: "CANCEL_SESSION", reasonCode, note })}
+            onClose={() => setCancelOpen(false)}
+          />
+        )
+      ) : (
+        <Dialog
+          open={cancelOpen}
+          title={COPY.cancelTitle}
+          onClose={() => setCancelOpen(false)}
+          actions={
+            <Button
+              variant="danger"
+              disabled={decide.isPending}
+              onClick={() => decide.mutate({ action: "CANCEL_SESSION" })}
+            >
+              {COPY.cancelConfirm}
+            </Button>
+          }
+        >
+          {COPY.cancelBody(item.tracking_number)}
+        </Dialog>
+      )}
     </article>
   );
 }

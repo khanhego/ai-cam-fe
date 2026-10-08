@@ -7,6 +7,7 @@ import { isApiError } from "@/lib/api/errors";
 import { Alert, Button, EmptyState, Tabs } from "@/shared/ui";
 
 import { CLIP_COPY, clipStateError } from "./copy";
+import { MissingMediaBlock } from "./MissingMediaBlock";
 
 export type ClipRef = {
   id: string;
@@ -65,6 +66,8 @@ function SignedVideo({
     return <EmptyState icon="delete" title={CLIP_COPY.deleted(state.deletedAt, state.days)} />;
   if (state?.kind === "pending") return <EmptyState icon="autorenew" title={CLIP_COPY.pending} />;
   if (state?.kind === "failed") return <Alert kind="error">{CLIP_COPY.failedRebuild}</Alert>;
+  // item 03: clip vừa thành "Thiếu tệp" sau khi trang tải (API-40 409 `details.status = MISSING`) — không thử lại.
+  if (state?.kind === "missing") return <MissingMediaBlock kind="clip" />;
   if (forbiddenText && url.isError && isApiError(url.error) && url.error.status === 403)
     return <Alert kind="warning">{forbiddenText}</Alert>;
   if (url.isError || failures > 1) {
@@ -137,7 +140,8 @@ function SideBySide({ cam1, cam2, forbiddenText }: { cam1: ClipRef; cam2: ClipRe
 
 /**
  * Trình phát clip Cam 1 / Cam 2 / Ghép (dùng chung station S1 và dashboard D4 — 02b-admin §3).
- * Trạng thái clip theo 01 §10.5 D4: đang cắt · đã xóa theo lưu trữ (kèm ngày) · lỗi tạo clip (`failedAction`: "Thử lại").
+ * Trạng thái clip theo 01 §10.5 D4: đang cắt · đã xóa theo lưu trữ (kèm ngày) · lỗi tạo clip (`failedAction`: "Thử lại") ·
+ * item 03 "Thiếu tệp" (`MissingMediaBlock`, không có `failedAction`).
  */
 export function ClipPlayer({
   clips,
@@ -183,6 +187,7 @@ export function ClipPlayer({
       {clip?.status === "DELETED" && (
         <EmptyState icon="delete" title={CLIP_COPY.deleted(clip.retention_until, retentionDays)} />
       )}
+      {clip?.status === "MISSING" && <MissingMediaBlock kind="clip" />}
       {clip?.status === "FAILED" && (
         <Alert kind="error" action={failedAction}>
           {CLIP_COPY.failed}

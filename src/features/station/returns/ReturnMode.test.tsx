@@ -25,10 +25,10 @@ test("TC-04.01/02: S1 → Chuyển sang nhận hàng hoàn → R5 bắt buộc �
   renderApp("/station");
   await user.click(await screen.findByRole("button", { name: "Chuyển sang nhận hàng hoàn" }));
 
-  const dialog = await screen.findByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const dialog = await screen.findByRole("dialog", { name: "Người kiểm" });
   // Esc (sự kiện cancel của <dialog>) không đóng khi bắt buộc; không có nút "Đóng".
   fireEvent(dialog, new Event("cancel", { cancelable: true }));
-  expect(screen.getByRole("dialog", { name: "Người kiểm hàng hoàn" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Người kiểm" })).toBeInTheDocument();
   expect(within(dialog).queryByRole("button", { name: "Đóng" })).toBeNull();
 
   await user.click(within(dialog).getByRole("button", { name: "Bắt đầu ca" }));
@@ -56,7 +56,7 @@ test("R5 bắt buộc ở station Cả hai có lối Chuyển sang đóng gói",
   stationSim.workMode = "RETURN";
   const user = userEvent.setup({ delay: null });
   renderApp("/station");
-  const dialog = await screen.findByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const dialog = await screen.findByRole("dialog", { name: "Người kiểm" });
 
   await user.click(within(dialog).getByRole("button", { name: "Chuyển sang đóng gói" }));
 
@@ -72,7 +72,7 @@ test("R1: Đổi người kiểm (R5 không bắt buộc, đóng được), Chuy
   await screen.findByText("SẴN SÀNG NHẬN HÀNG HOÀN");
 
   await user.click(screen.getByRole("button", { name: "Đổi người kiểm" }));
-  const dialog = await screen.findByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const dialog = await screen.findByRole("dialog", { name: "Người kiểm" });
   const field = within(dialog).getByLabelText("Tên người kiểm");
   expect(field).toHaveValue("Lan");
   await user.clear(field);
@@ -104,14 +104,14 @@ test("TC-04.34: station loại Nhận hoàn (không phải Cả hai) không có 
 test("TC-04.03: quét khi R5 đang mở (chưa có người kiểm) → mã không lọt vào ô, vẫn R5", async () => {
   stationSim.workMode = "RETURN";
   renderApp("/station");
-  const dialog = await screen.findByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const dialog = await screen.findByRole("dialog", { name: "Người kiểm" });
   const field = within(dialog).getByLabelText("Tên người kiểm");
   field.focus();
 
   await hidScan("SPXRTTST000041");
 
   expect(field).toHaveValue("");
-  expect(screen.getByRole("dialog", { name: "Người kiểm hàng hoàn" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Người kiểm" })).toBeInTheDocument();
   expect(stationSim.session).toBeNull();
 });
 

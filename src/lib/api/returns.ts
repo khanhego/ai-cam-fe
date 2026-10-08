@@ -5,10 +5,10 @@ import type {
   ReturnCaseStatus,
   ReturnKind,
 } from "@/shared/returns/types";
-import type { WarehouseStatus } from "@/shared/labels";
+import type { Platform, ReturnStatusGroup, WarehouseStatus } from "@/shared/labels";
 
 import { api } from "./client";
-import type { PackageSession } from "./packages";
+import type { PackageSession, ShopRef } from "./packages";
 import type { Page } from "./stations";
 
 /** API-110..113 (02 §6.2) — hồ sơ hàng hoàn (D14, khối Hàng hoàn ở D4). */
@@ -40,7 +40,19 @@ export type ReturnListItem = {
   claims: ClaimBrief[];
   /** Hồ sơ đã gộp vào hồ sơ khác (API-112) — `{id, code}` hoặc null. */
   merged_into: { id: string; code: string } | null;
+  /** item 03 (02 §6.2 API-110 mở rộng): sàn / shop (null = chưa gắn shop). */
+  platform: Platform | null;
+  shop: ShopRef | null;
+  platform_status_group: ReturnStatusGroup | null;
+  /** Chỉ `kind = REFUND_ONLY`: `seller_due_at`, không có → `reported_at` + `refund_only_default_hours` (`DEFAULT`). */
+  response_due_at: string | null;
+  response_due_source: "PLATFORM" | "DEFAULT" | null;
+  /** Hồ sơ khiếu nại chưa đóng mới nhất của đơn. */
+  claim: { id: string; code: string } | null;
 };
+
+/** item 03: `due_asc` mặc định ở tab `NO_PARCEL`, `created_desc` ở tab khác. */
+export type ReturnSort = "due_asc" | "created_desc";
 
 /** Tham số API-110; cũng là search params của D14 (`from`/`to` trên URL map sang `date_from`/`date_to`). */
 export type ReturnFilters = {
@@ -49,6 +61,12 @@ export type ReturnFilters = {
   q?: string;
   date_from?: string;
   date_to?: string;
+  /** item 03. */
+  platform?: string;
+  shop_id?: string;
+  /** Chỉ `REFUND_ONLY` chưa có hồ sơ khiếu nại mở, nhóm sàn `REQUESTED` / `ACCEPTED` (BR-40). */
+  pending_only?: boolean;
+  sort?: ReturnSort;
   page?: number;
   page_size?: number;
 };

@@ -1,6 +1,8 @@
 import type { Role, SessionUser } from "@/lib/api/session";
 
 import { resetMockApprovals } from "./handlers/approvals";
+import { resetMockBackup } from "./handlers/backup";
+import { resetMockNotify } from "./handlers/notify";
 import { resetMockClaimsHandlers } from "./handlers/claims";
 import { resetMockExportRules } from "./handlers/clips";
 import { resetMockImports } from "./handlers/imports";
@@ -11,6 +13,7 @@ import { resetMockStations } from "./handlers/stations";
 import { resetMockAudit } from "./handlers/users";
 import { resetMockPackages } from "./packagesDb";
 import { resetMockReturns } from "./returnsDb";
+import { resetMockShares } from "./sharesDb";
 import { resetStationSim } from "./stationSim";
 
 /** Dữ liệu giả theo seed `aicam seed-demo --prefix TST` (04-test-cases §1). Mật khẩu chung: matkhau123. */
@@ -80,8 +83,27 @@ export const PERMISSIONS: Record<Role, string[]> = {
     "recon.resolve",
     "warehouse_status.adjust",
     "claims.manage",
+    // item 03 (02 §6.1 API-04, §8 AuthZ)
+    "reports.returns",
+    "reports.claims",
+    "reports.productivity",
+    "shares.create",
+    "shares.read",
+    "shares.revoke_any",
+    "backup.read",
   ],
-  CSKH: ["packages.read", "clips.export", "returns.read", "recon.read", "claims.manage"],
+  CSKH: [
+    "packages.read",
+    "clips.export",
+    "returns.read",
+    "recon.read",
+    "claims.manage",
+    // item 03
+    "reports.returns",
+    "reports.claims",
+    "shares.create",
+    "shares.read",
+  ],
   STATION: ["station.scan"],
 };
 
@@ -122,4 +144,8 @@ export function resetMockDb() {
   resetMockImports();
   resetMockShops();
   resetMockSettings();
+  // item 03 (sau hồ sơ khiếu nại: link mẫu trỏ vào hồ sơ có sẵn).
+  resetMockShares();
+  resetMockNotify();
+  resetMockBackup();
 }

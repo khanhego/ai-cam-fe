@@ -218,10 +218,11 @@ test("TC-08.15 (UI): bỏ bằng chứng tự chọn cần lý do → phiên san
   expect(within(evidence).getByRole("region", { name: "Clip bằng chứng" })).toBeInTheDocument();
   const remove = within(evidence).getByRole("button", { name: /^Bỏ Phiên đóng gói/ });
   await user.click(remove);
-  const dialog = screen.getByRole("dialog", { name: "Lý do bỏ" });
+  // item 03 (BR-38): "Bỏ bằng chứng?" cho mọi bằng chứng.
+  const dialog = screen.getByRole("dialog", { name: "Bỏ bằng chứng?" });
   await user.click(within(dialog).getByRole("button", { name: "Bỏ bằng chứng" }));
-  expect(within(dialog).getByText("Nhập lý do 5–500 ký tự.")).toBeInTheDocument();
-  await user.type(within(dialog).getByLabelText("Lý do bỏ"), "Phiên đóng gói không liên quan");
+  expect(within(dialog).getByText("Nhập lý do bỏ bằng chứng (5–500 ký tự).")).toBeInTheDocument();
+  await user.type(within(dialog).getByLabelText(/^Lý do/), "Phiên đóng gói không liên quan");
   await user.click(within(dialog).getByRole("button", { name: "Bỏ bằng chứng" }));
 
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());

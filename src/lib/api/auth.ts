@@ -13,7 +13,17 @@ export type Permission =
   | "recon.read"
   | "recon.resolve"
   | "warehouse_status.adjust"
-  | "claims.manage";
+  | "claims.manage"
+  // item 03 (02 §6.1 API-04, §8 AuthZ)
+  | "reports.returns"
+  | "reports.claims"
+  | "reports.productivity"
+  | "shares.create"
+  | "shares.read"
+  | "shares.revoke_any"
+  | "notify.manage"
+  | "backup.manage"
+  | "backup.read";
 
 export const hasPermission = (me: Pick<Me, "permissions"> | null | undefined, p: Permission | string) =>
   Boolean(me && (me.permissions.includes("*") || me.permissions.includes(p)));

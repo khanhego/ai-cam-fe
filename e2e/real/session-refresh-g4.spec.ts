@@ -6,17 +6,16 @@
  * ở :8181 với `ACCESS_TOKEN_MINUTES=1`, cùng một Vite dev ở :5182 proxy sang nó; cả hai bị dọn ở `afterAll`.
  */
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { loginAdmin, resetData, scan, stationReady } from "./helpers";
+import { composeArgs, loginAdmin, resetData, scan, stationReady } from "./helpers";
 
-const API_PORT = 8181;
-const FE_PORT = 5182;
+// Stack khác stack dev (DEC-820): đổi cổng để không trùng container / dev server của stack dev.
+const API_PORT = Number(process.env.E2E_G4_API_PORT ?? 8181);
+const FE_PORT = Number(process.env.E2E_G4_FE_PORT ?? 5182);
 const FE = `http://localhost:${FE_PORT}`;
-const NAME = "aicam-g4-tc1005-api";
-const COMPOSE = resolve(process.cwd(), "../ai-cam-be/docker/compose.dev.yml");
+const NAME = `${process.env.AICAM_COMPOSE_PROJECT ?? "aicam"}-g4-tc1005-api`;
 
 let vite: ChildProcess | undefined;
 
@@ -46,7 +45,7 @@ test.beforeAll(async () => {
   removeApi();
   execFileSync(
     "docker",
-    ["compose", "-f", COMPOSE, "run", "-d", "--rm", "--no-deps", "--name", NAME, "-p", `${API_PORT}:8000`,
+    [...composeArgs(), "run", "-d", "--rm", "--no-deps", "--name", NAME, "-p", `${API_PORT}:8000`,
       "-e", "ACCESS_TOKEN_MINUTES=1", "api"], // prettier-ignore
     { stdio: "ignore" },
   );

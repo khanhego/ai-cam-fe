@@ -5,10 +5,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { hasPermission } from "@/lib/api/auth";
 import { isApiError } from "@/lib/api/errors";
 import { returnsApi, RETURN_TABS, type ReturnListItem, type ReturnTab } from "@/lib/api/returns";
+import { PlatformFilter } from "@/shared/filters/PlatformFilter";
+import { ShopChip } from "@/shared/filters/ShopChip";
 import { fmtDate } from "@/shared/format";
 import { CONCLUSION_LABEL, RETURN_CASE_STATUS, RETURN_KIND, RETURN_TAB } from "@/shared/returns/labels";
 import type { ReturnKind } from "@/shared/returns/types";
 import { useScanListener } from "@/shared/scan/useScanListener";
+import { DueCountdown } from "@/shared/time/DueCountdown";
 import {
   Alert,
   Button,
@@ -23,6 +26,7 @@ import {
 } from "@/shared/ui";
 
 import { useAuth } from "../auth/useAuth";
+import { useRuleThresholds } from "../reconciliation/useRuleThresholds";
 import { CreateClaimDialog } from "../claims/CreateClaimDialog";
 import { claimPath } from "../claims/paths";
 import { screenReady } from "../shell/nav";
@@ -113,6 +117,27 @@ function ClaimLinks({ rc }: { rc: ReturnListItem }) {
   );
 }
 
+/**
+ * Tab Chỉ hoàn tiền (item 03, 01 §10.5 D14): cột "Hồ sơ khiếu nại" = hồ sơ chưa đóng mới nhất của đơn (`claim`, API-110)
+ * hoặc nút "Tạo hồ sơ khiếu nại" (quyền `claims.manage`).
+ */
+function RefundClaimCell({ rc, action }: { rc: ReturnListItem; action: RowAction }) {
+  if (rc.claim) {
+    return screenReady("D17") ? (
+      <Link
+        to={claimPath(rc.claim.id)}
+        className="font-mono text-primary hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {rc.claim.code}
+      </Link>
+    ) : (
+      <span className="font-mono">{rc.claim.code}</span>
+    );
+  }
+  return action ? <ActionButton action={action} rc={rc} /> : <>—</>;
+}
+
 type RowAction = { label: string; icon: string; run: (rc: ReturnListItem) => void } | null;
 
 function ActionButton({ action, rc }: { action: RowAction; rc: ReturnListItem }) {
@@ -133,10 +158,26 @@ function ActionButton({ action, rc }: { action: RowAction; rc: ReturnListItem })
 }
 
 /** Bảng D14 (01 §10.5): từ `md`; card dưới `md` (không cuộn ngang ở 360px). Bấm dòng → D4 kiện đầu. */
-function ReturnTable({ items, tab, action }: { items: ReturnListItem[]; tab: ReturnTab; action: RowAction }) {
+function ReturnTable({
+  items,
+  tab,
+  action: rowAction,
+  defaultHours,
+}: {
+  items: ReturnListItem[];
+  tab: ReturnTab;
+  action: RowAction;
+  defaultHours?: number;
+}) {
   const navigate = useNavigate();
   const showWaiting = WAITING_TABS.has(tab);
   const showConclusion = CONCLUSION_TABS.has(tab);
+  /** Tab Chỉ hoàn tiền: cột Hạn phản hồi + Hồ sơ khiếu nại (gộp nút Tạo) thay cột Thao tác. */
+  const refund = tab === "NO_PARCEL";
+  const action = refund ? null : rowAction;
+  const due = (rc: ReturnListItem) => (
+    <DueCountdown dueAt={rc.response_due_at} source={rc.response_due_source} defaultHours={defaultHours} />
+  );
   const open = (rc: ReturnListItem) => {
     const path = packagePath(rc);
     if (path) navigate(path);
@@ -152,9 +193,11 @@ function ReturnTable({ items, tab, action }: { items: ReturnListItem[]; tab: Ret
             <tr>
               <th className="pl-4">{L.col.order}</th>
               <th>{L.col.tracking}</th>
+              <th>{L.col.shop}</th>
               <th>{L.col.kind}</th>
               <th>{L.col.reason}</th>
               <th>{L.col.reported}</th>
+              {refund && <th>{L.col.due}</th>}
               {showWaiting && <th>{L.col.waiting}</th>}
               <th>{L.col.status}</th>
               {showConclusion && <th>{L.col.conclusion}</th>}
@@ -170,17 +213,21 @@ function ReturnTable({ items, tab, action }: { items: ReturnListItem[]; tab: Ret
                   <TrackingCell rc={rc} />
                 </td>
                 <td>
+                  <ShopChip platform={rc.platform} shop={rc.shop} />
+                </td>
+                <td>
                   <KindCell rc={rc} />
                 </td>
                 <td>{rc.reason_label ?? "—"}</td>
                 <td className="tabular-nums">{fmtDate(rc.reported_at)}</td>
+                {refund && <td>{due(rc)}</td>}
                 {showWaiting && <td className="tabular-nums">{waiting(rc)}</td>}
                 <td>
                   <StatusCell rc={rc} />
                 </td>
                 {showConclusion && <td>{conclusion(rc)}</td>}
                 <td className={action ? undefined : "pr-4"}>
-                  <ClaimLinks rc={rc} />
+                  {refund ? <RefundClaimCell rc={rc} action={rowAction} /> : <ClaimLinks rc={rc} />}
                 </td>
                 {action && (
                   <td className="pr-4">
@@ -201,11 +248,23 @@ function ReturnTable({ items, tab, action }: { items: ReturnListItem[]; tab: Ret
               </span>
               <StatusCell rc={rc} />
             </div>
-            <p className="text-body-md text-on-surface">
+            <p className="flex flex-wrap items-center gap-x-1 text-body-md text-on-surface">
+              <ShopChip platform={rc.platform} shop={rc.shop} />
               <KindCell rc={rc} />
               {rc.waiting_days != null && ` · ${L.waitingDays(rc.waiting_days)}`}
             </p>
             <TrackingCell rc={rc} />
+            {refund && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-body-sm text-on-surface-variant">{L.col.due}:</span>
+                {due(rc)}
+              </div>
+            )}
+            {refund && (
+              <div className="mt-1">
+                <RefundClaimCell rc={rc} action={rowAction} />
+              </div>
+            )}
             {action && (
               <div className="mt-1">
                 <ActionButton action={action} rc={rc} />
@@ -239,6 +298,7 @@ export default function ReturnsPage() {
     setQ(filters.q ?? "");
   }
 
+  const thresholds = useRuleThresholds();
   const result = useQuery({
     queryKey: ["returns", api],
     queryFn: () => returnsApi.list(api),
@@ -274,7 +334,7 @@ export default function ReturnsPage() {
       <Tabs label={L.tabs} items={tabs} value={filters.tab} onChange={(tab) => apply({ tab })} />
       <form
         onSubmit={submitQ}
-        className="mb-2 grid gap-x-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto]"
+        className="mb-2 grid gap-x-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto]"
         role="search"
       >
         <TextField
@@ -313,17 +373,40 @@ export default function ReturnsPage() {
           min={filters.from}
           onChange={(e) => apply({ to: e.target.value || undefined })}
         />
+        <PlatformFilter
+          idPrefix="d14"
+          platform={filters.platform ?? null}
+          shopId={filters.shop ?? null}
+          onChange={(v) => apply({ platform: v.platform, shop: v.shopId })}
+        />
         <div className="mb-5 flex items-center gap-2">
           <Button type="submit" variant="tonal">
             {L.search}
           </Button>
         </div>
       </form>
-      {hasReturnFilters(filters) && (
-        <div className="mb-4">
-          <Button variant="text" size="sm" onClick={clear}>
-            {L.clear}
-          </Button>
+      {(filters.tab === "NO_PARCEL" || hasReturnFilters(filters)) && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {filters.tab === "NO_PARCEL" && (
+            <button
+              type="button"
+              aria-pressed={Boolean(filters.pendingOnly)}
+              className="state-layer rounded-sm"
+              onClick={() => apply({ pendingOnly: !filters.pendingOnly })}
+            >
+              <StatusChip
+                tone={filters.pendingOnly ? "primary" : "neutral"}
+                icon={filters.pendingOnly ? "check" : "filter_list"}
+              >
+                {L.pendingOnly}
+              </StatusChip>
+            </button>
+          )}
+          {hasReturnFilters(filters) && (
+            <Button variant="text" size="sm" onClick={clear}>
+              {L.clear}
+            </Button>
+          )}
         </div>
       )}
 
@@ -361,7 +444,12 @@ export default function ReturnsPage() {
       )}
       {data && data.total > 0 && !result.isError && (
         <div className="card" aria-busy={result.isFetching}>
-          <ReturnTable items={data.items} tab={filters.tab} action={action} />
+          <ReturnTable
+            items={data.items}
+            tab={filters.tab}
+            action={action}
+            defaultHours={thresholds.refund_only_default_hours}
+          />
           <Pagination
             page={data.page}
             pageSize={data.page_size || PAGE_SIZE}

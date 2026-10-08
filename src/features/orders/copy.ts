@@ -19,6 +19,8 @@ export const COPY = {
     clear: "Xóa bộ lọc",
     sessionFilter: "Lọc theo phiên",
     removeSessionFilter: (label: string) => `Bỏ lọc ${label}`,
+    /** item 03: chip lọc từ thẻ D2 "Phiên hoàn hủy / bỏ dở (7 ngày)" (BR-39 — không tính phiên quét nhầm). */
+    returnDropped: "Phiên hoàn hủy / bỏ dở (trừ quét nhầm)",
     notFoundCode: (q: string) => `Không tìm thấy mã ${q}.`,
     notFound: "Không tìm thấy kiện nào khớp bộ lọc.",
     error: "Không tải được danh sách kiện.",
@@ -29,6 +31,8 @@ export const COPY = {
     order: "Mã đơn",
     warehouse: "Trạng thái kho",
     platform: "Trạng thái sàn",
+    /** item 03 (FR-07.01): chip sàn · shop. */
+    shop: "Sàn · Shop",
     station: "Station",
     packedAt: "Giờ đóng gói",
     clip: "Clip",
@@ -60,6 +64,10 @@ export const COPY = {
     platform: "Shopee",
     placeholder: "Kiện tạm",
     operator: (name: string) => `Người kiểm ${name}`,
+    /** item 03 (FR-03.16, 01 §10.5 D4): phiên đóng gói. */
+    packer: (name: string) => `Người đóng gói: ${name}`,
+    /** item 03 (BR-32): sự kiện phiên `AMBIGUOUS_SHOP` trong dòng thời gian. */
+    ambiguousShop: (n: number, list: string) => `Mã có ở ${n} shop: ${list}`,
     packSnapshot: "Ảnh lúc đóng gói",
     claims: "Hồ sơ khiếu nại",
     noClaims: "Kiện này chưa có hồ sơ khiếu nại.",

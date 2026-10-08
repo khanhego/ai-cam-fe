@@ -1,10 +1,12 @@
 import { useState } from "react";
 
 import type { StationSession, StationState } from "@/lib/api/station";
-import { Alert, Button, Icon, StatusChip, TrackingNumber } from "@/shared/ui";
+import { Alert, Button, Icon, PlatformChip, StatusChip, TrackingNumber } from "@/shared/ui";
 
+import { CancelRequestedBanner } from "./CancelRequestedBanner";
 import { CancelSessionDialog } from "./CancelSessionDialog";
 import { COPY } from "./copy";
+import { MergedOrdersBanner } from "./MergedOrdersBanner";
 import { StationStatePanel } from "./StationStatePanel";
 import { mmss, useServerNow } from "./useServerClock";
 
@@ -30,8 +32,17 @@ function TrayChip({ match }: { match: StationState["tray"]["match"] }) {
   return null;
 }
 
+/** Mã đơn của kiện: đơn chính + đơn gộp (FR-05.22); rỗng khi kiện chưa xác minh. */
+function packageOrders(session: StationSession): string[] {
+  const order = session.package.order;
+  if (!order) return [];
+  return [order.platform_order_sn, ...order.merged_orders.map((m) => m.platform_order_sn)];
+}
+
 function ItemList({ session }: { session: StationSession }) {
   if (session.package.items.length === 0) return <p className="text-title-lg">{COPY.packing.noItems}</p>;
+  // Kiện gộp: mỗi dòng ghi "(đơn …{4 số cuối})" (01 §10.4 S2).
+  const merged = packageOrders(session).length > 1;
   return (
     <ul className="flex flex-col divide-y divide-outline-variant">
       {session.package.items.map((item, i) => (
@@ -46,6 +57,11 @@ function ItemList({ session }: { session: StationSession }) {
           <span className="flex-1 text-title-lg">{item.product_name}</span>
           <span className="text-title-lg text-on-surface-variant">{item.variation}</span>
           <span className="w-20 text-right text-title-lg tabular-nums">× {item.quantity}</span>
+          {merged && item.platform_order_sn && (
+            <span className="text-title-lg text-on-surface-variant tabular-nums">
+              {COPY.packing.itemOrder(item.platform_order_sn)}
+            </span>
+          )}
         </li>
       ))}
     </ul>
@@ -61,7 +77,10 @@ function OrderCancelledBanner() {
   );
 }
 
-/** S2 — Đang đóng gói (01 §10.4). Item 02: banner đơn vừa hủy + nút "Hủy phiên" nhấn mạnh. */
+/**
+ * S2 — Đang đóng gói (01 §10.4). Item 02: banner đơn vừa hủy + nút "Hủy phiên" nhấn mạnh. Item 03: chip sàn · shop
+ * (`PlatformChip` lg; kiện chưa xác minh → "Chưa rõ sàn"), banner kiện gộp, banner yêu cầu hủy (cờ phiên).
+ */
 export function PackingPanel({ state, onCallManager }: { state: StationState; onCallManager: () => void }) {
   const session = state.session!;
   const now = useServerNow();
@@ -70,6 +89,8 @@ export function PackingPanel({ state, onCallManager }: { state: StationState; on
   const warn = now >= Date.parse(session.warn_at);
   const warnMinutes = Math.round((Date.parse(session.warn_at) - Date.parse(session.started_at)) / 60_000);
   const cancelled = session.flags.includes("ORDER_CANCELLED");
+  const cancelRequested = !cancelled && session.flags.includes("ORDER_CANCEL_REQUESTED");
+  const order = session.package.order;
   return (
     <StationStatePanel
       tone="primary"
@@ -83,14 +104,19 @@ export function PackingPanel({ state, onCallManager }: { state: StationState; on
     >
       {warn && <Alert kind="warning">{COPY.packing.warn15(warnMinutes)}</Alert>}
       {cancelled && <OrderCancelledBanner />}
+      {cancelRequested && <CancelRequestedBanner />}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <TrackingNumber value={session.package.tracking_number} size="display" copy={false} />
-        {session.package.order && (
-          <span className="text-title-lg">
-            Shopee <span className="font-mono">{session.package.order.platform_order_sn}</span>
-          </span>
-        )}
+        <span className="flex flex-wrap items-center gap-4">
+          {order && (
+            <span className="text-title-lg">
+              {COPY.packing.orderLabel} <span className="font-mono">{order.platform_order_sn}</span>
+            </span>
+          )}
+          <PlatformChip platform={order?.platform ?? null} shopName={order?.shop_name} size="lg" />
+        </span>
       </div>
+      <MergedOrdersBanner orders={packageOrders(session)} />
       <div className="flex flex-wrap gap-2">
         <TrayChip match={state.tray.match} />
         {session.flags

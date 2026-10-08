@@ -13,6 +13,7 @@ const HOLD_MS = 3000;
 /**
  * Thanh 56px: station · (chế độ nhận hoàn: chip "Nhận hàng hoàn" + "Người kiểm: Lan [Đổi]") · chip Cam 1 / Cam 2 / Mạng
  * · giờ server · nút đăng xuất giữ 3 giây (01 §10.4). "Đổi" chỉ bấm được khi rảnh (đang có phiên → khóa, R5).
+ * Item 03 (FR-03.16): chế độ đóng gói → "Người đóng gói: Minh [Đổi]" / chữ xám "Chưa ghi tên người đóng gói · [Nhập tên]".
  */
 export function StationStatusBar({
   state,
@@ -61,6 +62,7 @@ export function StationStatusBar({
           )}
         </>
       )}
+      {state?.station.work_mode === "PACK" && <PackerName state={state} onChange={onChangeOperator} />}
       <div className="flex flex-1 flex-wrap gap-2">
         {state?.cameras.map((cam) =>
           cam.status === "ONLINE" ? (
@@ -90,5 +92,33 @@ export function StationStatusBar({
         <Icon name="logout" />
       </button>
     </header>
+  );
+}
+
+/** S1 / S2: tên người đóng gói (01 §10.4 item 03). Đổi tên khi đang có phiên → khóa như người kiểm (API-101 409). */
+function PackerName({ state, onChange }: { state: StationState; onChange?: () => void }) {
+  const C = COPY.operator;
+  const name = state.station.operator_name;
+  const busy = state.state !== "READY";
+  return (
+    <span className="flex items-center gap-1 text-title-md">
+      {name ? (
+        <span>{C.statusBarPack(name)}</span>
+      ) : (
+        <span className="text-on-surface-variant">{C.missingPack} ·</span>
+      )}
+      {onChange && (
+        <Button
+          variant="text"
+          size="sm"
+          aria-label={name ? `${C.change} người đóng gói` : `${C.enterName} người đóng gói`}
+          disabled={busy}
+          title={busy ? C.sessionActivePack : undefined}
+          onClick={onChange}
+        >
+          {name ? C.change : C.enterName}
+        </Button>
+      )}
+    </span>
   );
 }

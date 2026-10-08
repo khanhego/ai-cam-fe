@@ -1,3 +1,5 @@
+import type { BackupState, Platform } from "@/shared/labels";
+
 import { api } from "./client";
 
 /**
@@ -13,10 +15,17 @@ export type SystemSettings = {
 } & ThresholdSettings & {
     /** Sàn retention clip (chỉ đọc, `RETENTION_CLIP_MIN_DAYS` của máy chủ — item 02). */
     retention_clip_min_days: number;
-  };
+  } & Phase3Settings;
+
+/** item 03 (02 §6.2 API-80): GET luôn có; PUT tùy chọn (thiếu = giữ). */
+export type Phase3Settings = {
+  packer_name_required: boolean;
+  /** 1–168 (422 `fields.refund_only_default_hours`). */
+  refund_only_default_hours: number;
+};
 export type SettingsInput = Omit<
   SystemSettings,
-  "updated_at" | keyof ThresholdSettings | "retention_clip_min_days"
+  "updated_at" | keyof ThresholdSettings | "retention_clip_min_days" | keyof Phase3Settings
 >;
 
 /** item 02 (02 §6.2 API-80): 6 ngưỡng mới (tùy chọn khi PUT — thiếu giữ giá trị cũ). */
@@ -38,7 +47,9 @@ export const THRESHOLD_KEYS = [
 ] as const satisfies readonly (keyof ThresholdSettings)[];
 
 /** Body PUT: 4 trường Phase 1 bắt buộc + ngưỡng tùy chọn + `confirm_reduction` (409 RETENTION_REDUCTION_UNCONFIRMED). */
-export type SettingsPutBody = SettingsInput & Partial<ThresholdSettings> & { confirm_reduction?: boolean };
+export type SettingsPutBody = SettingsInput &
+  Partial<ThresholdSettings> &
+  Partial<Phase3Settings> & { confirm_reduction?: boolean };
 
 /** API-82 (cũng là `details.impact` của 409). */
 export type RetentionImpact = {
@@ -64,7 +75,22 @@ export type Health = {
     clock_offset_ms: number | null;
     last_seen_at: string | null;
   }[];
-  sync: { shop_id: string; last_success_at: string | null; last_error: Record<string, unknown> | null }[];
+  sync: {
+    shop_id: string;
+    last_success_at: string | null;
+    last_error: Record<string, unknown> | null;
+    /** item 03. */
+    platform?: Platform;
+    shop_name?: string | null;
+  }[];
+  /** item 03 (API-81): `late` = DB > 26 giờ không thành công / tệp chờ > 24 giờ / lệch mã băm chưa xử lý. */
+  backup?: {
+    state: BackupState;
+    last_db_success_at: string | null;
+    pending: number;
+    late: boolean;
+    last_error: { code: string; message: string; at: string } | null;
+  };
 };
 
 export const settingsApi = {

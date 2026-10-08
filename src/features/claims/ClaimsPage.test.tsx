@@ -27,6 +27,7 @@ test("drawer có 'Hồ sơ khiếu nại'; tab Mới mặc định có số, b�
   expect(header).toEqual([
     "Mã hồ sơ",
     "Mã kiện",
+    "Sàn · Shop",
     "Loại",
     "Bên nhận",
     "Trạng thái",

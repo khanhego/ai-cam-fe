@@ -84,7 +84,7 @@ test("M8 (BE thật): phiên hoàn Hộp rỗng → KN tự tạo → D4 chip b�
 
   // Station: nhận hoàn → R2 → ảnh F2 → "Hộp rỗng" → quét đóng → R1 báo hồ sơ khiếu nại tự tạo (TC-04.21).
   await page.getByRole("button", { name: "Chuyển sang nhận hàng hoàn" }).click();
-  const r5 = page.getByRole("dialog", { name: "Người kiểm hàng hoàn" });
+  const r5 = page.getByRole("dialog", { name: "Người kiểm" });
   await r5.getByLabel("Tên người kiểm").fill("Lan QA");
   await r5.getByRole("button", { name: "Bắt đầu ca" }).click();
   await expect(heading(page, "SẴN SÀNG NHẬN HÀNG HOÀN")).toBeVisible();

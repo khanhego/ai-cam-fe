@@ -5,7 +5,7 @@ import { isApiError } from "@/lib/api/errors";
 import { stationApi, type ReturnLookupItem } from "@/lib/api/station";
 import { WAREHOUSE_STATUS, type WarehouseStatus } from "@/shared/labels";
 import { RETURN_KIND } from "@/shared/returns/inspection";
-import { Alert, Button, Dialog, LinearProgress, StatusChip, TextField } from "@/shared/ui";
+import { Alert, Button, Dialog, LinearProgress, PlatformChip, StatusChip, TextField } from "@/shared/ui";
 
 import { COPY } from "../copy";
 import { useStationStore } from "../stationStore";
@@ -22,6 +22,8 @@ function Row({ item, onOpen, busy }: { item: ReturnLookupItem; onOpen: () => voi
         <p className="font-mono text-title-lg text-on-surface">{item.tracking_number}</p>
         <p className="flex flex-wrap items-center gap-2 text-body-lg">
           {item.platform_order_sn && <span className="font-mono">{item.platform_order_sn}</span>}
+          {/* item 03 (BR-29, 01 §10.4 R3): chip sàn · shop ≥ 20 px cạnh mã đơn; chưa gắn shop → "Chưa rõ sàn". */}
+          <PlatformChip platform={item.platform} shopName={item.shop_name} size="md" />
           {kind && <StatusChip tone={kind[1]}>{kind[0]}</StatusChip>}
           <span>{status}</span>
         </p>
@@ -38,7 +40,7 @@ function Row({ item, onOpen, busy }: { item: ReturnLookupItem; onOpen: () => voi
 }
 
 /**
- * R3 — Tìm kiện hoàn (01 §10.4, FR-04.07, 04.13): API-104 khi bấm "Tìm" / Enter (không tự tìm khi gõ), "Mở phiên"
+ * R3 — Tìm kiện hoàn (01 §10.4, FR-04.07, 04.13; item 03: chip sàn · shop mỗi dòng, mở từ `RETURN_MULTIPLE_ORDERS`): API-104 khi bấm "Tìm" / Enter (không tự tìm khi gõ), "Mở phiên"
  * → API-105 `package_id`; không có kết quả → "Mở phiên chưa xác định" (API-105 `unidentified_code`).
  */
 export function ReturnLookupDialog({

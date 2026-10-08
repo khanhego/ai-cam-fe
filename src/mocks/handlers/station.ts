@@ -14,6 +14,10 @@ const isSimError = (x: unknown): x is SimError =>
   typeof x === "object" && x !== null && "status" in x && "code" in x && "message" in x;
 const event = (type: string, data: unknown) => JSON.stringify({ type, data, at: new Date().toISOString() });
 
+/** item 03: kiện có yêu cầu hủy đến khi đang đóng gói (04 §1 `TTTST0000000051`). */
+export const CANCEL_LATER_CODE = "TTTST0000000051";
+const CANCEL_LATER_MS = 5_000;
+
 /** Ảnh mẫu cho API-106 (02b-station §12). */
 const SNAPSHOT_FILE = "/mock/snapshot.jpg";
 
@@ -28,6 +32,12 @@ export const stationJobs = {
     stationWs.broadcast(event("station.state", stationSim.state()));
     stationWs.broadcast(event("alert", alert));
     return alert;
+  },
+  /** item 03 (DEC-494): đơn vào nhóm `CANCEL_REQUESTED` khi đang đóng → cờ phiên, chỉ WS `station.state` (không alert). */
+  orderCancelRequested(trackingNumber?: string) {
+    if (!stationSim.flagOrderCancelRequested(trackingNumber)) return false;
+    stationWs.broadcast(event("station.state", stationSim.state()));
+    return true;
   },
   orderCancelled() {
     const alert = stationSim.flagOrderCancelled();
@@ -60,7 +70,12 @@ export const stationHandlers = [
     if (!body.code || !body.client_scan_id) {
       return apiError(422, "VALIDATION_ERROR", "Dữ liệu không hợp lệ.", { fields: { code: "Bắt buộc" } });
     }
-    return HttpResponse.json(stationSim.scan(body.code, body.client_scan_id));
+    const result = stationSim.scan(body.code, body.client_scan_id);
+    // 02b-station §12 v0.2: `TTTST0000000051` — yêu cầu hủy tới 5 giây sau khi mở phiên (J-04 lượt 2).
+    const code = body.code.trim().toUpperCase();
+    if (result.outcome === "SESSION_OPENED" && code === CANCEL_LATER_CODE)
+      setTimeout(() => stationJobs.orderCancelRequested(code), CANCEL_LATER_MS);
+    return HttpResponse.json(result);
   }),
 
   http.post(`${API}/station/sessions/:id/cancel`, async ({ request, params }) => {
@@ -73,6 +88,9 @@ export const stationHandlers = [
       });
     }
     const error = stationSim.cancel(String(params.id), body.reason);
+    // item 03 (02 §6.2 API-12, BR-37).
+    if (error === "CANCEL_REQUIRES_SUPERVISOR")
+      return apiError(409, error, "Phiên đã quá 60 giây. Bấm Gọi quản lý để hủy.");
     if (error === "VALIDATION_ERROR")
       return apiError(422, error, "Dữ liệu không hợp lệ.", {
         fields: { reason: "Lý do không hợp với loại phiên" },

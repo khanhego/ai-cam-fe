@@ -6,12 +6,13 @@ import type {
   ReturnKind,
   Snapshot,
 } from "@/shared/returns/types";
+import type { Platform } from "@/shared/labels";
 
 import { api } from "./client";
 
 /**
  * Type theo 02 §6.2 API-10..15 (viết tay tới khi có `pnpm gen:api` — DEC-41), mở rộng item 02 (02 §6.1 "Mở rộng",
- * API-100..105 — T-131).
+ * API-100..105 — T-131) và item 03 (02 §6.2 "API-10 / API-11 / API-12 mở rộng", API-104 — T-231).
  */
 export type StationStateName = "READY" | "PACKING" | "MISMATCH" | "WAITING_APPROVAL" | "INSPECTING";
 /** Loại station (`BOTH` chỉ có ở `kind`) và chế độ bàn hiện tại (02 §5.2). */
@@ -33,7 +34,10 @@ export type SessionFlag =
   | "NO_PACK_CLIP"
   | "UNANNOUNCED"
   | "UNIDENTIFIED"
-  | "INSPECTION_CORRECTED";
+  | "INSPECTION_CORRECTED"
+  // item 03 (02 §5.2 `session.flags` thêm)
+  | "AMBIGUOUS_SHOP"
+  | "ORDER_CANCEL_REQUESTED";
 
 export type StationItem = {
   /** item 02: có ở API-10 mở rộng (dòng kiểm hàng hoàn trỏ về dòng đơn). */
@@ -42,6 +46,19 @@ export type StationItem = {
   variation: string | null;
   quantity: number;
   image_url: string | null;
+  /** item 03: đơn của dòng (kiện gộp — FR-05.22); luôn có khi `package.order` có. */
+  platform_order_sn?: string | null;
+};
+
+/** `session.package.order` ở API-10 (item 03: sàn, shop, kiện gộp). null → kiện chưa xác minh ("Chưa rõ sàn"). */
+export type StationOrder = {
+  platform: Platform;
+  /** null = đơn chưa gắn shop (đơn nhập file). */
+  shop_name: string | null;
+  platform_order_sn: string;
+  buyer_note: string | null;
+  /** Đơn **thêm** cùng mã vận đơn; rỗng khi không gộp. */
+  merged_orders: { platform_order_sn: string }[];
 };
 
 /** `session.return_case` ở API-10 (phiên RETURN). */
@@ -77,6 +94,11 @@ export type StationSession = {
   started_at: string;
   flags: SessionFlag[];
   operator_name: string | null;
+  /**
+   * item 03 (BR-37): phiên RETURN `OPEN` chưa lưu kết luận, chưa có ảnh `MANUAL` → `started_at + 60 giây`; còn lại null.
+   * FE so với giờ server (`server_time`); server vẫn là nơi chặn (API-12 409 `CANCEL_REQUIRES_SUPERVISOR`).
+   */
+  self_cancel_until: string | null;
   /** Chỉ phiên RETURN; PACK → null (02 §6.2 API-10). */
   return_case: StationReturnCase | null;
   inspection: Inspection | null;
@@ -85,7 +107,7 @@ export type StationSession = {
   package: {
     id: string;
     tracking_number: string;
-    order: { platform: string; platform_order_sn: string; buyer_note: string | null } | null;
+    order: StationOrder | null;
     items: StationItem[];
   };
   mismatch: { source: "SCAN" | "CAM2"; expected: string; actual: string } | null;
@@ -107,6 +129,8 @@ export type StationInfo = {
   work_mode: WorkMode;
   /** null + `work_mode = RETURN` → FE mở R5 (BR-28). */
   operator_name: string | null;
+  /** item 03 (FR-03.16): Admin bật `packer_name_required` → chế độ PACK quét khi chưa có tên trả `OPERATOR_REQUIRED`. */
+  operator_required: boolean;
 };
 
 export type StationState = {
@@ -136,7 +160,10 @@ export type AlertCode =
   | "NOT_SHIPPED"
   | "RETURN_IN_PROGRESS_ELSEWHERE"
   | "INSPECTION_REQUIRED"
-  | "RETURN_CODE_DIFFERENT";
+  | "RETURN_CODE_DIFFERENT"
+  // item 03 (02 §5.2 `alert.code` thêm)
+  | "ORDER_CANCEL_REQUESTED"
+  | "RETURN_MULTIPLE_ORDERS";
 
 /** Mã alert chỉ ở chế độ RETURN; hai mã cuối hiện tại chỗ R2, không overlay (02b-station §8). */
 export const RETURN_ALERT_CODES = [
@@ -148,7 +175,16 @@ export const RETURN_ALERT_CODES = [
   "RETURN_IN_PROGRESS_ELSEWHERE",
   "INSPECTION_REQUIRED",
   "RETURN_CODE_DIFFERENT",
+  "RETURN_MULTIPLE_ORDERS",
 ] as const satisfies readonly AlertCode[];
+
+/** `alert.data` của `OPERATOR_REQUIRED` (item 03: cả chế độ PACK khi `operator_required`). */
+export type OperatorRequiredData = { mode: WorkMode };
+
+/** Một đơn khớp mã ở bàn hoàn (`RETURN_MULTIPLE_ORDERS`, BR-29 / EX-R20). */
+export type MatchedOrder = { platform: Platform; shop_name: string | null; platform_order_sn: string };
+/** `alert.data` của `RETURN_MULTIPLE_ORDERS`: FE mở R3 với `code`. */
+export type ReturnMultipleOrdersData = { code: string; orders: MatchedOrder[] };
 
 export type ScanAlert = { code: AlertCode; message: string; data: Record<string, unknown> };
 export type Outcome = "SESSION_OPENED" | "SESSION_COMPLETED" | "MISMATCH" | "ALERT" | "IGNORED";
@@ -193,6 +229,9 @@ export type ReturnLookupItem = {
   can_open: boolean;
   /** Mã alert khi `can_open = false` (NOT_SHIPPED, RETURN_ALREADY_RECEIVED, …). */
   blocked_reason: AlertCode | null;
+  /** item 03 (API-104): null = kiện / đơn chưa gắn shop. */
+  platform: Platform | null;
+  shop_name: string | null;
 };
 export type ReturnLookup = { items: ReturnLookupItem[]; platform_checked: boolean };
 
@@ -234,6 +273,7 @@ export const stationApi = {
   state: () => api.get<StationState>("/station/state"),
   scan: (code: string, clientScanId: string) =>
     api.post<ScanResult>("/station/scan", { code, client_scan_id: clientScanId }),
+  /** API-12. Phiên RETURN ngoài BR-37 → 409 `CANCEL_REQUIRES_SUPERVISOR` (item 03). */
   cancel: (sessionId: string, reason: CancelReason, note?: string) =>
     api.post<{ state: StationState }>(`/station/sessions/${sessionId}/cancel`, {
       reason,
@@ -248,7 +288,7 @@ export const stationApi = {
   /** API-100: đổi chế độ bàn (chỉ station `BOTH`). 409 MODE_NOT_ALLOWED / SESSION_ACTIVE. */
   setWorkMode: (workMode: WorkMode) =>
     api.put<{ state: StationState }>("/station/work-mode", { work_mode: workMode }),
-  /** API-101: tên người kiểm (strip, 2–40). 409 SESSION_ACTIVE, 422 VALIDATION_ERROR. */
+  /** API-101: tên người kiểm / người đóng gói (item 03 — strip, 2–40). 409 SESSION_ACTIVE, 422 VALIDATION_ERROR. */
   setOperator: (name: string) => api.put<{ state: StationState }>("/station/operator", { name }),
   /** API-102: lưu nháp kết luận (ghi đè toàn bộ). */
   saveInspection: (sessionId: string, body: InspectionInput) =>

@@ -32,7 +32,8 @@ const SNAPSHOT_MAX = 20;
 /**
  * `/station` — một trang, chọn panel theo `state` của server (DEC-18). Quét bằng máy quét HID.
  * Thứ tự ưu tiên: mất kết nối (S6) → cảnh báo vừa quét (S4 / R4) → `selectPanel(state)` (S1, S2, S3, S5, R1, R2).
- * R5 (người kiểm) là Dialog trên R1 — bắt buộc khi chế độ nhận hoàn chưa có tên (02b-station §2).
+ * R5 (người kiểm) là Dialog trên R1 — bắt buộc khi chế độ nhận hoàn chưa có tên (02b-station §2). Item 03: R5 cả ở chế
+ * độ đóng gói ("Người đóng gói") — mở từ thanh trạng thái hoặc khi quét bị `OPERATOR_REQUIRED` (DEC-481).
  */
 export default function StationPage({ socketFactory }: { socketFactory?: (url: string) => WebSocket } = {}) {
   const queryClient = useQueryClient();
@@ -179,7 +180,8 @@ export default function StationPage({ socketFactory }: { socketFactory?: (url: s
       {body}
       {s.state && !offline && !s.blocked && (
         <OperatorDialog
-          open={operatorRequired || (s.operatorOpen && s.state.station.work_mode === "RETURN")}
+          open={operatorRequired || s.operatorOpen}
+          mode={s.state.station.work_mode}
           required={operatorRequired}
           current={s.state.station.operator_name}
           onSubmit={s.setOperator}

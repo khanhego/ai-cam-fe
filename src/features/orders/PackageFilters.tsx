@@ -1,6 +1,14 @@
 import { useState, type FormEvent } from "react";
 
-import { SESSION_FLAG, SESSION_STATUS, SOURCE, WAREHOUSE_STATUS, type SessionStatus } from "@/shared/labels";
+import { PlatformFilter } from "@/shared/filters/PlatformFilter";
+import {
+  isPlatform,
+  SESSION_FLAG,
+  SESSION_STATUS,
+  SOURCE,
+  WAREHOUSE_STATUS,
+  type SessionStatus,
+} from "@/shared/labels";
 import { SESSION_TYPE } from "@/shared/returns/labels";
 import { Button, Icon, SelectField, StatusChip, TextField } from "@/shared/ui";
 
@@ -55,15 +63,20 @@ export function PackageFilters({
   }
 
   const sessionChips: [FilterKey, string][] = [];
+  // Nhiều giá trị cách dấu phẩy (D2 → D3, 02 §6.2 API-30 item 03): "Đã hủy / Bỏ dở".
   if (value.session_status)
     sessionChips.push([
       "session_status",
-      SESSION_STATUS[value.session_status as SessionStatus]?.[0] ?? value.session_status,
+      value.session_status
+        .split(",")
+        .map((v) => SESSION_STATUS[v.trim() as SessionStatus]?.[0] ?? v.trim())
+        .join(" / "),
     ]);
+  if (value.return_dropped === "true") sessionChips.push(["return_dropped", COPY.search.returnDropped]);
 
   return (
     <form role="search" aria-label="Lọc kiện" onSubmit={onSubmit} className="card mb-4 p-4 pb-0" noValidate>
-      <div className="grid gap-x-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_repeat(2,minmax(9.5rem,1fr))_repeat(3,minmax(0,1fr))]">
+      <div className="grid gap-x-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_repeat(2,minmax(9.5rem,1fr))_repeat(4,minmax(0,1fr))]">
         <TextField
           name="q"
           label={COPY.search.q}
@@ -146,6 +159,14 @@ export function PackageFilters({
             </option>
           ))}
         </SelectField>
+        <PlatformFilter
+          idPrefix="d3"
+          platform={isPlatform(draft.platform) ? draft.platform : null}
+          shopId={draft.shop ?? null}
+          onChange={(v) =>
+            apply({ ...draft, platform: v.platform ?? undefined, shop: v.shopId ?? undefined })
+          }
+        />
         <SelectField
           name="session_flag"
           label={COPY.search.sessionFlag}
