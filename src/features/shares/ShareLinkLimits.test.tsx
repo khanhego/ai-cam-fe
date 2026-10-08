@@ -38,6 +38,7 @@ function session(n: number, over: Partial<ShareOptionSession>): ShareOptionSessi
     cameras: ["CAM1", "CAM2"],
     review_needed: false,
     excluded: false,
+    evidence_exclusion: null,
     snapshot_count: 0,
     ...over,
   };

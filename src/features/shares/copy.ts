@@ -1,5 +1,6 @@
 import type { ShareUnavailableReason } from "@/lib/api/shares";
 import { fmtDate, fmtDuration, fmtShort } from "@/shared/format";
+import { EVIDENCE_EXCLUSION_MARKED, type EvidenceExclusion } from "@/shared/labels";
 
 /** Chữ ShareLinkDialog — nguyên văn 01 §10.5 "ShareLinkDialog" (DEC-17). */
 export const COPY = {
@@ -17,6 +18,15 @@ export const COPY = {
   /** mới (G3-FE-5, BR-39) — phiên bị loại nhưng thêm tay vào bằng chứng; `reason` = nhãn lý do như chip D17. */
   excluded: (reason: string | null) =>
     reason ? `Bị loại khỏi bằng chứng — ${reason}` : "Bị loại khỏi bằng chứng",
+  /**
+   * G3V-3 (DEC-935) — lý do theo API-164 `evidence_exclusion` (không có lý do hủy chi tiết như D17). "Hủy tại trạm" **mới**
+   * (chờ PO); hai nhãn còn lại như D17.
+   */
+  exclusion: {
+    MARKED: EVIDENCE_EXCLUSION_MARKED,
+    STATION_CANCEL: "Hủy tại trạm",
+    SUPERVISOR_CANCEL: "Quản lý hủy",
+  } satisfies Record<EvidenceExclusion, string>,
   unavailable: {
     CLIP_PENDING: () => "Chưa có clip",
     CLIP_FAILED: () => "Clip lỗi",

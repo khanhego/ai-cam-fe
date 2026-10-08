@@ -357,7 +357,10 @@ const UNAVAILABLE: Record<string, ShareOptionSession["unavailable_reason"]> = {
 function optionOf(
   s: MockSession,
   inEvidence?: Set<string>,
-): Omit<ShareOptionSession, "primary" | "default_selected" | "prior_return" | "excluded"> {
+): Omit<
+  ShareOptionSession,
+  "primary" | "default_selected" | "prior_return" | "excluded" | "evidence_exclusion"
+> {
   const cam1 = s.clips.find((c) => c.camera_role === "CAM1");
   const selectable = cam1?.status === "READY";
   return {
@@ -421,6 +424,10 @@ export function shareOptions(q: {
     excluded: claim
       ? Boolean(evOf(s.id)?.session.evidence_exclusion)
       : Boolean(sessionReview(s).evidence_exclusion),
+    // G3-EV-4 (BE `OptionSession.evidence_exclusion`) — G3V-3: ShareLinkDialog đọc thẳng.
+    evidence_exclusion: claim
+      ? (evOf(s.id)?.session.evidence_exclusion ?? null)
+      : sessionReview(s).evidence_exclusion,
   }));
   const returns = opts
     .filter((o) => o.type === "RETURN" && o.selectable && !o.review_needed)

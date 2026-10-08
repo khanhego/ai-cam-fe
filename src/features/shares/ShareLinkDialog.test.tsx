@@ -11,7 +11,7 @@ import { login } from "@/lib/api/auth";
 import { sharesApi } from "@/lib/api/shares";
 import { apiError } from "@/mocks/http";
 import { findPackage, findSessionAnywhere, mockClaims, P3_CLAIM_ID } from "@/mocks/returnsDb";
-import { mockCloud, mockShares, toShare } from "@/mocks/sharesDb";
+import { mockCloud, mockShares, shareOptions, toShare } from "@/mocks/sharesDb";
 import { renderApp } from "@/test/render";
 import { server } from "@/test/server";
 
@@ -249,7 +249,8 @@ test("G3-FE-5: phiên bị loại (BR-39) thêm tay → chip 'Bị loại khỏi
     });
   const { dialog } = await openFromClaim();
   const marked = await within(dialog).findByText("Bị loại khỏi bằng chứng — Đã đánh dấu quét nhầm");
-  const wrong = await within(dialog).findByText("Bị loại khỏi bằng chứng — Hủy: quét nhầm");
+  // G3V-3 (DEC-935): lý do lấy thẳng API-164 `evidence_exclusion` (không gọi API-132) → nhãn theo loại loại trừ.
+  const wrong = await within(dialog).findByText("Bị loại khỏi bằng chứng — Hủy tại trạm");
   for (const chip of [marked, wrong]) {
     const box = within(chip.closest("label")!).getByRole("checkbox");
     expect(box).not.toBeChecked();
@@ -358,4 +359,49 @@ test("G3V-2: D4 — phiên bị loại / Cần soát → 'Tạo link chia sẻ' 
   await new Promise((r) => setTimeout(r, 50));
   expect(ok).toBeEnabled();
   expect(screen.queryByText("Bị loại / cần soát — chưa gửi link được")).toBeNull();
+});
+
+test("G3V-3: MSW API-164 có sessions[].evidence_exclusion (nguồn hồ sơ + nguồn phiên)", async () => {
+  const claim = mockClaims.find((c) => c.id === P3_CLAIM_ID)!;
+  claim.evidence.push({
+    id: "ev-t-m",
+    kind: "SESSION",
+    ref_id: "ses-p3-m",
+    auto: false,
+    added_at: claim.created_at,
+  });
+  const byClaim = await sharesApi.options({ claim_id: P3_CLAIM_ID });
+  const ex = Object.fromEntries(byClaim.sessions.map((s) => [s.id, s.evidence_exclusion]));
+  expect(ex["ses-p3-m"]).toBe("MARKED");
+  expect(ex["ses-p3-a"]).toBeNull();
+  expect((await sharesApi.options({ session_id: "ses-p3-c" })).sessions[0]!.evidence_exclusion).toBe(
+    "STATION_CANCEL",
+  );
+});
+
+test("G3V-3: chip 'Bị loại' dùng API-164 evidence_exclusion (Quản lý hủy), không đọc API-132 trong dialog", async () => {
+  let claimCalls = 0;
+  server.use(
+    http.get(`/api/v1/shares/options`, () => {
+      const real = shareOptions({ session_id: "ses-p3-a" })!;
+      const row = { ...real.sessions[0]!, excluded: true, default_selected: false };
+      return HttpResponse.json({
+        ...real,
+        sessions: [{ ...row, evidence_exclusion: "SUPERVISOR_CANCEL" }],
+      });
+    }),
+  );
+  const user = userEvent.setup();
+  renderApp(`/admin/claims/${P3_CLAIM_ID}`);
+  const open = await screen.findByRole("button", { name: "Tạo link chia sẻ" });
+  server.use(
+    http.get(`/api/v1/claims/:id`, () => {
+      claimCalls += 1;
+      return HttpResponse.json({}, { status: 500 });
+    }),
+  );
+  await user.click(open);
+  const dialog = await screen.findByRole("dialog", { name: "Tạo link chia sẻ bằng chứng" });
+  expect(await within(dialog).findByText("Bị loại khỏi bằng chứng — Quản lý hủy")).toBeInTheDocument();
+  expect(claimCalls).toBe(0);
 });

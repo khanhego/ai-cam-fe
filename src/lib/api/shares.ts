@@ -1,4 +1,4 @@
-import type { Platform, ShareLayout, ShareStatus } from "@/shared/labels";
+import type { EvidenceExclusion, Platform, ShareLayout, ShareStatus } from "@/shared/labels";
 
 import { api } from "./client";
 import type { Page } from "./stations";
@@ -121,6 +121,11 @@ export type ShareOptionSession = {
    * chọn sẵn (`default_selected = false`); FE vẫn cho chọn tay (T-262 — DEC-800).
    */
   excluded: boolean;
+  /**
+   * G3-EV-4 (02 §6.2 API-164, BE `schemas.py` `OptionSession.evidence_exclusion`): lý do loại như API-132
+   * `session.evidence_exclusion` — chip "Bị loại…" của ShareLinkDialog đọc thẳng (G3V-3 — DEC-935); null = không bị loại.
+   */
+  evidence_exclusion: EvidenceExclusion | null;
   /** M16 (BE DEC-667): ảnh `READY` của phiên trong bằng chứng — link chỉ kèm ảnh của phiên được chọn (DEC-801). */
   snapshot_count: number;
 };
